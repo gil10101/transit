@@ -16,6 +16,6 @@ select
     t.direction_id,
     t.trip_headsign,
     t.shape_id,
-    regexp_extract(t.trip_id, '([0-9]{6}_.+)$', 1) as origin_time_token
+    {{ re_extract('t.trip_id', '([0-9]{6}_.+)$', 1) }} as origin_time_token
 from {{ source('silver', 'gtfs_static_trips') }} t
 join latest on t.city = latest.city and t.gtfs_version_id = latest.gtfs_version_id

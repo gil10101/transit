@@ -16,7 +16,7 @@ from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
 from spark_jobs.bronze_writer import tz_map_expr
-from spark_jobs.session import checkpoint_root, ensure_table, kafka_bootstrap
+from spark_jobs.session import checkpoint_root, ensure_table, kafka_bootstrap, trigger_kwargs
 
 STOP_TIME_EVENT = T.StructType(
     [
@@ -346,7 +346,7 @@ def start(spark: SparkSession):
             .writeStream.queryName(f"silver_{name}")
             .format("iceberg")
             .outputMode("append")
-            .trigger(processingTime="30 seconds")
+            .trigger(**trigger_kwargs())
             .option("checkpointLocation", f"{checkpoint_root()}/silver_{name}")
             .toTable(table)
         )

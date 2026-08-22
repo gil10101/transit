@@ -1,6 +1,6 @@
 #!/bin/bash
 # Package spark jobs, stage jars (no internet inside VPC-attached EMR Serverless),
-# and start the streaming job (bronze + silver) in STREAMING mode.
+# and run one drain (bronze + silver, availableNow trigger, exits when caught up).
 # Usage: scripts/submit_emr_streaming.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -47,11 +47,15 @@ aws emr-serverless start-job-run \
   --region "$REGION" \
   --application-id "$APP_ID" \
   --execution-role-arn "$EXEC_ROLE" \
-  --mode STREAMING \
-  --name transit-streaming \
+  --name transit-drain \
   --job-driver "{
     \"sparkSubmit\": {
       \"entryPoint\": \"s3://${ARTIFACTS}/code/entry.py\",
-      \"sparkSubmitParameters\": \"--py-files s3://${ARTIFACTS}/code/spark_jobs.zip --jars ${JARS} --conf spark.sql.catalog.lake=org.apache.iceberg.spark.SparkCatalog --conf spark.sql.catalog.lake.type=hadoop --conf spark.sql.catalog.lake.warehouse=s3://${LAKEHOUSE}/iceberg --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions --conf spark.emr-serverless.driverEnv.TP_CLOUD=1 --conf spark.emr-serverless.driverEnv.TP_CITY_TZS=nyc=America/New_York --conf spark.emr-serverless.driverEnv.TP_LAKE_URI=s3://${LAKEHOUSE} --conf spark.emr-serverless.driverEnv.KAFKA_BOOTSTRAP=${KAFKA_IP}:9092 --conf spark.executorEnv.TP_CLOUD=1 --conf spark.executorEnv.TP_CITY_TZS=nyc=America/New_York --conf spark.executorEnv.TP_LAKE_URI=s3://${LAKEHOUSE} --conf spark.executorEnv.KAFKA_BOOTSTRAP=${KAFKA_IP}:9092\"
+      \"sparkSubmitParameters\": \"--py-files s3://${ARTIFACTS}/code/spark_jobs.zip --jars ${JARS} --conf spark.driver.cores=2 --conf spark.driver.memory=6g --conf spark.executor.cores=2 --conf spark.executor.memory=6g --conf spark.dynamicAllocation.maxExecutors=1 --conf spark.emr-serverless.driverEnv.TP_TRIGGER=available_now --conf spark.executorEnv.TP_TRIGGER=available_now --conf spark.sql.catalog.lake=org.apache.iceberg.spark.SparkCatalog --conf spark.sql.catalog.lake.type=hadoop --conf spark.sql.catalog.lake.warehouse=s3://${LAKEHOUSE}/iceberg --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions --conf spark.emr-serverless.driverEnv.TP_CLOUD=1 --conf spark.emr-serverless.driverEnv.TP_CITY_TZS=nyc=America/New_York --conf spark.emr-serverless.driverEnv.TP_LAKE_URI=s3://${LAKEHOUSE} --conf spark.emr-serverless.driverEnv.KAFKA_BOOTSTRAP=${KAFKA_IP}:9092 --conf spark.executorEnv.TP_CLOUD=1 --conf spark.executorEnv.TP_CITY_TZS=nyc=America/New_York --conf spark.executorEnv.TP_LAKE_URI=s3://${LAKEHOUSE} --conf spark.executorEnv.KAFKA_BOOTSTRAP=${KAFKA_IP}:9092\"
+    }
+  }" \
+  --configuration-overrides "{
+    \"monitoringConfiguration\": {
+      \"s3MonitoringConfiguration\": {\"logUri\": \"s3://${ARTIFACTS}/emr-logs/\"}
     }
   }"

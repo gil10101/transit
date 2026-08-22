@@ -49,5 +49,5 @@ infra-apply:
 deploy-images:
 	bash scripts/deploy_images.sh
 
-emr-streaming:
-	bash scripts/submit_emr_streaming.sh
+emr-drain:
+	bash scripts/submit_emr_drain.sh

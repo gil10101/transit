@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "pyspark~=3.5.3",
     "dbt-duckdb>=1.9",
+    "dbt-snowflake>=1.9",
     "duckdb>=1.1",
     "pandas>=2.2",
 ]

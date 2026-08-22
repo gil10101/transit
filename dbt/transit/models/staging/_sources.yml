@@ -2,6 +2,7 @@ version: 2
 
 sources:
   - name: silver
+    database: "{{ 'TRANSIT' if target.type == 'snowflake' else 'transit' }}"
     schema: silver
     description: >
       Spark-managed Iceberg tables on MinIO, read by duckdb via iceberg_scan

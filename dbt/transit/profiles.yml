@@ -17,3 +17,13 @@ transit:
           endpoint: "localhost:9000"
           use_ssl: false
           url_style: path
+    prod:
+      type: snowflake
+      account: wqteqyy-ib47757
+      user: TERRAFORM_SVC
+      private_key_path: "{{ env_var('HOME') }}/.snowflake/keys/transit_terraform_key.p8"
+      role: ACCOUNTADMIN
+      database: TRANSIT
+      warehouse: TRANSFORM_XS
+      schema: GOLD
+      threads: 4

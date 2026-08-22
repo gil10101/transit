@@ -10,7 +10,13 @@ from __future__ import annotations
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
-from spark_jobs.session import checkpoint_root, city_timezones, ensure_table, kafka_bootstrap
+from spark_jobs.session import (
+    checkpoint_root,
+    city_timezones,
+    ensure_table,
+    kafka_bootstrap,
+    trigger_kwargs,
+)
 
 TABLE = "lake.bronze.envelopes"
 
@@ -70,7 +76,7 @@ def start(spark: SparkSession):
         .writeStream.queryName("bronze_envelopes")
         .format("iceberg")
         .outputMode("append")
-        .trigger(processingTime="30 seconds")
+        .trigger(**trigger_kwargs())
         .option("checkpointLocation", f"{checkpoint_root()}/bronze_envelopes")
         .toTable(TABLE)
     )

@@ -14,7 +14,7 @@ with rt_trips as (
         trip_uid,
         route_id,
         cast(substring(trip_id, 1, 6) as integer) as origin_centimin,
-        regexp_extract(trip_id, '\.\.?([NS])', 1) as direction_letter
+        {{ re_extract('trip_id', '\.\.?([NS])', 1) }} as direction_letter
     from {{ ref('stg_gtfsrt__trip_updates') }}
     where city_key = 'nyc' and trip_id is not null
 ),
@@ -28,7 +28,7 @@ static_trips as (
         t.direction_id,
         t.origin_time_token,
         cast(substring(t.origin_time_token, 1, 6) as integer) as origin_centimin,
-        regexp_extract(t.trip_id, '\.\.?([NS])', 1) as direction_letter
+        {{ re_extract('t.trip_id', '\.\.?([NS])', 1) }} as direction_letter
     from {{ ref('stg_gtfs__trips') }} t
     join {{ ref('int_service_dates') }} d
       on d.city_key = t.city_key and d.service_id = t.service_id

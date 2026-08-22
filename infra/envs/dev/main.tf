@@ -12,8 +12,9 @@ module "catalog" {
 }
 
 module "monitoring" {
-  source      = "../../modules/monitoring"
-  alert_email = var.alert_email
+  source            = "../../modules/monitoring"
+  alert_email       = var.alert_email
+  monthly_limit_usd = var.budget_monthly_usd
 }
 
 module "network" {
@@ -30,11 +31,14 @@ module "kafka" {
 }
 
 module "spark" {
-  source      = "../../modules/spark"
-  prefix      = var.prefix
-  subnet_ids  = module.network.subnet_ids
-  sg_id       = module.network.sg_emr_id
-  bucket_arns = module.lake.bucket_arns
+  source           = "../../modules/spark"
+  prefix           = var.prefix
+  subnet_ids       = module.network.subnet_ids
+  sg_id            = module.network.sg_emr_id
+  bucket_arns      = module.lake.bucket_arns
+  artifacts_bucket = module.lake.artifacts_bucket
+  lakehouse_bucket = module.lake.lakehouse_bucket
+  kafka_private_ip = module.kafka.private_ip
 }
 
 module "services" {

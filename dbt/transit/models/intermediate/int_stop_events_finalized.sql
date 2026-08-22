@@ -41,7 +41,7 @@ with preds as (
 
 fresh as (
     select * from preds
-    where fetched_at <= event_pred_ts + interval '{{ var("prediction_staleness_min") }} minutes'
+    where fetched_at <= {{ dbt.dateadd('minute', var('prediction_staleness_min'), 'event_pred_ts') }}
 ),
 
 watermark as (
@@ -55,7 +55,7 @@ sched_ranked as (
         s.sched_arr_ts_utc, s.sched_dep_ts_utc, s.timepoint, s.gtfs_version_id,
         row_number() over (
             partition by f.city_key, f.service_date, f.trip_uid, f.stop_id, f.fetched_at
-            order by abs(epoch(s.sched_arr_ts_utc - f.event_pred_ts))
+            order by abs({{ seconds_between('f.event_pred_ts', 's.sched_arr_ts_utc') }})
         ) as sched_rn
     from fresh f
     join {{ ref('int_gtfs_scheduled_stop_times') }} s
@@ -112,7 +112,7 @@ select
     static_trip_id,
     route_id,
     coalesce(matched_direction_id,
-             case regexp_extract(trip_id, '\.\.?([NS])', 1) when 'N' then 0 when 'S' then 1 end
+             case {{ re_extract('trip_id', '\.\.?([NS])', 1) }} when 'N' then 0 when 'S' then 1 end
     ) as direction_id,
     stop_id,
     vehicle_id,
@@ -125,11 +125,11 @@ select
     dep_pred_ts_utc as actual_dep_ts_utc,
     cast(coalesce(
         arr_delay_sec,
-        epoch(coalesce(arr_pred_ts_utc, dep_pred_ts_utc) - sched_arr_ts_utc)
+        {{ seconds_between('sched_arr_ts_utc', 'coalesce(arr_pred_ts_utc, dep_pred_ts_utc)') }}
     ) as integer) as delay_arr_sec,
     cast(coalesce(
         dep_delay_sec,
-        epoch(dep_pred_ts_utc - sched_dep_ts_utc)
+        {{ seconds_between('sched_dep_ts_utc', 'dep_pred_ts_utc') }}
     ) as integer) as delay_dep_sec,
     schedule_relationship,
     (schedule_relationship = 'CANCELED') as cancelled_flag,

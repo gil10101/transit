@@ -49,9 +49,6 @@ def build_spark(app_name: str) -> SparkSession:
     from dotenv import load_dotenv
 
     load_dotenv()
-    endpoint = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
-    access = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
-    secret = os.environ.get("MINIO_SECRET_KEY", "minioadmin")
     packages = ",".join(
         [
             f"org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:{ICEBERG_VERSION}",
@@ -60,7 +57,7 @@ def build_spark(app_name: str) -> SparkSession:
             f"com.amazonaws:aws-java-sdk-bundle:{AWS_SDK_VERSION}",
         ]
     )
-    return (
+    builder = (
         SparkSession.builder.appName(app_name)
         .config("spark.jars.packages", packages)
         .config("spark.sql.session.timeZone", "UTC")
@@ -72,17 +69,36 @@ def build_spark(app_name: str) -> SparkSession:
             "spark.sql.extensions",
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
         )
-        .config("spark.hadoop.fs.s3a.endpoint", endpoint)
-        .config("spark.hadoop.fs.s3a.access.key", access)
-        .config("spark.hadoop.fs.s3a.secret.key", secret)
-        .config("spark.hadoop.fs.s3a.path.style.access", "true")
-        .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
-        .config(
-            "spark.hadoop.fs.s3a.aws.credentials.provider",
-            "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider",
-        )
-        .getOrCreate()
     )
+    # MinIO when TP_LAKE_URI is unset (pure local); AWS default credential chain when
+    # the laptop targets the cloud lake directly (one-off batch jobs like static parse)
+    if os.environ.get("TP_LAKE_URI"):
+        builder = builder.config(
+            "spark.hadoop.fs.s3a.aws.credentials.provider",
+            "com.amazonaws.auth.DefaultAWSCredentialsProviderChain",
+        )
+    else:
+        builder = (
+            builder.config(
+                "spark.hadoop.fs.s3a.endpoint",
+                os.environ.get("MINIO_ENDPOINT", "http://localhost:9000"),
+            )
+            .config(
+                "spark.hadoop.fs.s3a.access.key",
+                os.environ.get("MINIO_ACCESS_KEY", "minioadmin"),
+            )
+            .config(
+                "spark.hadoop.fs.s3a.secret.key",
+                os.environ.get("MINIO_SECRET_KEY", "minioadmin"),
+            )
+            .config("spark.hadoop.fs.s3a.path.style.access", "true")
+            .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
+            .config(
+                "spark.hadoop.fs.s3a.aws.credentials.provider",
+                "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider",
+            )
+        )
+    return builder.getOrCreate()
 
 
 def kafka_bootstrap() -> str:
@@ -98,3 +114,11 @@ def ensure_table(spark: SparkSession, name: str, ddl_columns: str, partition_by:
         f"CREATE TABLE IF NOT EXISTS {name} ({ddl_columns}) "
         f"USING iceberg PARTITIONED BY ({partition_by})"
     )
+
+
+def trigger_kwargs() -> dict:
+    """availableNow (drain Kafka, commit, exit) when TP_TRIGGER=available_now —
+    the scheduled cloud mode; continuous 30s micro-batches otherwise (local)."""
+    if os.environ.get("TP_TRIGGER") == "available_now":
+        return {"availableNow": True}
+    return {"processingTime": "30 seconds"}

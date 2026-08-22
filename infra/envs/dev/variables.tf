@@ -24,3 +24,8 @@ variable "snowflake_external_id" {
   type    = string
   default = ""
 }
+
+variable "budget_monthly_usd" {
+  type    = number
+  default = 50
+}

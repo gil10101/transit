@@ -37,7 +37,12 @@ removed as (
     where cd.exception_type = 2
 )
 
-select * from by_calendar
-where (city_key, service_date, service_id) not in (select * from removed)
+select * from by_calendar bc
+where not exists (
+    select 1 from removed r
+    where r.city_key = bc.city_key
+      and r.service_date = bc.service_date
+      and r.service_id = bc.service_id
+)
 union
 select * from added

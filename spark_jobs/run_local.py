@@ -7,6 +7,7 @@ commits live in the checkpoints, so restarts are lossless.
 
 from __future__ import annotations
 
+import os
 import time
 import traceback
 
@@ -23,7 +24,10 @@ def run_once() -> None:
     try:
         queries = [bronze_writer.start(spark), *silver_normalize.start(spark)]
         print(f"streaming queries running: {[q.name for q in queries]}", flush=True)
-        spark.streams.awaitAnyTermination()
+        if os.environ.get("TP_TRIGGER") == "available_now":
+            for q in queries:
+                q.awaitTermination()
+            return
         # a query died; surface its error to the supervisor
         for q in queries:
             if q.exception() is not None:
@@ -37,6 +41,8 @@ def main() -> None:
     while True:
         try:
             run_once()
+            if os.environ.get("TP_TRIGGER") == "available_now":
+                return  # scheduled drain: one pass, clean exit
         except KeyboardInterrupt:
             return
         except Exception:
