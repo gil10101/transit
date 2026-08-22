@@ -1,0 +1,30 @@
+# secrets
+.env
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/
+
+# dbt
+dbt/transit/target/
+dbt/transit/dbt_packages/
+dbt/transit/logs/
+*.duckdb
+*.duckdb.wal
+
+# dagster
+.dagster_home/
+orchestration/**/tmp*/
+
+# spark
+spark_jobs/checkpoints/
+derby.log
+metastore_db/
+
+# local data
+data/
+*.log
+.DS_Store

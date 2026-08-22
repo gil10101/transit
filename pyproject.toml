@@ -1,0 +1,40 @@
+[project]
+name = "transit-pulse"
+version = "0.1.0"
+description = "Multi-city transit reliability warehouse. Local NYC vertical slice."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "requests>=2.32",
+    "protobuf>=4.25",
+    "gtfs-realtime-bindings>=1.0.0",
+    "confluent-kafka>=2.5",
+    "pyyaml>=6.0",
+    "boto3>=1.34",
+    "python-dotenv>=1.0",
+    "pyspark~=3.5.3",
+    "dbt-duckdb>=1.9",
+    "duckdb>=1.1",
+    "pandas>=2.2",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+    "pytest>=8.3",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["dbt/transit/target", "dbt/transit/dbt_packages"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
