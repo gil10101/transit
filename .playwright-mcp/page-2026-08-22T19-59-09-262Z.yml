@@ -1,0 +1,76 @@
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - generic [ref=e6] [cursor=pointer]
+    - generic [ref=e37]:
+      - button "Create Bucket" [ref=e38] [cursor=pointer]
+      - generic [ref=e47]:
+        - textbox "Filter Buckets" [ref=e58]
+        - generic [ref=e59]: Buckets
+        - generic [ref=e63]:
+          - button "lakehouse" [ref=e182] [cursor=pointer]
+          - button "raw" [ref=e190] [cursor=pointer]
+      - separator [ref=e80]
+      - generic [ref=e81]:
+        - link "Documentation" [ref=e82] [cursor=pointer]:
+          - /url: https://docs.min.io/community/minio-object-store/index.html?ref=con
+        - button "License" [ref=e91] [cursor=pointer]
+        - separator [ref=e105]
+        - button "Sign Out" [ref=e106] [cursor=pointer]
+  - main [ref=e116]:
+    - generic [ref=e197]:
+      - generic [ref=e198]: Object Browser
+      - textbox "Start typing to filter objects in the bucket" [ref=e211]
+      - generic [ref=e213]:
+        - button [ref=e214] [cursor=pointer]
+        - button [ref=e223] [cursor=pointer]
+    - generic [ref=e231]:
+      - generic [ref=e234]:
+        - generic [ref=e241]:
+          - heading "lakehouse" [level=1] [ref=e242]
+          - generic [ref=e244]:
+            - generic [ref=e245]:
+              - text: "Created on:"
+              - strong [ref=e246]: Sat, Aug 22 2026 14:17:05 (EDT)
+            - generic [ref=e247]:
+              - text: "Access:"
+              - strong [ref=e248]: PRIVATE
+            - generic [ref=e249]: 91.4 MiB - 3247 Objects
+        - generic [ref=e250]:
+          - button "Rewind" [disabled] [ref=e253]
+          - button "Refresh" [ref=e263] [cursor=pointer]
+          - button "Upload" [ref=e273] [cursor=pointer]
+      - generic [ref=e282]:
+        - button "Choose File" [ref=e283]
+        - generic [ref=e284]:
+          - generic [ref=e285]:
+            - generic [ref=e287]:
+              - generic [ref=e288]:
+                - button [ref=e289] [cursor=pointer]
+                - link "lakehouse" [ref=e294] [cursor=pointer]:
+                  - /url: /browser/lakehouse
+                - button [ref=e295] [cursor=pointer]
+              - button "Create new path" [ref=e303] [cursor=pointer]
+            - generic [ref=e314]:
+              - generic:
+                - grid:
+                  - row [ref=e315]:
+                    - columnheader [ref=e316]
+                    - columnheader "name" [ref=e321] [cursor=pointer]:
+                      - generic [ref=e322]: Name
+                    - columnheader "last_modified" [ref=e326] [cursor=pointer]:
+                      - generic [ref=e327]: Last Modified
+                    - columnheader "size" [ref=e329] [cursor=pointer]:
+                      - generic [ref=e330]: Size
+                  - rowgroup "grid" [ref=e332]:
+                    - row [ref=e333]:
+                      - row "row" [ref=e334]:
+                        - gridcell [ref=e335]
+                        - gridcell "checkpoints" [ref=e339]
+                        - gridcell
+                        - gridcell "-" [ref=e349]
+                      - row "row" [ref=e350]:
+                        - gridcell [ref=e351]
+                        - gridcell "iceberg" [ref=e355]
+                        - gridcell
+                        - gridcell "-" [ref=e365]
+          - button [ref=e366] [cursor=pointer]

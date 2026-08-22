@@ -1,0 +1,119 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - region "Notifications alt+T"
+    - generic [ref=e4]:
+      - navigation [ref=e6]:
+        - link [ref=e8] [cursor=pointer]:
+          - /url: /
+        - generic [ref=e29]:
+          - generic [ref=e30]:
+            - link "timeline Overview" [ref=e32] [cursor=pointer]:
+              - /url: /overview
+              - generic [ref=e33]:
+                - img "timeline" [ref=e35]
+                - generic [ref=e36]: Overview
+            - link "runs Runs" [ref=e38] [cursor=pointer]:
+              - /url: /runs
+              - generic [ref=e39]:
+                - img "runs" [ref=e41]
+                - generic [ref=e42]: Runs
+          - generic [ref=e43]:
+            - link "catalog_book Catalog" [ref=e45] [cursor=pointer]:
+              - /url: /assets
+              - generic [ref=e46]:
+                - img "catalog_book" [ref=e48]
+                - generic [ref=e49]: Catalog
+            - link "schedule Automation" [ref=e51] [cursor=pointer]:
+              - /url: /automation
+              - generic [ref=e52]:
+                - img "schedule" [ref=e54]
+                - generic [ref=e55]: Automation
+          - generic [ref=e56]:
+            - link "lineage Lineage" [ref=e58] [cursor=pointer]:
+              - /url: /asset-groups
+              - generic [ref=e59]:
+                - img "lineage" [ref=e61]
+                - generic [ref=e62]: Lineage
+            - link "deployment Deployment" [ref=e64] [cursor=pointer]:
+              - /url: /deployment
+              - generic [ref=e65]:
+                - img "deployment" [ref=e67]
+                - generic [ref=e68]: Deployment
+        - generic [ref=e69]:
+          - button "search Search" [ref=e72] [cursor=pointer]:
+            - generic [ref=e73]:
+              - img "search" [ref=e75]
+              - generic [ref=e76]: Search
+          - generic [ref=e77]:
+            - button "panel_show_right Hide navigation" [ref=e79] [cursor=pointer]:
+              - generic [ref=e80]:
+                - img "panel_show_right" [ref=e82]
+                - generic [ref=e83]: Hide navigation
+            - button "settings Settings" [ref=e85] [cursor=pointer]:
+              - generic [ref=e86]:
+                - img "settings" [ref=e88]
+                - generic [ref=e89]: Settings
+            - button "support Support" [ref=e92] [cursor=pointer]:
+              - generic [ref=e93]:
+                - img "support" [ref=e95]
+                - generic [ref=e96]: Support
+      - generic [ref=e101]:
+        - tablist [ref=e103]:
+          - tab "Code locations" [expanded] [selected] [ref=e104] [cursor=pointer]
+          - tab "Daemons" [ref=e105] [cursor=pointer]
+          - tab "Concurrency" [ref=e106] [cursor=pointer]
+          - tab "Configuration (read-only)" [ref=e107] [cursor=pointer]
+        - generic [ref=e109]:
+          - generic [ref=e110]:
+            - generic [ref=e111]:
+              - button "filter_alt Filter" [ref=e115] [cursor=pointer]:
+                - img "filter_alt" [ref=e116]
+                - generic [ref=e117]: Filter
+              - generic [ref=e118]: 1 code location
+            - button "reload_definitions Reload all" [ref=e120] [cursor=pointer]:
+              - img "reload_definitions" [ref=e121]
+              - generic [ref=e122]: Reload all
+          - generic [ref=e123]:
+            - generic [ref=e124]:
+              - generic [ref=e125]: Name
+              - generic [ref=e126]: Status
+              - generic [ref=e127]: Updated
+              - generic [ref=e128]: Actions
+            - generic [ref=e132]:
+              - generic [ref=e134]:
+                - link [ref=e136] [cursor=pointer]:
+                  - /url: /locations/transit_dagster.definitions/
+                  - generic "transit_dagster.definitions" [ref=e137]
+                - generic [ref=e138]:
+                  - generic [ref=e139]: "module_name:"
+                  - generic "transit_dagster.definitions" [ref=e141]
+                - generic [ref=e142]:
+                  - link "asset_group 0" [ref=e144] [cursor=pointer]:
+                    - /url: /locations/transit_dagster.definitions/assets
+                    - generic [ref=e145]:
+                      - img "asset_group" [ref=e146]
+                      - generic [ref=e147]: "0"
+                  - link "job 0" [ref=e149] [cursor=pointer]:
+                    - /url: /locations/transit_dagster.definitions/jobs
+                    - generic [ref=e150]:
+                      - img "job" [ref=e151]
+                      - generic [ref=e152]: "0"
+                  - link "schedule 0" [ref=e154] [cursor=pointer]:
+                    - /url: /locations/transit_dagster.definitions/schedules
+                    - generic [ref=e155]:
+                      - img "schedule" [ref=e156]
+                      - generic [ref=e157]: "0"
+                  - link "sensors 0" [ref=e159] [cursor=pointer]:
+                    - /url: /locations/transit_dagster.definitions/sensors
+                    - generic [ref=e160]:
+                      - img "sensors" [ref=e161]
+                      - generic [ref=e162]: "0"
+              - generic [ref=e163]: Loaded
+              - generic [ref=e167]: 2 hours ago
+              - generic [ref=e170]:
+                - button "code_location_reload Reload" [ref=e217] [cursor=pointer]:
+                  - img "code_location_reload" [ref=e218]
+                  - generic [ref=e219]: Reload
+                - button [ref=e176] [cursor=pointer]:
+                  - img "expand_more" [ref=e177]
+  - alert [ref=e100]

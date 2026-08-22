@@ -1,0 +1,124 @@
+- generic [active] [ref=f3e1]:
+  - generic [ref=f3e3]:
+    - generic [ref=f3e5]:
+      - generic [ref=f3e6] [cursor=pointer]
+      - generic [ref=f3e37]:
+        - button "Create Bucket" [ref=f3e38] [cursor=pointer]
+        - generic [ref=f3e47]:
+          - textbox "Filter Buckets" [ref=f3e58]
+          - generic [ref=f3e59]: Buckets
+          - generic [ref=f3e63]:
+            - button "lakehouse" [ref=f3e65] [cursor=pointer]
+            - button "raw" [ref=f3e73] [cursor=pointer]
+        - separator [ref=f3e80]
+        - generic [ref=f3e81]:
+          - link "Documentation" [ref=f3e82] [cursor=pointer]:
+            - /url: https://docs.min.io/community/minio-object-store/index.html?ref=con
+          - button "License" [ref=f3e91] [cursor=pointer]
+          - separator [ref=f3e105]
+          - button "Sign Out" [ref=f3e106] [cursor=pointer]
+    - main [ref=f3e116]:
+      - generic [ref=f3e117]:
+        - generic [ref=f3e118]: Object Browser
+        - textbox "Start typing to filter objects in the bucket" [ref=f3e131]
+        - generic [ref=f3e133]:
+          - button [ref=f3e134] [cursor=pointer]
+          - button [ref=f3e143] [cursor=pointer]
+      - generic [ref=f3e151]:
+        - generic [ref=f3e154]:
+          - generic [ref=f3e161]:
+            - heading "lakehouse" [level=1] [ref=f3e162]
+            - generic [ref=f3e164]:
+              - generic [ref=f3e165]:
+                - text: "Created on:"
+                - strong [ref=f3e166]: Sat, Aug 22 2026 14:17:05 (EDT)
+              - generic [ref=f3e167]:
+                - text: "Access:"
+                - strong [ref=f3e168]: PRIVATE
+              - generic [ref=f3e169]: 91.4 MiB - 3247 Objects
+          - generic [ref=f3e170]:
+            - button "Rewind" [disabled] [ref=f3e173]
+            - button "Refresh" [ref=f3e183] [cursor=pointer]
+            - button "Upload" [ref=f3e193] [cursor=pointer]
+        - generic [ref=f3e202]:
+          - button "Choose File" [ref=f3e203]
+          - generic [ref=f3e204]:
+            - generic [ref=f3e205]:
+              - generic [ref=f3e207]:
+                - generic [ref=f3e208]:
+                  - button [ref=f3e209] [cursor=pointer]
+                  - link "lakehouse" [ref=f3e214] [cursor=pointer]:
+                    - /url: /browser/lakehouse
+                  - button [ref=f3e215] [cursor=pointer]
+                - button "Create new path" [ref=f3e223] [cursor=pointer]
+              - generic [ref=f3e234]:
+                - generic:
+                  - grid:
+                    - row [ref=f3e300]:
+                      - columnheader [ref=f3e301]
+                      - columnheader "name" [ref=f3e306] [cursor=pointer]:
+                        - generic [ref=f3e307]: Name
+                      - columnheader "last_modified" [ref=f3e311] [cursor=pointer]:
+                        - generic [ref=f3e312]: Last Modified
+                      - columnheader "size" [ref=f3e314] [cursor=pointer]:
+                        - generic [ref=f3e315]: Size
+                    - rowgroup "grid" [ref=f3e317]:
+                      - row [ref=f3e318]:
+                        - row "row" [ref=f3e319]:
+                          - gridcell [ref=f3e320]
+                          - gridcell "checkpoints" [ref=f3e324]
+                          - gridcell
+                          - gridcell "-" [ref=f3e334]
+                        - row "row" [ref=f3e335]:
+                          - gridcell [ref=f3e336]
+                          - gridcell "iceberg" [ref=f3e340]
+                          - gridcell
+                          - gridcell "-" [ref=f3e350]
+            - button [ref=f3e257] [cursor=pointer]
+  - generic [ref=f3e264]:
+    - generic [ref=f3e265]: License
+    - generic [ref=f3e268]:
+      - generic [ref=f3e274]:
+        - generic [ref=f3e275]:
+          - text: By using this software, you acknowledge that MinIO software is licensed under the
+          - link "GNU AGPL v3" [ref=f3e276] [cursor=pointer]:
+            - /url: https://min.io/compliance?ref=con
+          - text: ", for which, the full text can be found here:"
+          - link "https://www.gnu.org/licenses/agpl-3.0.html." [ref=f3e277] [cursor=pointer]:
+            - /url: https://www.gnu.org/licenses/agpl-3.0.html
+        - generic [ref=f3e278]:
+          - text: "Please review the terms carefully and ensure you are in compliance with the obligations of the license. If you are not able to satisfy the license obligations, we offer a commercial license which is available here:"
+          - link "https://min.io/signup." [ref=f3e279] [cursor=pointer]:
+            - /url: https://min.io/signup?ref=con
+        - heading "What is the GNU AGPL v3?" [level=2] [ref=f3e280]
+        - paragraph [ref=f3e281]:
+          - text: The GNU AGPL v3 is short for the "GNU Affero General Public License v3". It is a
+          - link "FOSS" [ref=f3e282] [cursor=pointer]:
+            - /url: https://en.wikipedia.org/wiki/Free_and_open-source_software
+          - text: license certified by the
+          - link "Free Software Foundation" [ref=f3e283] [cursor=pointer]:
+            - /url: https://www.fsf.org/
+          - text: and the Open Source Initiative. You can get a copy of the GNU AGPL v3 license with MinIO source code or at
+          - link "https://www.gnu.org/licenses/agpl-3.0.en.html" [ref=f3e284] [cursor=pointer]:
+            - /url: https://min.io/compliance?ref=con
+          - text: .
+        - heading "What does it mean for me to comply with the GNU AGPL v3?" [level=2] [ref=f3e285]
+        - paragraph [ref=f3e286]: When you host or distribute MinIO over a network, the AGPL v3 applies to you. Any distribution or copying of MinIO software modified or not has to comply with the obligations specified in the AGPL v3 license. You must include the source code, full license text and the original copyright notice along with the object code.
+        - paragraph [ref=f3e287]:
+          - text: We recommend the
+          - link "Free Software Foundation’s interpretation" [ref=f3e288] [cursor=pointer]:
+            - /url: https://www.gnu.org/licenses/agpl-3.0.en.html
+          - text: of the GNU AGPL v3 license.
+        - heading "Making combined or derivative works of MinIO" [level=2] [ref=f3e289]
+        - paragraph [ref=f3e290]: Creating combined or derivative works of MinIO requires all such works to be released under the same license.
+        - paragraph [ref=f3e291]: If MinIO source code is included in the same executable file, they are definitely combined in one program. If modules are designed to run linked together in a shared address space, that almost surely means combining them into one program.
+        - paragraph [ref=f3e292]: By contrast, pipes, sockets, RESTful APIs, and command-line arguments are communication mechanisms normally used between two separate programs. So when they are used for communication, the modules normally are separate programs. But if the semantics of the communication are intimate enough, exchanging complex internal data structures, that too could be a basis to consider the two parts as combined into a larger program.
+        - paragraph [ref=f3e293]:
+          - text: Merely aggregating MinIO software into your distribution does not constitute derivative works. For more information, please refer to the
+          - link "GPL FAQ" [ref=f3e294] [cursor=pointer]:
+            - /url: https://www.gnu.org/licenses/gpl-faq.en.html#MereAggregation
+          - text: .
+        - paragraph
+        - heading "Talking to your Legal Counsel" [level=2] [ref=f3e295]
+        - paragraph [ref=f3e296]: If you have questions, we recommend that you talk to your own attorney for legal advice. Purchasing a commercial license from MinIO removes the GNU AGPL v3 obligations from MinIO software.
+      - button "Acknowledge" [ref=f3e298] [cursor=pointer]

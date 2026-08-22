@@ -1,0 +1,121 @@
+- generic [ref=f1e3]:
+  - generic [ref=f1e5]:
+    - generic [ref=f1e6] [cursor=pointer]
+    - generic [ref=f1e37]:
+      - button "Create Bucket" [ref=f1e38] [cursor=pointer]
+      - generic [ref=f1e47]:
+        - textbox "Filter Buckets" [ref=f1e58]
+        - generic [ref=f1e59]: Buckets
+        - generic [ref=f1e63]:
+          - button "lakehouse" [ref=f1e65] [cursor=pointer]
+          - button "raw" [ref=f1e73] [cursor=pointer]
+      - separator [ref=f1e80]
+      - generic [ref=f1e81]:
+        - link "Documentation" [ref=f1e82] [cursor=pointer]:
+          - /url: https://docs.min.io/community/minio-object-store/index.html?ref=con
+        - button "License" [ref=f1e91] [cursor=pointer]
+        - separator [ref=f1e100]
+        - button "Sign Out" [ref=f1e101] [cursor=pointer]
+  - main [ref=f1e111]:
+    - generic [ref=f1e112]:
+      - generic [ref=f1e113]: Object Browser
+      - textbox "Start typing to filter objects in the bucket" [ref=f1e126]
+      - generic [ref=f1e128]:
+        - button [ref=f1e129] [cursor=pointer]
+        - button [ref=f1e138] [cursor=pointer]
+    - generic [ref=f1e146]:
+      - generic [ref=f1e149]:
+        - generic [ref=f1e156]:
+          - heading "lakehouse" [level=1] [ref=f1e157]
+          - generic [ref=f1e159]:
+            - generic [ref=f1e160]:
+              - text: "Created on:"
+              - strong [ref=f1e161]: Sat, Aug 22 2026 14:17:05 (EDT)
+            - generic [ref=f1e162]:
+              - text: "Access:"
+              - strong [ref=f1e163]: PRIVATE
+            - generic [ref=f1e164]: 93.6 MiB - 3315 Objects
+        - generic [ref=f1e165]:
+          - button "Rewind" [disabled] [ref=f1e168]
+          - button "Refresh" [ref=f1e178] [cursor=pointer]
+          - button "Upload" [ref=f1e188] [cursor=pointer]
+      - generic [ref=f1e197]:
+        - button "Choose File" [ref=f1e198]
+        - generic [ref=f1e199]:
+          - generic [ref=f1e200]:
+            - generic [ref=f1e202]:
+              - generic [ref=f1e203]:
+                - button [ref=f1e204] [cursor=pointer]
+                - generic [ref=f1e208]:
+                  - link "lakehouse" [ref=f1e209] [cursor=pointer]:
+                    - /url: /browser/lakehouse
+                  - text: /
+                  - link "iceberg" [ref=f1e210] [cursor=pointer]:
+                    - /url: /browser/lakehouse/iceberg%2F
+                  - text: /silver
+                - button [ref=f1e211] [cursor=pointer]
+              - button "Create new path" [ref=f1e219] [cursor=pointer]
+            - generic [ref=f1e230]:
+              - generic:
+                - grid:
+                  - row [ref=f1e259]:
+                    - columnheader [ref=f1e260]
+                    - columnheader "name" [ref=f1e265] [cursor=pointer]:
+                      - generic [ref=f1e266]: Name
+                    - columnheader "last_modified" [ref=f1e270] [cursor=pointer]:
+                      - generic [ref=f1e271]: Last Modified
+                    - columnheader "size" [ref=f1e273] [cursor=pointer]:
+                      - generic [ref=f1e274]: Size
+                  - rowgroup "grid" [ref=f1e276]:
+                    - row [ref=f1e277]:
+                      - row "row" [ref=f1e278]:
+                        - gridcell [ref=f1e279]
+                        - gridcell "alerts" [ref=f1e283]
+                        - gridcell
+                        - gridcell "-" [ref=f1e293]
+                      - row "row" [ref=f1e294]:
+                        - gridcell [ref=f1e295]
+                        - gridcell "gtfs_static_calendar_dates" [ref=f1e299]
+                        - gridcell
+                        - gridcell "-" [ref=f1e309]
+                      - row "row" [ref=f1e310]:
+                        - gridcell [ref=f1e311]
+                        - gridcell "gtfs_static_calendar" [ref=f1e315]
+                        - gridcell
+                        - gridcell "-" [ref=f1e325]
+                      - row "row" [ref=f1e326]:
+                        - gridcell [ref=f1e327]
+                        - gridcell "gtfs_static_routes" [ref=f1e331]
+                        - gridcell
+                        - gridcell "-" [ref=f1e341]
+                      - row "row" [ref=f1e342]:
+                        - gridcell [ref=f1e343]
+                        - gridcell "gtfs_static_shapes" [ref=f1e347]
+                        - gridcell
+                        - gridcell "-" [ref=f1e357]
+                      - row "row" [ref=f1e358]:
+                        - gridcell [ref=f1e359]
+                        - gridcell "gtfs_static_stop_times" [ref=f1e363]
+                        - gridcell
+                        - gridcell "-" [ref=f1e373]
+                      - row "row" [ref=f1e374]:
+                        - gridcell [ref=f1e375]
+                        - gridcell "gtfs_static_stops" [ref=f1e379]
+                        - gridcell
+                        - gridcell "-" [ref=f1e389]
+                      - row "row" [ref=f1e390]:
+                        - gridcell [ref=f1e391]
+                        - gridcell "gtfs_static_trips" [ref=f1e395]
+                        - gridcell
+                        - gridcell "-" [ref=f1e405]
+                      - row "row" [ref=f1e406]:
+                        - gridcell [ref=f1e407]
+                        - gridcell "stop_time_predictions" [ref=f1e411]
+                        - gridcell
+                        - gridcell "-" [ref=f1e421]
+                      - row "row" [ref=f1e422]:
+                        - gridcell [ref=f1e423]
+                        - gridcell "vehicle_positions" [ref=f1e427]
+                        - gridcell
+                        - gridcell "-" [ref=f1e437]
+          - button [ref=f1e253] [cursor=pointer]
