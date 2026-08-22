@@ -1,0 +1,2 @@
+city_key,city_name,country,iana_tz,peak_am_start,peak_am_end,peak_pm_start,peak_pm_end,rt_delay_source,attribution_text
+nyc,New York,US,America/New_York,07:00,10:00,16:00,19:00,computed,Data provided by the Metropolitan Transportation Authority

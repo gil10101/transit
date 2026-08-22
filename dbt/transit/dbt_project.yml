@@ -1,0 +1,38 @@
+name: transit
+version: "0.1.0"
+profile: transit
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+
+vars:
+  lookback_hours: 48
+  freq_headway_threshold_sec: 600
+  otp_bands: {early_max: -60, on_time_max: 299, late_max: 899}
+  early_departure_grace_sec: 60
+  score_weights: {wait: 0.35, otp: 0.30, cancel: 0.20, bunch: 0.15}
+  completeness_exclusion_threshold: 0.70
+  methodology_version: "1.0"
+  # v1 finalization knobs (documented in int_stop_events_finalized)
+  finalize_horizon_min: 20
+  prediction_staleness_min: 30
+
+seeds:
+  transit:
+    dim_city:
+      +column_types:
+        peak_am_start: time
+        peak_am_end: time
+        peak_pm_start: time
+        peak_pm_end: time
+
+models:
+  transit:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: table
+    marts:
+      +materialized: table

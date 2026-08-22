@@ -1,0 +1,19 @@
+transit:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: transit.duckdb
+      threads: 4
+      extensions: [httpfs, iceberg, icu]
+      settings:
+        TimeZone: UTC  # naive<->instant casts must be deterministic, never machine-local
+        # streaming commits rewrite version-hint.text; fall back to globbing mid-rewrite
+        unsafe_enable_version_guessing: true
+      secrets:
+        - type: s3
+          key_id: "{{ env_var('MINIO_ACCESS_KEY', 'minioadmin') }}"
+          secret: "{{ env_var('MINIO_SECRET_KEY', 'minioadmin') }}"
+          endpoint: "localhost:9000"
+          use_ssl: false
+          url_style: path

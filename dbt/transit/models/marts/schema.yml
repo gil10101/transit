@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: fct_stop_events
+    description: >
+      Atomic fact. Grain: one finalized arrival per (city_key, service_date,
+      trip_uid, stop_sequence). v1 finalization_method is always last_prediction.
+    columns:
+      - name: event_key
+        description: md5 of the grain, for uniqueness enforcement
+        data_tests: [unique, not_null]
+      - name: city_key
+        data_tests: [not_null]
+      - name: service_date
+        data_tests: [not_null]
+      - name: trip_uid
+        data_tests: [not_null]
+      - name: stop_sequence
+        data_tests: [not_null]
+      - name: delay_arr_sec
+        description: signed seconds vs schedule; negative = early
+        data_tests:
+          - delay_within_bounds
+      - name: otp_band
+        data_tests:
+          - accepted_values:
+              values: [early, on_time, late, very_late]
+
+  - name: int_stop_events_finalized
+    columns:
+      - name: trip_uid
+        data_tests: [not_null]
+
+  - name: int_trip_matching_nyc
+    description: RT trip_id -> static trip_id; exact token match else nearest origin time.
+    columns:
+      - name: match_confidence
+        data_tests:
+          - accepted_values:
+              values: [1.0, 0.9, 0.7]
+              quote: false

@@ -1,0 +1,28 @@
+version: 2
+
+sources:
+  - name: silver
+    schema: silver
+    description: >
+      Spark-managed Iceberg tables on MinIO, read by duckdb via iceberg_scan
+      (Hadoop catalog paths under s3://lakehouse/iceberg/silver).
+    meta:
+      external_location: "iceberg_scan('s3://lakehouse/iceberg/silver/{name}', allow_moved_paths = true)"
+    tables:
+      - name: stop_time_predictions
+        loaded_at_field: fetched_at
+        freshness:
+          warn_after: {count: 30, period: minute}
+          error_after: {count: 2, period: hour}
+      - name: vehicle_positions
+        loaded_at_field: fetched_at
+        freshness:
+          warn_after: {count: 30, period: minute}
+          error_after: {count: 2, period: hour}
+      - name: alerts
+      - name: gtfs_static_routes
+      - name: gtfs_static_trips
+      - name: gtfs_static_stops
+      - name: gtfs_static_stop_times
+      - name: gtfs_static_calendar
+      - name: gtfs_static_calendar_dates
