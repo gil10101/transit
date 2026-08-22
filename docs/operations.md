@@ -10,7 +10,7 @@ The laptop is optional; everything below runs in the cloud.
 |---|---|---|
 | Poller (NYC, 30s) + Dagster + postgres | EC2 t4g.medium, docker compose via systemd `transit.service` | instance `i-0f0d6e32cb15ce471` |
 | Kafka (KRaft single broker) | EC2 t4g.small, docker `apache/kafka:3.8.0` | private `10.20.0.34:9092` |
-| Bronze/silver Spark drains | EMR Serverless app `00g86oj9urdank0d`, EventBridge schedule `transit-pulse-emr-drain` every 15 min, `availableNow` trigger, exits when caught up | exec role `transit-pulse-emr-exec` |
+| Bronze/silver Spark drains | EMR Serverless app `00g86oj9urdank0d`; EventBridge schedule `transit-pulse-emr-drain` (15 min) -> Lambda `transit-pulse-emr-drain` -> StartJobRun (`availableNow` trigger, exits when caught up); failures land in SQS DLQ `transit-pulse-emr-drain-dlq` | exec role `transit-pulse-emr-exec` |
 | Lake (Iceberg, Hadoop catalog) | `s3://transit-pulse-622221238588-lakehouse/iceberg/{bronze,silver}` | version-hint.text per table |
 | Raw archive | `s3://transit-pulse-622221238588-raw/<city>/<endpoint>/<date>/<hour>/` | includes migrated local history |
 | Jars + code + EMR logs | `s3://transit-pulse-622221238588-artifacts/{jars,code,emr-logs}` | code zip re-staged by `make emr-drain` |
@@ -71,8 +71,11 @@ snow sql -q "select count(*), max(fetched_at) from TRANSIT.SILVER.STOP_TIME_PRED
    `TP_CITY_TZS`); VPC ENIs have no internet (Kafka connector jars staged from artifacts bucket);
    default driver is 4 vCPU (starves a 4 vCPU app cap — drains pin 2+2); STREAMING mode rejects
    retry-policy; continuous streaming costs ~10x drains.
-4. **EventBridge → StartJobRun universal target requires `ClientToken` =
-   `<aws.scheduler.execution-id>`** in the input JSON.
+4. **EventBridge Scheduler cannot call emrserverless:startJobRun directly**: create-time
+   validation demands PascalCase incl. ClientToken, but `<aws.scheduler.execution-id>` is NOT
+   substituted at fire time -> literal angle brackets fail the API token regex on every
+   invocation (visible only via TargetErrorCount metric / DLQ). Hence the Lambda invoker
+   (`infra/modules/spark/lambda/drain.py`) generating a uuid clientToken per run.
 5. **MTA quirks** live in `docs/01-data-dictionary.md` §B (L-feed delay exception, trip_id
    matching, direction from `..N/..S`, weekend service changes cause the audited
    delay-bounds warns → supplemented GTFS at P5).

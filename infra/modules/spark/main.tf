@@ -164,6 +164,82 @@ resource "aws_iam_role_policy" "scheduler_dlq" {
   })
 }
 
+data "archive_file" "drain_lambda" {
+  type        = "zip"
+  source_file = "${path.module}/lambda/drain.py"
+  output_path = "${path.module}/lambda/drain.zip"
+}
+
+resource "aws_iam_role" "drain_lambda" {
+  name = "${var.prefix}-drain-lambda"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "drain_lambda" {
+  name = "start-job-run"
+  role = aws_iam_role.drain_lambda.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["emr-serverless:StartJobRun"]
+        Resource = "*"
+      },
+      {
+        Effect    = "Allow"
+        Action    = ["iam:PassRole"]
+        Resource  = aws_iam_role.execution.arn
+        Condition = { StringEquals = { "iam:PassedToService" = "emr-serverless.amazonaws.com" } }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_lambda_function" "drain" {
+  function_name    = "${var.prefix}-emr-drain"
+  role             = aws_iam_role.drain_lambda.arn
+  handler          = "drain.handler"
+  runtime          = "python3.12"
+  timeout          = 30
+  filename         = data.archive_file.drain_lambda.output_path
+  source_code_hash = data.archive_file.drain_lambda.output_base64sha256
+  environment {
+    variables = {
+      APP_ID        = aws_emrserverless_application.streaming.id
+      EXEC_ROLE_ARN = aws_iam_role.execution.arn
+      ENTRY_POINT   = "s3://${var.artifacts_bucket}/code/entry.py"
+      SPARK_PARAMS  = local.spark_params
+      LOG_URI       = "s3://${var.artifacts_bucket}/emr-logs/"
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "scheduler_invoke" {
+  name = "invoke-drain-lambda"
+  role = aws_iam_role.scheduler.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lambda:InvokeFunction"]
+      Resource = aws_lambda_function.drain.arn
+    }]
+  })
+}
+
 resource "aws_scheduler_schedule" "drain" {
   name                = "${var.prefix}-emr-drain"
   schedule_expression = var.drain_schedule
@@ -171,7 +247,7 @@ resource "aws_scheduler_schedule" "drain" {
     mode = "OFF"
   }
   target {
-    arn      = "arn:aws:scheduler:::aws-sdk:emrserverless:startJobRun"
+    arn      = aws_lambda_function.drain.arn
     role_arn = aws_iam_role.scheduler.arn
     dead_letter_config {
       arn = aws_sqs_queue.drain_dlq.arn
@@ -179,23 +255,7 @@ resource "aws_scheduler_schedule" "drain" {
     retry_policy {
       maximum_retry_attempts = 1
     }
-    input = jsonencode({
-      ClientToken      = "<aws.scheduler.execution-id>"
-      ApplicationId    = aws_emrserverless_application.streaming.id
-      ExecutionRoleArn = aws_iam_role.execution.arn
-      Name             = "transit-drain"
-      JobDriver = {
-        SparkSubmit = {
-          EntryPoint            = "s3://${var.artifacts_bucket}/code/entry.py"
-          SparkSubmitParameters = local.spark_params
-        }
-      }
-      ConfigurationOverrides = {
-        MonitoringConfiguration = {
-          S3MonitoringConfiguration = { LogUri = "s3://${var.artifacts_bucket}/emr-logs/" }
-        }
-      }
-    })
+    input = jsonencode({})
   }
 }
 
