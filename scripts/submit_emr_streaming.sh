@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-REGION=${AWS_REGION:-us-east-1}
+REGION=${AWS_REGION:-us-east-2}
 APP_ID=$(terraform -chdir=infra/envs/dev output -raw emr_application_id)
 EXEC_ROLE=$(terraform -chdir=infra/envs/dev output -raw emr_execution_role_arn)
 ARTIFACTS=$(terraform -chdir=infra/envs/dev output -raw artifacts_bucket)

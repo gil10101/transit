@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-REGION=${AWS_REGION:-us-east-1}
+REGION=${AWS_REGION:-us-east-2}
 INGESTION_URL=$(terraform -chdir=infra/envs/dev output -raw ecr_ingestion_url)
 DAGSTER_URL=$(terraform -chdir=infra/envs/dev output -raw ecr_dagster_url)
 REGISTRY=${INGESTION_URL%%/*}

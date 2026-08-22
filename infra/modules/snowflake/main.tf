@@ -89,7 +89,7 @@ resource "snowflake_schema" "gold" {
 resource "snowflake_external_volume" "lakehouse" {
   name = "TRANSIT_LAKEHOUSE"
   storage_location {
-    storage_location_name = "lakehouse-us-east-1"
+    storage_location_name = "lakehouse-us-east-2"
     storage_provider      = "S3"
     storage_base_url      = "s3://${var.lakehouse_bucket}/iceberg/"
     storage_aws_role_arn  = aws_iam_role.snowflake_reader.arn
