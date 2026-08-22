@@ -11,7 +11,7 @@ Binary protobuf `FeedMessage`. One file = `header` + repeated `entity`, each ent
 ### A.1 FeedHeader
 | Field | Type | Meaning | Our use |
 |---|---|---|---|
-| `gtfs_realtime_version` | string | Spec version ("2.0") | sanity check |
+| `gtfs_realtime_version` | string | Spec version ("2.0"; NYC reports "1.0") | sanity check |
 | `timestamp` | uint64 epoch | When feed snapshot was generated | `feed_ts_utc`; freshness metric (observed lag 1–18s ✅) |
 
 ### A.2 TripUpdate (→ `silver.stop_time_predictions`)
@@ -63,7 +63,7 @@ Binary protobuf `FeedMessage`. One file = `header` + repeated `entity`, each ent
 
 | City | Endpoints | Auth | Verified | Quirks that affect the pipeline |
 |---|---|---|---|---|
-| **NYC (MTA subway)** | `api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs[-ace,-bdfm,-g,-jz,-nqrw,-l,-si]` (8 feeds, TU+VP+Alert combined) | none | ✅ 200, feed_age 3–8s, ACE: TU=79/VP=79; 1-7: TU=201/VP=114 | ① `arrival.delay` NOT set (✅ `delay_set=False`) → we compute vs schedule. ② trip_id is origin-time-encoded (✅ `070950_A..S58R`) ≠ static trip_id → NYC matcher on (route, direction, start_date, origin time = prefix/100 min after midnight). ③ VP has NO lat/lon for subway (stop-relative only). ④ NYCT protobuf extension present (`nyct_trip_descriptor`: train_id, is_assigned, direction; `nyct_stop_time_update`: scheduled_track, actual_track) — parse train_id, ignore rest. |
+| **NYC (MTA subway)** | `api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs[-ace,-bdfm,-g,-jz,-nqrw,-l,-si]` (8 feeds, TU+VP+Alert combined) | none | ✅ 200, feed_age 3–8s, ACE: TU=79/VP=79; 1-7: TU=201/VP=114 | ① `arrival.delay` NOT set (✅ `delay_set=False`) → we compute vs schedule. **Exception (fixtures 2026-08-22): the L feed (CBTC) DOES set `arrival.delay` and `stop_time_update.stop_sequence` (197/201 STUs); the other 7 feeds set neither.** The COALESCE delay rule absorbs this. ② trip_id is origin-time-encoded (✅ `070950_A..S58R`) ≠ static trip_id → NYC matcher on (route, direction, start_date, origin time = prefix/100 min after midnight); `trip.start_time` is sometimes empty → origin time always taken from the trip_id prefix. ③ VP has NO lat/lon for subway (stop-relative only). ④ NYCT protobuf extension present (`nyct_trip_descriptor`: train_id, is_assigned, direction; `nyct_stop_time_update`: scheduled_track, actual_track) — parse train_id, ignore rest. ⑤ `stop_sequence` absent outside the L feed → derived from matched static `stop_times` by stop_id. |
 | **Chicago (CTA)** | `transitdata.transitchicago.com/GtfsRealtime/{TripUpdates,VehiclePositions,ServiceAlerts}.pb` (+`.json`) | **free key required**, `?key=` (✅ keyless request returns HTML page, not a feed) | endpoint live | Beta program; register via CTA Developer Center. Train Tracker/Bus Tracker JSON APIs remain as backup. Rail + bus in one program. |
 | **DC (WMATA)** | `api.wmata.com/gtfs/{rail,bus}-gtfsrt-{tripupdates,vehiclepositions,alerts}.pb` | free key, header `api_key`; default 50k calls/day | ✅ 401 (auth wall confirmed) | 6 endpoints × 30s = 17k/day, inside quota. |
 | **Boston (MBTA)** | `cdn.mbta.com/realtime/{TripUpdates,VehiclePositions,Alerts}.pb` | none for GTFS-RT (V3 JSON:API key optional) | ✅ 200, TU=1671, VP=522, age 1–2s | Occupancy populated on many vehicles. Cleanest feed of the set. |
