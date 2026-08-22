@@ -147,6 +147,23 @@ locals {
   ])
 }
 
+resource "aws_sqs_queue" "drain_dlq" {
+  name = "${var.prefix}-emr-drain-dlq"
+}
+
+resource "aws_iam_role_policy" "scheduler_dlq" {
+  name = "dlq"
+  role = aws_iam_role.scheduler.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sqs:SendMessage"]
+      Resource = aws_sqs_queue.drain_dlq.arn
+    }]
+  })
+}
+
 resource "aws_scheduler_schedule" "drain" {
   name                = "${var.prefix}-emr-drain"
   schedule_expression = var.drain_schedule
@@ -156,6 +173,12 @@ resource "aws_scheduler_schedule" "drain" {
   target {
     arn      = "arn:aws:scheduler:::aws-sdk:emrserverless:startJobRun"
     role_arn = aws_iam_role.scheduler.arn
+    dead_letter_config {
+      arn = aws_sqs_queue.drain_dlq.arn
+    }
+    retry_policy {
+      maximum_retry_attempts = 1
+    }
     input = jsonencode({
       ClientToken      = "<aws.scheduler.execution-id>"
       ApplicationId    = aws_emrserverless_application.streaming.id
