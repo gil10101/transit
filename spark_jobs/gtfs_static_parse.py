@@ -21,13 +21,12 @@ import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-import boto3
 import requests
 from dotenv import load_dotenv
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
-from ingestion.adapters.base import load_city_config
+from ingestion.adapters.base import load_city_config, s3_client
 from spark_jobs.session import build_spark
 
 # file name -> columns cast from string
@@ -67,13 +66,7 @@ def download(url: str) -> bytes:
 
 
 def archive_zip(city: str, version_id: str, blob: bytes) -> None:
-    boto3.client(
-        "s3",
-        endpoint_url=os.environ.get("MINIO_ENDPOINT", "http://localhost:9000"),
-        aws_access_key_id=os.environ.get("MINIO_ACCESS_KEY", "minioadmin"),
-        aws_secret_access_key=os.environ.get("MINIO_SECRET_KEY", "minioadmin"),
-        region_name="us-east-1",
-    ).put_object(
+    s3_client().put_object(
         Bucket=os.environ.get("RAW_BUCKET", "raw"),
         Key=f"static/{city}/{version_id}/gtfs.zip",
         Body=blob,

@@ -1,0 +1,788 @@
+- generic [active]:
+  - generic:
+    - generic:
+      - generic "View Lineage Graph" [ref=f1e4] [cursor=pointer]
+      - generic [ref=f1e7]:
+        - generic [ref=f1e8]:
+          - link [ref=f1e13] [cursor=pointer]:
+            - /url: "#!/overview"
+            - img "dbt logo" [ref=f1e14]
+          - list [ref=f1e19]:
+            - listitem [ref=f1e20]:
+              - link "Overview" [ref=f1e21] [cursor=pointer]:
+                - /url: "#!/overview"
+            - listitem [ref=f1e22]:
+              - generic [ref=f1e23]:
+                - generic [ref=f1e24]: Project
+                - generic [ref=f1e28]: Database
+                - generic [ref=f1e32]: Group
+            - listitem [ref=f1e36]:
+              - generic [ref=f1e37]:
+                - generic [ref=f1e38]:
+                  - strong [ref=f1e39]: Sources
+                  - list [ref=f1e40]:
+                    - listitem [ref=f1e41]:
+                      - generic [ref=f1e42] [cursor=pointer]: silver
+                - strong [ref=f1e48]: Projects
+                - list [ref=f1e49]:
+                  - listitem [ref=f1e50]:
+                    - generic [ref=f1e51] [cursor=pointer]: transit
+                    - list [ref=f1e57]:
+                      - listitem [ref=f1e58]:
+                        - generic [ref=f1e59] [cursor=pointer]: macros
+                      - listitem [ref=f1e65]:
+                        - generic [ref=f1e66] [cursor=pointer]: models
+                        - list [ref=f1e72]:
+                          - listitem [ref=f1e73]:
+                            - generic [ref=f1e74] [cursor=pointer]: intermediate
+                          - listitem [ref=f1e80]:
+                            - generic [ref=f1e81] [cursor=pointer]: marts
+                            - list [ref=f1e87]:
+                              - listitem [ref=f1e88]:
+                                - generic "fct_stop_events" [ref=f1e89] [cursor=pointer]
+                          - listitem [ref=f1e95]:
+                            - generic [ref=f1e96] [cursor=pointer]: staging
+                      - listitem [ref=f1e102]:
+                        - generic [ref=f1e103] [cursor=pointer]: seeds
+                      - listitem [ref=f1e109]:
+                        - generic [ref=f1e110] [cursor=pointer]: tests
+            - listitem
+            - listitem
+        - generic [ref=f1e116]:
+          - textbox "Search for models..." [ref=f1e119]
+          - generic [ref=f1e121]:
+            - generic [ref=f1e122]:
+              - heading "fct_stop_events incremental" [level=1] [ref=f1e125]
+              - list [ref=f1e127]:
+                - listitem [ref=f1e128]:
+                  - link "Details" [ref=f1e129] [cursor=pointer]:
+                    - /url: "#!/model/model.transit.fct_stop_events#details"
+                - listitem [ref=f1e130]:
+                  - link "Description" [ref=f1e131] [cursor=pointer]:
+                    - /url: "#!/model/model.transit.fct_stop_events#description"
+                - listitem [ref=f1e132]:
+                  - link "Columns" [ref=f1e133] [cursor=pointer]:
+                    - /url: "#!/model/model.transit.fct_stop_events#columns"
+                - listitem [ref=f1e134]:
+                  - link "Referenced By" [ref=f1e135] [cursor=pointer]:
+                    - /url: "#!/model/model.transit.fct_stop_events#referenced_by"
+                - listitem [ref=f1e136]:
+                  - link "Depends On" [ref=f1e137] [cursor=pointer]:
+                    - /url: "#!/model/model.transit.fct_stop_events#depends_on"
+                - listitem [ref=f1e138]:
+                  - link "Code" [ref=f1e139] [cursor=pointer]:
+                    - /url: "#!/model/model.transit.fct_stop_events#code"
+            - generic [ref=f1e141]:
+              - generic [ref=f1e144]:
+                - heading "Details" [level=6] [ref=f1e145]
+                - generic [ref=f1e151]:
+                  - generic [ref=f1e152]:
+                    - term [ref=f1e153]: Tags
+                    - definition [ref=f1e154]: untagged
+                  - generic [ref=f1e155]:
+                    - term [ref=f1e156]: Owner
+                    - definition
+                  - generic [ref=f1e157]:
+                    - term [ref=f1e158]: Type
+                    - definition [ref=f1e159]: table
+                  - generic [ref=f1e160]:
+                    - term [ref=f1e161]: Package
+                    - definition [ref=f1e162]: transit
+                  - generic [ref=f1e163]:
+                    - term [ref=f1e164]: Language
+                    - definition [ref=f1e165]: sql
+                  - generic [ref=f1e166]:
+                    - term [ref=f1e167]: Relation
+                    - definition [ref=f1e168]: transit.main.fct_stop_events
+                  - generic [ref=f1e169]:
+                    - term [ref=f1e170]: Access
+                    - definition [ref=f1e171]: protected
+                  - generic [ref=f1e172]:
+                    - term [ref=f1e173]: Version
+                    - definition
+                  - generic [ref=f1e174]:
+                    - term [ref=f1e175]: Contract
+                    - definition [ref=f1e176]: Not Enforced
+              - generic [ref=f1e178]:
+                - heading "Description" [level=6] [ref=f1e179]
+                - paragraph [ref=f1e183]: "Atomic fact. Grain: one finalized arrival per (city_key, service_date, trip_uid, stop_sequence). v1 finalization_method is always last_prediction."
+              - generic [ref=f1e185]:
+                - heading "Columns" [level=6] [ref=f1e186]
+                - table [ref=f1e191]:
+                  - rowgroup [ref=f1e192]:
+                    - row [ref=f1e193]:
+                      - columnheader "Column" [ref=f1e194]
+                      - columnheader "Type" [ref=f1e195]
+                      - columnheader "Description" [ref=f1e196]
+                      - columnheader "Constraints" [ref=f1e197]
+                      - columnheader "Data Tests" [ref=f1e198]
+                      - columnheader "More?" [ref=f1e199]
+                  - rowgroup [ref=f1e200]:
+                    - row [ref=f1e201] [cursor=pointer]:
+                      - cell "event_key" [ref=f1e202]
+                      - cell [ref=f1e204]:
+                        - generic [ref=f1e205]:
+                          - text: VARCHAR
+                          - paragraph
+                      - cell "md5 of the grain, for uniqueness enforcement" [ref=f1e206]
+                      - cell [ref=f1e207]
+                      - cell "U N" [ref=f1e208]
+                      - cell [ref=f1e210]
+                    - row [ref=f1e215] [cursor=pointer]:
+                      - cell "city_key" [ref=f1e216]
+                      - cell [ref=f1e218]:
+                        - generic [ref=f1e219]:
+                          - text: VARCHAR
+                          - paragraph
+                      - cell [ref=f1e220]
+                      - cell [ref=f1e221]
+                      - cell "N" [ref=f1e222]
+                      - cell [ref=f1e224]
+                    - row [ref=f1e229] [cursor=pointer]:
+                      - cell "service_date" [ref=f1e230]
+                      - cell [ref=f1e232]:
+                        - generic [ref=f1e233]:
+                          - text: DATE
+                          - paragraph
+                      - cell [ref=f1e234]
+                      - cell [ref=f1e235]
+                      - cell "N" [ref=f1e236]
+                      - cell [ref=f1e238]
+                    - row [ref=f1e243] [cursor=pointer]:
+                      - cell "trip_uid" [ref=f1e244]
+                      - cell [ref=f1e246]:
+                        - generic [ref=f1e247]:
+                          - text: VARCHAR
+                          - paragraph
+                      - cell [ref=f1e248]
+                      - cell [ref=f1e249]
+                      - cell "N" [ref=f1e250]
+                      - cell [ref=f1e252]
+                    - row [ref=f1e257] [cursor=pointer]:
+                      - cell "stop_sequence" [ref=f1e258]
+                      - cell [ref=f1e260]:
+                        - generic [ref=f1e261]:
+                          - text: INTEGER
+                          - paragraph
+                      - cell [ref=f1e262]
+                      - cell [ref=f1e263]
+                      - cell "N" [ref=f1e264]
+                      - cell [ref=f1e266]
+                    - row [ref=f1e271]:
+                      - cell "trip_id_raw" [ref=f1e272]
+                      - cell [ref=f1e274]:
+                        - generic [ref=f1e275]:
+                          - text: VARCHAR
+                          - paragraph
+                      - cell [ref=f1e276]
+                      - cell [ref=f1e277]
+                      - cell [ref=f1e278]
+                      - cell [ref=f1e279]
+                    - row [ref=f1e280]:
+                      - cell "static_trip_id" [ref=f1e281]
+                      - cell [ref=f1e283]:
+                        - generic [ref=f1e284]:
+                          - text: VARCHAR
+                          - paragraph
+                      - cell [ref=f1e285]
+                      - cell [ref=f1e286]
+                      - cell [ref=f1e287]
+                      - cell [ref=f1e288]
+                    - row [ref=f1e289]:
+                      - cell "route_id" [ref=f1e290]
+                      - cell [ref=f1e292]:
+                        - generic [ref=f1e293]:
+                          - text: VARCHAR
+                          - paragraph
+                      - cell [ref=f1e294]
+                      - cell [ref=f1e295]
+                      - cell [ref=f1e296]
+                      - cell [ref=f1e297]
+                    - row [ref=f1e298]:
+                      - cell "direction_id" [ref=f1e299]
+                      - cell [ref=f1e301]:
+                        - generic [ref=f1e302]:
+                          - text: INTEGER
+                          - paragraph
+                      - cell [ref=f1e303]
+                      - cell [ref=f1e304]
+                      - cell [ref=f1e305]
+                      - cell [ref=f1e306]
+                    - row [ref=f1e307]:
+                      - cell "stop_id" [ref=f1e308]
+                      - cell [ref=f1e310]:
+                        - generic [ref=f1e311]:
+                          - text: VARCHAR
+                          - paragraph
+                      - cell [ref=f1e312]
+                      - cell [ref=f1e313]
+                      - cell [ref=f1e314]
+                      - cell [ref=f1e315]
+                    - row [ref=f1e316]:
+                      - cell "vehicle_id" [ref=f1e317]
+                      - cell [ref=f1e319]:
+                        - generic [ref=f1e320]:
+                          - text: VARCHAR
+                          - paragraph
+                      - cell [ref=f1e321]
+                      - cell [ref=f1e322]
+                      - cell [ref=f1e323]
+                      - cell [ref=f1e324]
+                    - row [ref=f1e325]:
+                      - cell "match_confidence" [ref=f1e326]
+                      - cell [ref=f1e328]:
+                        - generic [ref=f1e329]:
+                          - text: DECIMAL(2,1)
+                          - paragraph
+                      - cell [ref=f1e330]
+                      - cell [ref=f1e331]
+                      - cell [ref=f1e332]
+                      - cell [ref=f1e333]
+                    - row [ref=f1e334]:
+                      - cell "local_date" [ref=f1e335]
+                      - cell [ref=f1e337]:
+                        - generic [ref=f1e338]:
+                          - text: DATE
+                          - paragraph
+                      - cell [ref=f1e339]
+                      - cell [ref=f1e340]
+                      - cell [ref=f1e341]
+                      - cell [ref=f1e342]
+                    - row [ref=f1e343]:
+                      - cell "local_hour" [ref=f1e344]
+                      - cell [ref=f1e346]:
+                        - generic [ref=f1e347]:
+                          - text: BIGINT
+                          - paragraph
+                      - cell [ref=f1e348]
+                      - cell [ref=f1e349]
+                      - cell [ref=f1e350]
+                      - cell [ref=f1e351]
+                    - row [ref=f1e352]:
+                      - cell "local_dow" [ref=f1e353]
+                      - cell [ref=f1e355]:
+                        - generic [ref=f1e356]:
+                          - text: BIGINT
+                          - paragraph
+                      - cell [ref=f1e357]
+                      - cell [ref=f1e358]
+                      - cell [ref=f1e359]
+                      - cell [ref=f1e360]
+                    - row [ref=f1e361]:
+                      - cell "is_peak" [ref=f1e362]
+                      - cell [ref=f1e364]:
+                        - generic [ref=f1e365]:
+                          - text: BOOLEAN
+                          - paragraph
+                      - cell [ref=f1e366]
+                      - cell [ref=f1e367]
+                      - cell [ref=f1e368]
+                      - cell [ref=f1e369]
+                    - row [ref=f1e370]:
+                      - cell "sched_arr_ts_utc" [ref=f1e371]
+                      - cell [ref=f1e373]:
+                        - generic [ref=f1e374]:
+                          - text: TIMESTAMP
+                          - paragraph
+                      - cell [ref=f1e375]
+                      - cell [ref=f1e376]
+                      - cell [ref=f1e377]
+                      - cell [ref=f1e378]
+                    - row [ref=f1e379]:
+                      - cell "sched_dep_ts_utc" [ref=f1e380]
+                      - cell [ref=f1e382]:
+                        - generic [ref=f1e383]:
+                          - text: TIMESTAMP
+                          - paragraph
+                      - cell [ref=f1e384]
+                      - cell [ref=f1e385]
+                      - cell [ref=f1e386]
+                      - cell [ref=f1e387]
+                    - row [ref=f1e388]:
+                      - cell "actual_arr_ts_utc" [ref=f1e389]
+                      - cell [ref=f1e391]:
+                        - generic [ref=f1e392]:
+                          - text: TIMESTAMP WITH TIME ZONE
+                          - paragraph
+                      - cell [ref=f1e393]
+                      - cell [ref=f1e394]
+                      - cell [ref=f1e395]
+                      - cell [ref=f1e396]
+                    - row [ref=f1e397]:
+                      - cell "actual_dep_ts_utc" [ref=f1e398]
+                      - cell [ref=f1e400]:
+                        - generic [ref=f1e401]:
+                          - text: TIMESTAMP WITH TIME ZONE
+                          - paragraph
+                      - cell [ref=f1e402]
+                      - cell [ref=f1e403]
+                      - cell [ref=f1e404]
+                      - cell [ref=f1e405]
+                    - row [ref=f1e406] [cursor=pointer]:
+                      - cell "delay_arr_sec" [ref=f1e407]
+                      - cell [ref=f1e409]:
+                        - generic [ref=f1e410]:
+                          - text: INTEGER
+                          - paragraph
+                      - cell "signed seconds vs schedule; negative = early" [ref=f1e411]
+                      - cell [ref=f1e412]
+                      - cell "+" [ref=f1e413]
+                      - cell [ref=f1e415]
+                    - row [ref=f1e420]:
+                      - cell "delay_dep_sec" [ref=f1e421]
+                      - cell [ref=f1e423]:
+                        - generic [ref=f1e424]:
+                          - text: INTEGER
+                          - paragraph
+                      - cell [ref=f1e425]
+                      - cell [ref=f1e426]
+                      - cell [ref=f1e427]
+                      - cell [ref=f1e428]
+                    - row [ref=f1e429]:
+                      - cell "early_departure_flag" [ref=f1e430]
+                      - cell [ref=f1e432]:
+                        - generic [ref=f1e433]:
+                          - text: BOOLEAN
+                          - paragraph
+                      - cell [ref=f1e434]
+                      - cell [ref=f1e435]
+                      - cell [ref=f1e436]
+                      - cell [ref=f1e437]
+                    - row [ref=f1e438] [cursor=pointer]:
+                      - cell "otp_band" [ref=f1e439]
+                      - cell [ref=f1e441]:
+                        - generic [ref=f1e442]:
+                          - text: VARCHAR
+                          - paragraph
+                      - cell [ref=f1e443]
+                      - cell [ref=f1e444]
+                      - cell "A" [ref=f1e445]
+                      - cell [ref=f1e447]
+                    - row [ref=f1e452]:
+                      - cell "schedule_relationship" [ref=f1e453]
+                      - cell [ref=f1e455]:
+                        - generic [ref=f1e456]:
+                          - text: VARCHAR
+                          - paragraph
+                      - cell [ref=f1e457]
+                      - cell [ref=f1e458]
+                      - cell [ref=f1e459]
+                      - cell [ref=f1e460]
+                    - row [ref=f1e461]:
+                      - cell "cancelled_flag" [ref=f1e462]
+                      - cell [ref=f1e464]:
+                        - generic [ref=f1e465]:
+                          - text: BOOLEAN
+                          - paragraph
+                      - cell [ref=f1e466]
+                      - cell [ref=f1e467]
+                      - cell [ref=f1e468]
+                      - cell [ref=f1e469]
+                    - row [ref=f1e470]:
+                      - cell "skipped_flag" [ref=f1e471]
+                      - cell [ref=f1e473]:
+                        - generic [ref=f1e474]:
+                          - text: BOOLEAN
+                          - paragraph
+                      - cell [ref=f1e475]
+                      - cell [ref=f1e476]
+                      - cell [ref=f1e477]
+                      - cell [ref=f1e478]
+                    - row [ref=f1e479]:
+                      - cell "finalization_method" [ref=f1e480]
+                      - cell [ref=f1e482]:
+                        - generic [ref=f1e483]:
+                          - text: VARCHAR
+                          - paragraph
+                      - cell [ref=f1e484]
+                      - cell [ref=f1e485]
+                      - cell [ref=f1e486]
+                      - cell [ref=f1e487]
+                    - row [ref=f1e488]:
+                      - cell "prediction_count" [ref=f1e489]
+                      - cell [ref=f1e491]:
+                        - generic [ref=f1e492]:
+                          - text: BIGINT
+                          - paragraph
+                      - cell [ref=f1e493]
+                      - cell [ref=f1e494]
+                      - cell [ref=f1e495]
+                      - cell [ref=f1e496]
+                    - row [ref=f1e497]:
+                      - cell "first_seen_utc" [ref=f1e498]
+                      - cell [ref=f1e500]:
+                        - generic [ref=f1e501]:
+                          - text: TIMESTAMP WITH TIME ZONE
+                          - paragraph
+                      - cell [ref=f1e502]
+                      - cell [ref=f1e503]
+                      - cell [ref=f1e504]
+                      - cell [ref=f1e505]
+                    - row [ref=f1e506]:
+                      - cell "last_seen_utc" [ref=f1e507]
+                      - cell [ref=f1e509]:
+                        - generic [ref=f1e510]:
+                          - text: TIMESTAMP WITH TIME ZONE
+                          - paragraph
+                      - cell [ref=f1e511]
+                      - cell [ref=f1e512]
+                      - cell [ref=f1e513]
+                      - cell [ref=f1e514]
+                    - row [ref=f1e515]:
+                      - cell "gtfs_version_id" [ref=f1e516]
+                      - cell [ref=f1e518]:
+                        - generic [ref=f1e519]:
+                          - text: VARCHAR
+                          - paragraph
+                      - cell [ref=f1e520]
+                      - cell [ref=f1e521]
+                      - cell [ref=f1e522]
+                      - cell [ref=f1e523]
+                    - row [ref=f1e524]:
+                      - cell "source_format" [ref=f1e525]
+                      - cell [ref=f1e527]:
+                        - generic [ref=f1e528]:
+                          - text: VARCHAR
+                          - paragraph
+                      - cell [ref=f1e529]
+                      - cell [ref=f1e530]
+                      - cell [ref=f1e531]
+                      - cell [ref=f1e532]
+              - generic [ref=f1e534]:
+                - heading "Referenced By" [level=6] [ref=f1e535]
+                - generic [ref=f1e538]:
+                  - list [ref=f1e539]:
+                    - listitem [ref=f1e540]:
+                      - generic [ref=f1e541]: Data Tests
+                  - list [ref=f1e543]:
+                    - listitem [ref=f1e544]:
+                      - link "unique_fct_stop_events_event_key" [ref=f1e545] [cursor=pointer]:
+                        - /url: "#!/test/test.transit.unique_fct_stop_events_event_key.864853f3c7"
+                    - listitem [ref=f1e546]:
+                      - link "not_null_fct_stop_events_event_key" [ref=f1e547] [cursor=pointer]:
+                        - /url: "#!/test/test.transit.not_null_fct_stop_events_event_key.3ae809573a"
+                    - listitem [ref=f1e548]:
+                      - link "not_null_fct_stop_events_city_key" [ref=f1e549] [cursor=pointer]:
+                        - /url: "#!/test/test.transit.not_null_fct_stop_events_city_key.af23a67c09"
+                    - listitem [ref=f1e550]:
+                      - link "not_null_fct_stop_events_service_date" [ref=f1e551] [cursor=pointer]:
+                        - /url: "#!/test/test.transit.not_null_fct_stop_events_service_date.30014ec451"
+                    - listitem [ref=f1e552]:
+                      - link "not_null_fct_stop_events_trip_uid" [ref=f1e553] [cursor=pointer]:
+                        - /url: "#!/test/test.transit.not_null_fct_stop_events_trip_uid.305b3841c2"
+                    - listitem [ref=f1e554]:
+                      - link "not_null_fct_stop_events_stop_sequence" [ref=f1e555] [cursor=pointer]:
+                        - /url: "#!/test/test.transit.not_null_fct_stop_events_stop_sequence.3b32737bf7"
+                    - listitem [ref=f1e556]:
+                      - link "delay_within_bounds_fct_stop_events_delay_arr_sec" [ref=f1e557] [cursor=pointer]:
+                        - /url: "#!/test/test.transit.delay_within_bounds_fct_stop_events_delay_arr_sec.b34f86c661"
+                    - listitem [ref=f1e558]:
+                      - link "accepted_values_fct_stop_events_otp_band__early__on_time__late__very_late" [ref=f1e559] [cursor=pointer]:
+                        - /url: "#!/test/test.transit.accepted_values_fct_stop_events_otp_band__early__on_time__late__very_late.a9d04af6f1"
+              - generic [ref=f1e561]:
+                - heading "Depends On" [level=6] [ref=f1e562]
+                - generic [ref=f1e565]:
+                  - list [ref=f1e566]:
+                    - listitem [ref=f1e567]:
+                      - generic [ref=f1e568]: Seeds
+                    - listitem [ref=f1e569]:
+                      - generic [ref=f1e570] [cursor=pointer]: Models
+                    - listitem [ref=f1e571]:
+                      - generic [ref=f1e572] [cursor=pointer]: Macros
+                  - list [ref=f1e574]:
+                    - listitem [ref=f1e575]:
+                      - link "dim_city" [ref=f1e576] [cursor=pointer]:
+                        - /url: "#!/seed/seed.transit.dim_city"
+              - generic [ref=f1e579]:
+                - heading "Code" [level=6] [ref=f1e580]
+                - generic [ref=f1e582]:
+                  - list [ref=f1e583]:
+                    - listitem [ref=f1e584]:
+                      - generic [ref=f1e585]: Source
+                    - listitem [ref=f1e586]:
+                      - generic [ref=f1e587] [cursor=pointer]: Compiled
+                    - listitem [ref=f1e588]
+                    - listitem [ref=f1e589]:
+                      - generic [ref=f1e590] [cursor=pointer]: copy to clipboard
+                  - code [ref=f1e593]:
+                    - generic [ref=f1e594]: "-- Atomic fact: one finalized stop visit per (city_key, service_date, trip_uid,"
+                    - generic [ref=f1e595]: "-- stop_sequence). Local-time fields derive via dim_city.iana_tz; all analysis is"
+                    - generic [ref=f1e596]: "-- local, storage is UTC. NYC is subway-only, so the bus-timepoint early-departure"
+                    - generic [ref=f1e597]: "-- rule never fires here (kept as an explicit false until bus cities land)."
+                    - text: "{{ config"
+                    - generic [ref=f1e598]: (
+                    - text: materialized
+                    - generic [ref=f1e599]: =
+                    - generic [ref=f1e600]: "'incremental'"
+                    - generic [ref=f1e601]: ","
+                    - text: incremental_strategy
+                    - generic [ref=f1e602]: =
+                    - generic [ref=f1e603]: "'delete+insert'"
+                    - generic [ref=f1e604]: ","
+                    - text: unique_key
+                    - generic [ref=f1e605]: =
+                    - generic [ref=f1e606]: "["
+                    - generic [ref=f1e607]: "'city_key'"
+                    - generic [ref=f1e608]: ","
+                    - generic [ref=f1e609]: "'service_date'"
+                    - generic [ref=f1e610]: ","
+                    - generic [ref=f1e611]: "'trip_uid'"
+                    - generic [ref=f1e612]: ","
+                    - generic [ref=f1e613]: "'stop_sequence'"
+                    - generic [ref=f1e614]: "]"
+                    - generic [ref=f1e615]: )
+                    - text: "}}"
+                    - generic [ref=f1e616]: with
+                    - text: f
+                    - generic [ref=f1e617]: as
+                    - generic [ref=f1e618]: (
+                    - generic [ref=f1e619]: select
+                    - generic [ref=f1e620]: "*"
+                    - generic [ref=f1e621]: from
+                    - text: "{{ ref"
+                    - generic [ref=f1e622]: (
+                    - generic [ref=f1e623]: "'int_stop_events_finalized'"
+                    - generic [ref=f1e624]: )
+                    - text: "}} {"
+                    - generic [ref=f1e625]: "%"
+                    - generic [ref=f1e626]: if
+                    - text: is_incremental
+                    - generic [ref=f1e627]: (
+                    - generic [ref=f1e628]: )
+                    - generic [ref=f1e629]: "%"
+                    - text: "}"
+                    - generic [ref=f1e630]: where
+                    - text: service_date
+                    - generic [ref=f1e631]: ">="
+                    - generic [ref=f1e632]: current_date
+                    - generic [ref=f1e633]: "-"
+                    - text: cast
+                    - generic [ref=f1e634]: (
+                    - text: ceil
+                    - generic [ref=f1e635]: (
+                    - text: "{{ var"
+                    - generic [ref=f1e636]: (
+                    - generic [ref=f1e637]: "'lookback_hours'"
+                    - generic [ref=f1e638]: )
+                    - text: "}}"
+                    - generic [ref=f1e639]: /
+                    - generic [ref=f1e640]: "24.0"
+                    - generic [ref=f1e641]: )
+                    - generic [ref=f1e642]: as
+                    - generic [ref=f1e643]: int
+                    - generic [ref=f1e644]: )
+                    - text: "{"
+                    - generic [ref=f1e645]: "%"
+                    - text: endif
+                    - generic [ref=f1e646]: "%"
+                    - text: "}"
+                    - generic [ref=f1e647]: )
+                    - generic [ref=f1e648]: ","
+                    - text: localized
+                    - generic [ref=f1e649]: as
+                    - generic [ref=f1e650]: (
+                    - generic [ref=f1e651]: select
+                    - text: f
+                    - generic [ref=f1e652]: .
+                    - generic [ref=f1e653]: "*"
+                    - generic [ref=f1e654]: ","
+                    - text: c
+                    - generic [ref=f1e655]: .
+                    - text: iana_tz
+                    - generic [ref=f1e656]: ","
+                    - text: c
+                    - generic [ref=f1e657]: .
+                    - text: peak_am_start
+                    - generic [ref=f1e658]: ","
+                    - text: c
+                    - generic [ref=f1e659]: .
+                    - text: peak_am_end
+                    - generic [ref=f1e660]: ","
+                    - text: c
+                    - generic [ref=f1e661]: .
+                    - text: peak_pm_start
+                    - generic [ref=f1e662]: ","
+                    - text: c
+                    - generic [ref=f1e663]: .
+                    - text: peak_pm_end
+                    - generic [ref=f1e664]: ","
+                    - text: "{{ to_local"
+                    - generic [ref=f1e665]: (
+                    - generic [ref=f1e666]: "'f.actual_arr_ts_utc'"
+                    - generic [ref=f1e667]: ","
+                    - generic [ref=f1e668]: "'c.iana_tz'"
+                    - generic [ref=f1e669]: )
+                    - text: "}}"
+                    - generic [ref=f1e670]: as
+                    - text: actual_arr_ts_local
+                    - generic [ref=f1e671]: from
+                    - text: f
+                    - generic [ref=f1e672]: join
+                    - text: "{{ ref"
+                    - generic [ref=f1e673]: (
+                    - generic [ref=f1e674]: "'dim_city'"
+                    - generic [ref=f1e675]: )
+                    - text: "}} c"
+                    - generic [ref=f1e676]: "on"
+                    - text: c
+                    - generic [ref=f1e677]: .
+                    - text: city_key
+                    - generic [ref=f1e678]: =
+                    - text: f
+                    - generic [ref=f1e679]: .
+                    - text: city_key
+                    - generic [ref=f1e680]: )
+                    - generic [ref=f1e681]: select
+                    - text: md5
+                    - generic [ref=f1e682]: (
+                    - text: concat_ws
+                    - generic [ref=f1e683]: (
+                    - generic [ref=f1e684]: "'|'"
+                    - generic [ref=f1e685]: ","
+                    - text: city_key
+                    - generic [ref=f1e686]: ","
+                    - text: service_date
+                    - generic [ref=f1e687]: ","
+                    - text: trip_uid
+                    - generic [ref=f1e688]: ","
+                    - text: stop_sequence
+                    - generic [ref=f1e689]: )
+                    - generic [ref=f1e690]: )
+                    - generic [ref=f1e691]: as
+                    - text: event_key
+                    - generic [ref=f1e692]: ","
+                    - text: city_key
+                    - generic [ref=f1e693]: ","
+                    - text: service_date
+                    - generic [ref=f1e694]: ","
+                    - text: trip_uid
+                    - generic [ref=f1e695]: ","
+                    - text: stop_sequence
+                    - generic [ref=f1e696]: ","
+                    - text: trip_id_raw
+                    - generic [ref=f1e697]: ","
+                    - text: static_trip_id
+                    - generic [ref=f1e698]: ","
+                    - text: route_id
+                    - generic [ref=f1e699]: ","
+                    - text: direction_id
+                    - generic [ref=f1e700]: ","
+                    - text: stop_id
+                    - generic [ref=f1e701]: ","
+                    - text: vehicle_id
+                    - generic [ref=f1e702]: ","
+                    - text: match_confidence
+                    - generic [ref=f1e703]: ","
+                    - text: cast
+                    - generic [ref=f1e704]: (
+                    - text: actual_arr_ts_local
+                    - generic [ref=f1e705]: as
+                    - generic [ref=f1e706]: date
+                    - generic [ref=f1e707]: )
+                    - generic [ref=f1e708]: as
+                    - text: local_date
+                    - generic [ref=f1e709]: ","
+                    - text: extract
+                    - generic [ref=f1e710]: (
+                    - generic [ref=f1e711]: hour
+                    - generic [ref=f1e712]: from
+                    - text: actual_arr_ts_local
+                    - generic [ref=f1e713]: )
+                    - generic [ref=f1e714]: as
+                    - text: local_hour
+                    - generic [ref=f1e715]: ","
+                    - text: dayofweek
+                    - generic [ref=f1e716]: (
+                    - text: cast
+                    - generic [ref=f1e717]: (
+                    - text: actual_arr_ts_local
+                    - generic [ref=f1e718]: as
+                    - generic [ref=f1e719]: date
+                    - generic [ref=f1e720]: )
+                    - generic [ref=f1e721]: )
+                    - generic [ref=f1e722]: as
+                    - text: local_dow
+                    - generic [ref=f1e723]: ","
+                    - generic [ref=f1e724]: (
+                    - text: cast
+                    - generic [ref=f1e725]: (
+                    - text: actual_arr_ts_local
+                    - generic [ref=f1e726]: as
+                    - generic [ref=f1e727]: time
+                    - generic [ref=f1e728]: )
+                    - generic [ref=f1e729]: between
+                    - text: peak_am_start
+                    - generic [ref=f1e730]: and
+                    - text: peak_am_end
+                    - generic [ref=f1e731]: or
+                    - text: cast
+                    - generic [ref=f1e732]: (
+                    - text: actual_arr_ts_local
+                    - generic [ref=f1e733]: as
+                    - generic [ref=f1e734]: time
+                    - generic [ref=f1e735]: )
+                    - generic [ref=f1e736]: between
+                    - text: peak_pm_start
+                    - generic [ref=f1e737]: and
+                    - text: peak_pm_end
+                    - generic [ref=f1e738]: )
+                    - generic [ref=f1e739]: and
+                    - text: dayofweek
+                    - generic [ref=f1e740]: (
+                    - text: cast
+                    - generic [ref=f1e741]: (
+                    - text: actual_arr_ts_local
+                    - generic [ref=f1e742]: as
+                    - generic [ref=f1e743]: date
+                    - generic [ref=f1e744]: )
+                    - generic [ref=f1e745]: )
+                    - generic [ref=f1e746]: between
+                    - generic [ref=f1e747]: "1"
+                    - generic [ref=f1e748]: and
+                    - generic [ref=f1e749]: "5"
+                    - generic [ref=f1e750]: as
+                    - text: is_peak
+                    - generic [ref=f1e751]: ","
+                    - text: sched_arr_ts_utc
+                    - generic [ref=f1e752]: ","
+                    - text: sched_dep_ts_utc
+                    - generic [ref=f1e753]: ","
+                    - text: actual_arr_ts_utc
+                    - generic [ref=f1e754]: ","
+                    - text: actual_dep_ts_utc
+                    - generic [ref=f1e755]: ","
+                    - text: delay_arr_sec
+                    - generic [ref=f1e756]: ","
+                    - text: delay_dep_sec
+                    - generic [ref=f1e757]: ","
+                    - generic [ref=f1e758]: "false"
+                    - generic [ref=f1e759]: as
+                    - text: early_departure_flag
+                    - generic [ref=f1e760]: ","
+                    - text: "{{ otp_band"
+                    - generic [ref=f1e761]: (
+                    - generic [ref=f1e762]: "'delay_arr_sec'"
+                    - generic [ref=f1e763]: )
+                    - text: "}}"
+                    - generic [ref=f1e764]: as
+                    - text: otp_band
+                    - generic [ref=f1e765]: ","
+                    - text: schedule_relationship
+                    - generic [ref=f1e766]: ","
+                    - text: cancelled_flag
+                    - generic [ref=f1e767]: ","
+                    - text: skipped_flag
+                    - generic [ref=f1e768]: ","
+                    - text: finalization_method
+                    - generic [ref=f1e769]: ","
+                    - text: prediction_count
+                    - generic [ref=f1e770]: ","
+                    - text: first_seen_utc
+                    - generic [ref=f1e771]: ","
+                    - text: last_seen_utc
+                    - generic [ref=f1e772]: ","
+                    - text: gtfs_version_id
+                    - generic [ref=f1e773]: ","
+                    - text: source_format
+                    - generic [ref=f1e774]: from
+                    - text: localized

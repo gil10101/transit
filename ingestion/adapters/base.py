@@ -143,18 +143,27 @@ class KafkaEmitter:
         self.producer.flush(10)
 
 
+def s3_client():
+    """MinIO when MINIO_ENDPOINT is set (local dev); default AWS chain otherwise
+    (instance role / ~/.aws in cloud)."""
+    endpoint = os.environ.get("MINIO_ENDPOINT")
+    if endpoint:
+        return boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            aws_access_key_id=os.environ.get("MINIO_ACCESS_KEY", "minioadmin"),
+            aws_secret_access_key=os.environ.get("MINIO_SECRET_KEY", "minioadmin"),
+            region_name="us-east-1",
+        )
+    return boto3.client("s3")
+
+
 class RawArchiver:
     """Writes fetched bytes to s3://$RAW_BUCKET/<city>/<endpoint>/<date>/<hour>/<ts>.pb."""
 
     def __init__(self):
         self.bucket = os.environ.get("RAW_BUCKET", "raw")
-        self.client = boto3.client(
-            "s3",
-            endpoint_url=os.environ.get("MINIO_ENDPOINT", "http://localhost:9000"),
-            aws_access_key_id=os.environ.get("MINIO_ACCESS_KEY", "minioadmin"),
-            aws_secret_access_key=os.environ.get("MINIO_SECRET_KEY", "minioadmin"),
-            region_name="us-east-1",
-        )
+        self.client = s3_client()
 
     def archive(self, city: str, endpoint: str, fetched_at: datetime, raw: bytes) -> str:
         key = (

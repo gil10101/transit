@@ -29,9 +29,20 @@ def city_timezones() -> dict[str, str]:
     return out
 
 
+def lake_base() -> str:
+    """s3a://<bucket> against MinIO locally; TP_LAKE_URI (s3://...) in cloud."""
+    return os.environ.get("TP_LAKE_URI", f"s3a://{os.environ.get('LAKE_BUCKET', 'lakehouse')}")
+
+
 def build_spark(app_name: str) -> SparkSession:
     load_dotenv()
-    lake_bucket = os.environ.get("LAKE_BUCKET", "lakehouse")
+    if os.environ.get("TP_CLOUD") == "1":
+        # EMR: catalog, jars, and S3 access arrive via job-submission conf / instance role
+        return (
+            SparkSession.builder.appName(app_name)
+            .config("spark.sql.session.timeZone", "UTC")
+            .getOrCreate()
+        )
     endpoint = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
     access = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
     secret = os.environ.get("MINIO_SECRET_KEY", "minioadmin")
@@ -50,7 +61,7 @@ def build_spark(app_name: str) -> SparkSession:
         .config("spark.sql.shuffle.partitions", "8")
         .config("spark.sql.catalog.lake", "org.apache.iceberg.spark.SparkCatalog")
         .config("spark.sql.catalog.lake.type", "hadoop")
-        .config("spark.sql.catalog.lake.warehouse", f"s3a://{lake_bucket}/iceberg")
+        .config("spark.sql.catalog.lake.warehouse", f"{lake_base()}/iceberg")
         .config(
             "spark.sql.extensions",
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
@@ -73,8 +84,7 @@ def kafka_bootstrap() -> str:
 
 
 def checkpoint_root() -> str:
-    lake_bucket = os.environ.get("LAKE_BUCKET", "lakehouse")
-    return f"s3a://{lake_bucket}/checkpoints"
+    return f"{lake_base()}/checkpoints"
 
 
 def ensure_table(spark: SparkSession, name: str, ddl_columns: str, partition_by: str) -> None:
