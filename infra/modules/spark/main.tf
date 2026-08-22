@@ -127,6 +127,8 @@ locals {
     "--conf spark.driver.memory=6g",
     "--conf spark.executor.cores=2",
     "--conf spark.executor.memory=6g",
+    "--conf spark.executor.instances=1",
+    "--conf spark.dynamicAllocation.initialExecutors=1",
     "--conf spark.dynamicAllocation.maxExecutors=1",
     "--conf spark.sql.catalog.lake=org.apache.iceberg.spark.SparkCatalog",
     "--conf spark.sql.catalog.lake.type=hadoop",

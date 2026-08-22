@@ -7,7 +7,13 @@ Nine cities planned (NYC, Chicago, DC, Boston, SF Bay, Toronto, Zurich, Helsinki
 three real-time formats (GTFS-RT protobuf, ODPT JSON, MQTT). Full plan and verified
 per-feed facts live in [`docs/`](docs/).
 
-**Status: Phase 1 — NYC subway vertical slice, running end-to-end locally.**
+**Status: Phase 2 — NYC pipeline running fully in AWS (us-east-2) + Snowflake; laptop optional.**
+
+Cloud path: poller on EC2 -> Kafka (EC2, KRaft) -> EMR Serverless drains every 15 min
+(availableNow, checkpointed) -> Iceberg on S3 -> Snowflake external Iceberg tables ->
+dbt (`--target prod`) builds `TRANSIT.GOLD.FCT_STOP_EVENTS`. Local compose remains the
+dev loop (`make up`, `--target dev`). `make snowflake-refresh` re-pins Snowflake's
+Iceberg metadata after drains (Dagster takes this over in P5).
 
 ## Architecture (local slice)
 
@@ -31,8 +37,7 @@ MTA subway (8 GTFS-RT feeds, 30s poll)
         → int_stop_events_finalized → fct_stop_events
 ```
 
-Cloud phases swap MinIO→S3, duckdb→Snowflake, add EMR Serverless + Terraform. Same code,
-different profiles; nothing cloud-side exists yet by design.
+Same code both ways: MinIO<->S3, duckdb<->Snowflake are profile/env switches. `infra/` holds the Terraform that stands the cloud path up (42 resources, $90/mo budget alarm).
 
 ## Quickstart
 

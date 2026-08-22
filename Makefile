@@ -51,3 +51,6 @@ deploy-images:
 
 emr-drain:
 	bash scripts/submit_emr_drain.sh
+
+snowflake-refresh:
+	uv run python scripts/snowflake_register_iceberg.py
