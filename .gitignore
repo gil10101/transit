@@ -28,3 +28,10 @@ metastore_db/
 data/
 *.log
 .DS_Store
+
+# terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+.jars/

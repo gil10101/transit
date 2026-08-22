@@ -30,3 +30,24 @@ test:
 lint:
 	uv run ruff check .
 	uv run ruff format --check .
+
+# --- cloud (Phase 2) ---
+
+infra-bootstrap:
+	cd infra/bootstrap && terraform init && terraform apply
+
+infra-init:
+	cd infra/envs/dev && terraform init \
+	  -backend-config="bucket=$$(cd ../../bootstrap && terraform output -raw state_bucket)"
+
+infra-plan:
+	cd infra/envs/dev && terraform plan -out=tfplan
+
+infra-apply:
+	cd infra/envs/dev && terraform apply tfplan
+
+deploy-images:
+	bash scripts/deploy_images.sh
+
+emr-streaming:
+	bash scripts/submit_emr_streaming.sh
