@@ -1,0 +1,16 @@
+# NYC MTA subway. 8 combined GTFS-RT feeds (TU+VP+Alerts per endpoint), no auth.
+# URLs verified in docs/01-data-dictionary.md §B. VehiclePositions carry no lat/lon (subway).
+city: nyc
+agency: MTA-NYCT
+timezone: America/New_York
+adapter: gtfs_rt
+poll_seconds: 30
+feed_groups:
+  base: https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs
+  ace: https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-ace
+  bdfm: https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm
+  g: https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-g
+  jz: https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-jz
+  nqrw: https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw
+  l: https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l
+  si: https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-si
