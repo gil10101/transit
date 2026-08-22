@@ -80,7 +80,7 @@ services:
     build: orchestration
     command: dagster-webserver -h 0.0.0.0 -p 3000 -w /opt/dagster/app/workspace.yaml
     ports:
-      - "3000:3000"
+      - "3070:3000"  # host 3000 is commonly taken by dev servers
     environment: &dagster-env
       DAGSTER_PG_HOST: postgres
       DAGSTER_PG_USER: ${DAGSTER_PG_USER:-dagster}
@@ -89,6 +89,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # also anchors the one-shot bucket-init so `up --wait` treats its exit-0 as success
+      minio-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3000/server_info"]
       interval: 10s
