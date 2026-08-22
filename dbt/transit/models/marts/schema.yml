@@ -20,7 +20,13 @@ models:
       - name: delay_arr_sec
         description: signed seconds vs schedule; negative = early
         data_tests:
-          - delay_within_bounds
+          # spec §7: out-of-bounds delays are audited, not dropped. Failures persist in
+          # the store_failures table; known cause is weekend service changes absent from
+          # the regular static feed (supplemented GTFS lands in P5).
+          - delay_within_bounds:
+              config:
+                severity: warn
+                store_failures: true
       - name: otp_band
         data_tests:
           - accepted_values:

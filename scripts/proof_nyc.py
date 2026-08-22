@@ -57,7 +57,7 @@ def main() -> None:
     fmt = "{:>5} {:>3} {:>7} {:>6} {:>7} {:>6} {:>6}"
     print(fmt.format("route", "hr", "events", "otp%", "early%", "med_s", "p90_s"))
     for r in rows:
-        print(fmt.format(*r))
+        print(fmt.format(*("-" if v is None else v for v in r)))
 
     print("\n=== route rollup ===")
     for r in con.execute(

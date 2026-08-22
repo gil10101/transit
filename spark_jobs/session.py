@@ -9,8 +9,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import yaml
-from dotenv import load_dotenv
 from pyspark import __version__ as spark_version
 from pyspark.sql import SparkSession
 
@@ -22,6 +20,12 @@ CITY_CONFIG_DIR = Path(__file__).resolve().parent.parent / "ingestion" / "config
 
 
 def city_timezones() -> dict[str, str]:
+    # cloud: injected via env (EMR python has no yaml); local: read from city configs
+    injected = os.environ.get("TP_CITY_TZS")
+    if injected:
+        return dict(pair.split("=", 1) for pair in injected.split(","))
+    import yaml
+
     out = {}
     for path in CITY_CONFIG_DIR.glob("*.yaml"):
         cfg = yaml.safe_load(path.read_text())
@@ -35,7 +39,6 @@ def lake_base() -> str:
 
 
 def build_spark(app_name: str) -> SparkSession:
-    load_dotenv()
     if os.environ.get("TP_CLOUD") == "1":
         # EMR: catalog, jars, and S3 access arrive via job-submission conf / instance role
         return (
@@ -43,6 +46,9 @@ def build_spark(app_name: str) -> SparkSession:
             .config("spark.sql.session.timeZone", "UTC")
             .getOrCreate()
         )
+    from dotenv import load_dotenv
+
+    load_dotenv()
     endpoint = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
     access = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
     secret = os.environ.get("MINIO_SECRET_KEY", "minioadmin")
