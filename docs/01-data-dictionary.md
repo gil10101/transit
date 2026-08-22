@@ -104,6 +104,9 @@ Binary protobuf `FeedMessage`. One file = `header` + repeated `entity`, each ent
 ---
 
 ## D. Static GTFS (all cities) — weekly versioned pulls → `silver.gtfs_static_*`
+
+Verified static URLs (add per city as verified): **NYC subway** = `https://rrgtfsfeeds.s3.amazonaws.com/gtfs_subway.zip` (✅ 200 on 2026-08-22; the legacy `web.mta.info/developers/data/nyct/subway/google_transit.zip` 301-redirects to it; `gtfs_supplemented.zip` on the same bucket adds service-change trips — evaluate in P5).
+
 | File | Key fields we use |
 |---|---|
 | `agency.txt` | agency_id, agency_name, **agency_timezone** (cross-check vs dim_city) |
