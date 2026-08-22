@@ -16,10 +16,10 @@ poll-nyc:
 	uv run python -m ingestion.poller nyc
 
 spark-local:
-	uv run python spark_jobs/run_local.py
+	uv run python -m spark_jobs.run_local
 
 gtfs-static:
-	uv run python spark_jobs/gtfs_static_parse.py nyc
+	uv run python -m spark_jobs.gtfs_static_parse nyc
 
 dbt-build:
 	cd dbt/transit && uv run dbt build --profiles-dir .
