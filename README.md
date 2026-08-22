@@ -91,7 +91,7 @@ Full field-level dictionary: [`docs/01-data-dictionary.md`](docs/01-data-diction
 | `orchestration/` | Dagster (webserver+daemon in compose; assets land in Phase 5) |
 | `tests/` | fixture-decode + unit tests; no live calls |
 | `docs/` | plan, data dictionary, warehouse schema, dbt spec, deliverables, evidence |
-| `infra/` | empty Terraform skeleton until Phase 2 |
+| `infra/` | Terraform: bootstrap (state bucket) + envs/dev wiring lake, network, kafka, EMR Serverless, services, Snowflake modules |
 
 ## Data licenses
 
