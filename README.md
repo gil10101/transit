@@ -1,4 +1,4 @@
-# Transit Pulse
+# Transit
 
 A multi-city transit reliability warehouse. One question: **which cities run the most
 reliable public transit — and what makes them reliable?**
