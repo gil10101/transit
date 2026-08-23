@@ -33,6 +33,8 @@ sources:
 | `stg_weather__hourly` | view | WMO code → weather_key |
 | `int_gtfs_scheduled_stop_times` | incremental | exploded schedule per service_date (calendar × stop_times); cluster (service_date, city) |
 | `int_trip_matching_nyc` | incremental | RT trip_id → static trip via (route, direction, service_date, origin-time prefix/100 min); emits match_confidence |
+| `int_trip_matching_generic` **[rev P3]** | table | P3 cities. boston/toronto: RT trip_id **is** the static trip_id → exact equijoin; helsinki: trip_id empty (dict §B) → (route_id, direction_id, origin-time seconds) among trips active on the service_date via `int_service_dates`. Confidence 1.0 exact only, no fuzzy tiers; unmatched RT trips (e.g. TTC ADDED runs) absent → events flow with null schedule, OTP null |
+| `int_trip_matching` **[rev P3]** | table | union of nyc + generic matchers with identical columns — the **only** matcher downstream models reference (`int_stop_events_finalized` joins it on city_key/service_date/trip_uid). Grain 1 row per (city_key, service_date, trip_uid): best-confidence kept via qualify, guarded by `tests/assert_trip_matching_unique.sql` |
 | `int_odpt_stop_map` | table | ODPT URN ↔ GTFS stop_id/route_id; `dbt_utils.relationships` tested both ways |
 | `int_stop_events_finalized` | **incremental (merge)** | THE model — see §3. unique_key `(city_key, service_date, trip_uid, stop_sequence)`, lookback var 48h |
 | `int_service_frequency` | ~~incremental~~ **table [rev P5]** (small; rebuilt with static) | median sched headway per (route, direction, daypart, service_date); `is_frequent = headway ≤ var('freq_headway_threshold_sec')` |
@@ -85,6 +87,7 @@ Custom generic tests:
 - `frequent_service_has_ewt` / `scheduled_service_has_otp` (scoring path routed correctly)
 dbt_expectations: row-count deltas day-over-day within ±40% per city (feed-outage tripwire, pairs with Dagster freshness checks).
 **[rev P5]** implemented via the custom `value_within_range` generic (dbt_utils/dbt_expectations not installed): delay bounds, headway sanity, completeness warn<0.85/error<0.50, gap_ratio/EWT ranges. Still deferred: `local_time_consistency`, `frequent_service_has_ewt`/`scheduled_service_has_otp` (land with the P6 scoring path they guard), row-count delta expectations (Dagster freshness checks cover the outage tripwire today).
+**[rev P3]** stg_gtfs__routes maps Google extended route types (HSL: 701/702/704 bus, 109 suburban rail, 900 tram — 92% of its routes) alongside base 0-4. Per-city singular tests: `assert_toronto_added_normalized` (no toronto row may still read `NEW`, and no negative-id row `SCHEDULED` — the staging NEW→ADDED normalization, dict §B TTC) and `assert_trip_matching_unique` (matcher grain guard). `dim_city.rt_delay_source` accepted_values [computed, feed]; all four live cities are `computed` (fixtures 2026-08-23: 0 arrivals carry `arrival.delay` in boston/toronto/helsinki). All models tolerate cities with zero local rows — duckdb dev runs green with only NYC data.
 
 ## 8. Vars (`dbt_project.yml`)
 ```yaml

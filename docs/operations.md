@@ -8,7 +8,7 @@ The laptop is optional; everything below runs in the cloud.
 
 | Piece | Where | Identity |
 |---|---|---|
-| Poller (NYC, 30s) + Dagster + postgres | EC2 t4g.medium, docker compose via systemd `transit.service` | instance `i-0f0d6e32cb15ce471` |
+| Pollers (nyc/boston/toronto/helsinki, 30s each, one container per city) + Dagster + postgres | EC2 t4g.medium, docker compose via systemd `transit.service` | instance `i-0f0d6e32cb15ce471` |
 | Kafka (KRaft single broker) | EC2 t4g.small, docker `apache/kafka:3.8.0` | private `10.20.0.34:9092` |
 | Bronze/silver Spark drains | EMR Serverless app `00g86oj9urdank0d`; EventBridge schedule `transit-pulse-emr-drain` (15 min) -> Lambda `transit-pulse-emr-drain` -> StartJobRun (`availableNow` trigger, exits when caught up); failures land in SQS DLQ `transit-pulse-emr-drain-dlq` | exec role `transit-pulse-emr-exec` |
 | Lake (Iceberg, Hadoop catalog) | `s3://transit-pulse-622221238588-lakehouse/iceberg/{bronze,silver}` | version-hint.text per table |
@@ -31,11 +31,13 @@ The laptop is optional; everything below runs in the cloud.
 ## Health checks
 
 ```sh
-# poller alive + polling
+# poller alive + polling (per city: transit-poller-1 is nyc; the P3 cities are
+# transit-poller-boston-1 / transit-poller-toronto-1 / transit-poller-helsinki-1)
 aws ssm send-command --instance-ids i-0f0d6e32cb15ce471 --document-name AWS-RunShellScript \
   --parameters 'commands=["docker logs transit-poller-1 2>&1 | tail -3"]' ...  # then get-command-invocation
 
-# raw archive fresh (should be < 1 min old)
+# raw archive fresh (should be < 1 min old; endpoint names per city = the
+# feed_groups keys in ingestion/config/cities/<city>.yaml, e.g. boston/trip_updates)
 aws s3 ls s3://transit-pulse-622221238588-raw/nyc/base/$(date -u +%Y-%m-%d)/ --recursive | tail -1
 
 # drains healthy (expect transit-drain SUCCESS every ~15 min)
@@ -72,9 +74,9 @@ cadence (drains are idempotent `availableNow` catch-ups).
 | Schedule (UTC) | What runs |
 |---|---|
 | Every 2h at :05 | `emr_drain` → `snowflake_iceberg_refresh` (re-pin metadata) → dbt build (gold) → warehouse asset checks (gold row growth during service hours; silver `max(fetched_at)` < 3h) |
-| Every 15 min (:10 :25 :40 :55) | `raw_feed_freshness` — boto3-only S3 listing of the 8 NYC endpoint prefixes; fails if any endpoint's newest object is older than 40 min (worst-case detection ~55 min after a kill). **This is the killed-feed tripwire**; it never wakes the warehouse |
-| Weekly Sun 09:00 (off the 2h :05 grid) | `gtfs_static_nyc` — EMR parse of the supplemented static zip → refresh `gtfs_static_*` iceberg tables → dbt build --select "stg_gtfs__*+" |
-| Hourly at :20 | `weather_hourly` — Open-Meteo forecast MERGE into `TRANSIT.SILVER.WEATHER_HOURLY` |
+| Every 15 min (:10 :25 :40 :55) | `raw_feed_freshness` — boto3-only S3 listing of every live city's endpoint prefixes (config-driven from the `feed_groups` keys in `ingestion/config/cities/*.yaml`: nyc 8, boston 3, toronto 3, helsinki 2 = 16); fails if any endpoint's newest object is older than 40 min (worst-case detection ~55 min after a kill). **This is the killed-feed tripwire**; it never wakes the warehouse |
+| Weekly Sun 09:00 (off the 2h :05 grid) | `gtfs_static` — EMR parse of each live city's static zip (sequential, one at a time on the 4 vCPU app; a failing city is skipped and reported, the rest still refresh) → refresh `gtfs_static_*` iceberg tables → dbt build --select "stg_gtfs__*+". Typically done well before the 10:05 chain; worst case (per-city 25-min timeouts) spills past it — that chain run fails on capacity and self-heals at its next 2h tick |
+| Hourly at :20 | `weather_hourly` — Open-Meteo forecast MERGE into `TRANSIT.SILVER.WEATHER_HOURLY` (all live cities: nyc, boston, toronto, helsinki) |
 | Manual only | `weather_backfill_2yr` (`make p5-backfill-weather`) — Open-Meteo archive API, chunked by year |
 
 - **UI**: not internet-exposed; port-forward via SSM (row above), then http://localhost:3070.
@@ -107,6 +109,28 @@ cadence (drains are idempotent `availableNow` catch-ups).
   `systemctl daemon-reload && systemctl restart transit.service`).
 - **Local compose**: dagster UI must come up with an empty `.env` — cloud-touching assets
   fail lazily at materialize time only.
+
+## P3 batch 1 rollout (boston / toronto / helsinki — built 2026-08-23)
+
+Code and infra definitions are in the repo; nothing is live until the operator runs,
+in this order:
+
+1. `make deploy-images` — ingestion image picks up the new city yamls; dagster image
+   bakes `ingestion/config` (freshness tripwire reads it) + the fan-out assets.
+2. `make infra-plan` → review → `make infra-apply` — 4-city `TP_CITY_TZS` into the
+   drain Lambda's `SPARK_PARAMS`/services env, and the services compose gains
+   `poller-boston`/`poller-toronto`/`poller-helsinki`. Applying before the images are
+   pushed leaves the new pollers crash-looping on the old image — push first.
+3. Re-land user_data on the services box (compose changed): SSM shell →
+   `cloud-init clean --logs && reboot` (procedure in "Dagster (P5)" above).
+4. `make emr-drain` once — re-stages `spark_jobs.zip` so EMR static parses see the
+   new city yamls (the zip bundles `ingestion/`).
+5. Verify: per-city raw prefixes advancing (health checks above), `raw_feed_freshness`
+   green on 16 endpoints, weekly `gtfs_static` run covers 4 cities, dbt marts show the
+   new cities. Completeness ≥85% after 48h is the docs/04 acceptance gate.
+
+The Dagster asset `gtfs_static_nyc` was renamed `gtfs_static` (multi-city); its
+materialization history starts fresh under the new key.
 
 ## Known quirks (cost real debugging time — do not rediscover)
 
@@ -141,9 +165,11 @@ EC2 ~$41 (kafka+services+EBS), EMR drains ~$15-30 (96 short runs/day), S3+Glue+s
 Snowflake trial credits now (~$20-25/mo post-trial). Total ~$60-75 now, ~$80-95 post-trial.
 Ceiling: budget alarm $90.
 
-## Next (post-P5, per docs/04)
+## Next (per docs/04)
 
 P5 landed: Dagster chain + checks, supplemented GTFS, headways/EWT + P5 marts, weather.
 To enable in prod: generate the DAGSTER_SVC key pair (procedure above), apply, deploy the
-dagster image. Next phases: P3 GTFS-RT fan-out (keys in .env.example), P4 Tokyo,
-P6 scorecard/dashboard + SCD2 dims.
+dagster image. P3 batch 1 (boston/toronto/helsinki, keyless) is built — rollout checklist
+above; pending the 48h completeness gate. Next: P3 batch 2 (chicago/dc/sf/zurich — needs
+`CTA_API_KEY`/`WMATA_API_KEY`/`BAY511_API_TOKEN`/`SWISS_OTD_TOKEN` in `.env` and on the
+box), P4 Tokyo, P6 scorecard/dashboard + SCD2 dims.
