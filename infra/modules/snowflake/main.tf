@@ -171,11 +171,36 @@ resource "snowflake_grant_account_role" "pipeline_to_dagster" {
 
 resource "snowflake_grant_privileges_to_account_role" "pipeline_db_usage" {
   account_role_name = snowflake_account_role.transit_pipeline.name
-  privileges        = ["USAGE"]
+  # CREATE SCHEMA: dbt materializes store_failures audit schemas (<schema>_dbt_test__audit)
+  privileges        = ["USAGE", "CREATE SCHEMA"]
   on_account_object {
     object_type = "DATABASE"
     object_name = snowflake_database.transit.name
   }
+}
+
+# dbt's existing store_failures audit schema predates TRANSIT_PIPELINE; without
+# ownership the pipeline's dbt runs fail on the first store_failures test.
+resource "snowflake_grant_ownership" "audit_schema" {
+  account_role_name   = snowflake_account_role.transit_pipeline.name
+  outbound_privileges = "COPY"
+  on {
+    object_type = "SCHEMA"
+    object_name = "\"${snowflake_database.transit.name}\".\"GOLD_DBT_TEST__AUDIT\""
+  }
+  depends_on = [snowflake_grant_account_role.pipeline_to_accountadmin]
+}
+
+resource "snowflake_grant_ownership" "audit_all_tables" {
+  account_role_name   = snowflake_account_role.transit_pipeline.name
+  outbound_privileges = "COPY"
+  on {
+    all {
+      object_type_plural = "TABLES"
+      in_schema          = "\"${snowflake_database.transit.name}\".\"GOLD_DBT_TEST__AUDIT\""
+    }
+  }
+  depends_on = [snowflake_grant_ownership.audit_schema]
 }
 
 resource "snowflake_grant_privileges_to_account_role" "pipeline_wh_usage" {
