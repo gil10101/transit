@@ -1,0 +1,81 @@
+version: 2
+
+models:
+  - name: fct_route_reliability_daily
+    description: >
+      One row per (city, route, service_date, direction): OTP band shares and
+      delay stats (ADDED excluded), signed EWT over frequent slices weighted by
+      gap count, bunching/big-gap shares, and route-level delivery figures
+      (cancel/completeness/trip counts repeat across the two direction rows).
+    columns:
+      # grain
+      - name: route_day_key
+        description: md5 of (city_key, service_date, route_id, direction_id)
+        data_tests: [unique, not_null]
+      - name: city_key
+        data_tests: [not_null]
+      - name: service_date
+        data_tests: [not_null]
+      - name: route_id
+        data_tests: [not_null]
+      - name: direction_id
+        data_tests: [not_null]
+      - name: mode
+        description: route_type-derived mode; 'unknown' when route missing from static
+        data_tests: [not_null]
+      # OTP block (shares of banded, non-ADDED stop events; each 0..1)
+      - name: otp_pct
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 1}
+      - name: early_pct
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 1}
+      - name: late_pct
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 1}
+      - name: very_late_pct
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 1}
+      - name: early_departure_pct
+        description: share of events flagged early_departure (bus-timepoint rule; 0.0 for NYC subway)
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 1}
+      # delay stats (signed seconds)
+      - name: mean_delay_sec
+      - name: median_delay_sec
+      - name: p90_delay_sec
+      # waiting/regularity block
+      - name: ewt_sec
+        description: >
+          signed excess wait time over frequent slices (AWT - SWT); negative
+          means better-than-schedule regularity, scoring clamps later
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: -600, max_value: 3600}
+              config: {severity: warn}
+      - name: bunching_pct
+        description: bunched gaps / rated gaps, all slices
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 1}
+      - name: big_gap_pct
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 1}
+      # delivery block (route-level, repeated per direction)
+      - name: cancel_pct
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 1}
+      - name: completeness_pct
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 1.2}
+              config: {severity: warn}
+      - name: scheduled_trips
+      - name: observed_trips

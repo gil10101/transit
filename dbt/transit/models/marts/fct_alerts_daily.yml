@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: fct_alerts_daily
+    description: >
+      Alert exposure per (city, route, service_date): distinct alerts,
+      overlap-deduped active minutes per alert clamped to the local day, worst
+      effect by severity rank. Alerts with no route attribution (no informed
+      route and no parsable trip token) aggregate under route_id
+      '_unattributed'. Two different alerts overlapping in time both count —
+      dedupe is within an alert_id only (docs/02 fct_alerts_daily).
+    columns:
+      # grain
+      - name: alert_day_key
+        description: md5 of (city_key, route_id, service_date)
+        data_tests: [unique, not_null]
+      - name: city_key
+        data_tests: [not_null]
+      - name: route_id
+        description: informed route, NYC trip-token parse, or '_unattributed'
+        data_tests: [not_null]
+      - name: service_date
+        data_tests: [not_null]
+      # measures
+      - name: alerts_active
+        description: distinct alert_ids touching the route-day
+        data_tests:
+          - not_null
+          - value_within_range:
+              arguments: {min_value: 0, strict_min: true}
+      - name: alert_minutes
+        description: >
+          sum over alerts of overlap-deduped active minutes within the local
+          day; can exceed 1440 when several alerts run concurrently
+        data_tests:
+          - not_null
+          - value_within_range:
+              arguments: {min_value: 0}
+      - name: worst_effect
+        description: GTFS-RT effect with the best (lowest) alert_effect_rank on the route-day
+        data_tests: [not_null]

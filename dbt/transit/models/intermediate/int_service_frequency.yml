@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: int_service_frequency
+    description: >
+      Median scheduled headway per (city, route, direction, daypart,
+      service_date), from gaps between consecutive scheduled arrivals at each
+      stop. is_frequent (median <= var freq_headway_threshold_sec, 600s)
+      decides EWT-vs-OTP scoring per slice.
+    columns:
+      - name: frequency_key
+        description: md5 of the grain (city, route, direction, daypart, service_date)
+        data_tests: [unique, not_null]
+      - name: city_key
+        data_tests: [not_null]
+      - name: route_id
+        data_tests: [not_null]
+      - name: direction_id
+        data_tests: [not_null]
+      - name: daypart
+        description: local-time bucket per the daypart macro
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [am_peak, midday, pm_peak, evening, overnight]
+      - name: service_date
+        data_tests: [not_null]
+      - name: median_sched_headway_sec
+        description: median gap between consecutive scheduled arrivals in the slice
+        data_tests:
+          - not_null
+          - value_within_range:
+              arguments:
+                min_value: 0
+                max_value: 86400
+                strict_min: true
+              config: {severity: warn}
+      - name: n_sched_gaps
+        description: gap count backing the median (weighting/confidence)
+      - name: is_frequent
+        description: median headway <= 600s; routes the slice to EWT scoring
+        data_tests: [not_null]

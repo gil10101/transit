@@ -1,0 +1,19 @@
+version: 2
+
+models:
+  - name: stg_gtfsrt__vehicle_positions
+    description: >
+      Typed view over silver.vehicle_positions: one vehicle ping per row.
+      Rename/cast only; NYC subway pings have no lat/lon and no vehicle_id,
+      so trip_uid is the activity identifier there.
+    columns:
+      - name: city_key
+        data_tests: [not_null]
+      - name: trip_uid
+        description: canonical trip identity (hash) shared with trip updates
+        data_tests: [not_null]
+      - name: ts_utc
+        description: ping timestamp (vehicle timestamp, else fetched_at)
+        data_tests: [not_null]
+      - name: service_date
+        data_tests: [not_null]

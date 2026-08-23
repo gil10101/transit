@@ -1,0 +1,26 @@
+version: 2
+
+models:
+  - name: stg_gtfsrt__alerts
+    description: >
+      Typed view over silver.alerts, exploded to one row per (alert version,
+      active period, informed entity). Empty JSON arrays survive as a single
+      all-null element so no alert version is lost. NYC service alerts inform
+      trips (entity_route_id null, entity_trip_id set); route attribution from
+      the trip token happens in fct_alerts_daily.
+    columns:
+      - name: city_key
+        data_tests: [not_null]
+      - name: alert_id
+        data_tests: [not_null]
+      - name: fetched_at
+        description: poll time of this alert version (observed-window fallback basis)
+        data_tests: [not_null]
+      - name: period_start_ts_utc
+        description: stated active-period start (UTC); null when the feed states none
+      - name: period_end_ts_utc
+        description: stated active-period end (UTC); null when open-ended or unstated
+      - name: entity_route_id
+        description: route the alert informs, as received (null for NYC trip-scoped alerts)
+      - name: entity_trip_id
+        description: trip the alert informs, as received

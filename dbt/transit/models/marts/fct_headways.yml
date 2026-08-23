@@ -1,0 +1,59 @@
+version: 2
+
+models:
+  - name: fct_headways
+    description: >
+      Observed consecutive arrivals per (city, route, direction, stop,
+      service_date); one row per arrival with a predecessor at the same stop.
+      ADDED trips included (headways measure delivered service; OTP excludes
+      them elsewhere). sched_headway_sec derives from consecutive scheduled
+      arrivals (no frequencies.txt for NYC), matched to the nearest preceding
+      scheduled arrival.
+    columns:
+      # grain
+      - name: headway_key
+        description: md5 of (city_key, service_date, trip_uid, stop_sequence)
+        data_tests: [unique, not_null]
+      - name: city_key
+        data_tests: [not_null]
+      - name: service_date
+        data_tests: [not_null]
+      - name: trip_uid
+        data_tests: [not_null]
+      - name: stop_sequence
+        data_tests: [not_null]
+      # slice attributes
+      - name: route_id
+        data_tests: [not_null]
+      - name: direction_id
+        data_tests: [not_null]
+      - name: stop_id
+        data_tests: [not_null]
+      - name: local_hour
+        description: local hour of the arrival (city tz)
+      - name: daypart
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [am_peak, midday, pm_peak, evening, overnight]
+      # measures
+      - name: actual_gap_sec
+        description: arrival minus previous arrival, seconds
+        data_tests:
+          - not_null
+          # docs/03 headway_sane: 30s .. 4h; zero/short gaps surface for investigation
+          - value_within_range:
+              arguments: {min_value: 30, max_value: 14400}
+              config: {severity: warn}
+      - name: sched_headway_sec
+        description: scheduled gap owned by the nearest preceding scheduled arrival; null when no schedule matches
+      - name: gap_ratio
+        description: actual_gap_sec / sched_headway_sec (null when schedule missing or zero)
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: 0, strict_min: true}
+              config: {severity: warn}
+      - name: bunched_flag
+        description: gap_ratio < 0.5
+      - name: big_gap_flag
+        description: gap_ratio > 2.0

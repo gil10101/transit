@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: fct_vehicle_activity_hourly
+    description: >
+      Service volume actually on the road/rails per (city, mode, service_date,
+      local_hour), counted from vehicle positions. Where the feed omits
+      vehicle_id (NYC subway), distinct_vehicles proxies via trip_uid and
+      vehicle_id_reliable is false; distinct_trips_active is the comparable
+      primary measure across cities.
+    columns:
+      # grain
+      - name: activity_key
+        description: md5 of (city_key, mode, service_date, local_hour)
+        data_tests: [unique, not_null]
+      - name: city_key
+        data_tests: [not_null]
+      - name: mode
+        description: route_type-derived mode via stg_gtfs__routes; 'unknown' when the route is absent from static
+        data_tests: [not_null]
+      - name: service_date
+        data_tests: [not_null]
+      - name: local_hour
+        data_tests:
+          - not_null
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 23}
+      # measures
+      - name: distinct_vehicles
+        description: distinct vehicle_id, or distinct trip_uid when vehicle_id_reliable=false
+        data_tests:
+          - not_null
+          - value_within_range:
+              arguments: {min_value: 0, strict_min: true}
+      - name: distinct_trips_active
+        data_tests: [not_null]
+      - name: distinct_routes_active
+        data_tests: [not_null]
+      - name: vehicle_id_reliable
+        description: false when the feed provides no stable vehicle ids (count is a trip proxy)
+        data_tests: [not_null]

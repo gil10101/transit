@@ -1,0 +1,59 @@
+version: 2
+
+models:
+  - name: fct_service_delivery_daily
+    description: >
+      Daily delivered-vs-scheduled trips per (city, route, service_date).
+      completeness_pct = observed non-ADDED trips / scheduled trips; ADDED
+      trips count in volume, never in completeness (locked rule). Routes
+      scheduled but unobserved keep a row with completeness 0 — feed outages
+      surface here.
+    columns:
+      # grain
+      - name: delivery_key
+        description: md5 of (city_key, route_id, service_date)
+        data_tests: [unique, not_null]
+      - name: city_key
+        data_tests: [not_null]
+      - name: route_id
+        data_tests: [not_null]
+      - name: service_date
+        data_tests: [not_null]
+      # measures
+      - name: trips_scheduled
+        description: static trips active on the service_date (0 when route only observed)
+        data_tests: [not_null]
+      - name: trips_observed
+        description: distinct observed trip_uid, any schedule_relationship
+        data_tests: [not_null]
+      - name: trips_added
+        description: observed trips flagged ADDED
+        data_tests: [not_null]
+      - name: trips_cancelled
+        description: distinct CANCELED trips from trip updates (they never reach fct_stop_events)
+        data_tests: [not_null]
+      - name: completeness_pct
+        description: observed non-ADDED / scheduled; null when nothing scheduled
+        data_tests:
+          # >1 possible via loose trip matching; >1.2 is suspicious, warn
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 1.2}
+              config: {severity: warn}
+          # docs/03 §7 completeness_above: warn <85%, error <50% per city/day.
+          # Judges only closed service days at or after var completeness_enforced_from:
+          # the current day is always partially observed, and days before 24/7 cloud
+          # polling began (2026-08-23) are partial by construction — both would fail
+          # spuriously and forever.
+          - value_within_range:
+              name: completeness_above_warn_85pct
+              arguments: {min_value: 0.85}
+              config:
+                severity: warn
+                where: "service_date < current_date and service_date >= '{{ var('completeness_enforced_from') }}'"
+          - value_within_range:
+              name: completeness_above_error_50pct
+              arguments: {min_value: 0.50}
+              config:
+                severity: error
+                store_failures: true
+                where: "service_date < current_date and service_date >= '{{ var('completeness_enforced_from') }}'"

@@ -10,6 +10,10 @@ transit:
         TimeZone: UTC  # naive<->instant casts must be deterministic, never machine-local
         # streaming commits rewrite version-hint.text; fall back to globbing mid-rewrite
         unsafe_enable_version_guessing: true
+        # local MinIO drops connections under concurrent GETs — retry instead of erroring
+        http_retries: 6
+        http_retry_wait_ms: 500
+        http_keep_alive: false
       secrets:
         - type: s3
           key_id: "{{ env_var('MINIO_ACCESS_KEY', 'minioadmin') }}"
@@ -20,9 +24,11 @@ transit:
     prod:
       type: snowflake
       account: wqteqyy-ib47757
-      user: TERRAFORM_SVC
-      private_key_path: "{{ env_var('HOME') }}/.snowflake/keys/transit_terraform_key.p8"
-      role: ACCOUNTADMIN
+      # P5: Dagster runs dbt as DAGSTER_SVC / TRANSIT_PIPELINE by exporting
+      # these env vars; the defaults keep laptop runs on TERRAFORM_SVC unchanged.
+      user: "{{ env_var('SNOWFLAKE_USER', 'TERRAFORM_SVC') }}"
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH', env_var('HOME') ~ '/.snowflake/keys/transit_terraform_key.p8') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'ACCOUNTADMIN') }}"
       database: TRANSIT
       warehouse: TRANSFORM_XS
       schema: GOLD

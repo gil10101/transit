@@ -14,6 +14,9 @@ vars:
   early_departure_grace_sec: 60
   score_weights: {wait: 0.35, otp: 0.30, cancel: 0.20, bunch: 0.15}
   completeness_exclusion_threshold: 0.70
+  # first full service day of 24/7 cloud polling; completeness tests only judge
+  # closed days from here on (the deployment day is partial by construction)
+  completeness_enforced_from: "2026-08-23"
   methodology_version: "1.0"
   # v1 finalization knobs (documented in int_stop_events_finalized)
   finalize_horizon_min: 20
