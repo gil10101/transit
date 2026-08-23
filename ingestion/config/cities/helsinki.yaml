@@ -1,0 +1,15 @@
+# Helsinki HSL. TU + Alerts only — NO VehiclePositions feed (MQTT HFP is stretch-only,
+# skipped). No auth. trip_id is EMPTY in TU -> trips resolve via (route_id, direction_id,
+# start_date, start_time). arrival.delay NOT set (0/~20k arrivals, §B amended 2026-08-23);
+# arrival.time always present -> delay computed vs static via the canonical COALESCE.
+city: helsinki
+agency: HSL
+timezone: Europe/Helsinki
+adapter: gtfs_rt
+poll_seconds: 30
+# Static GTFS verified 2026-08-23: 301 -> infopalvelut.storage.hsldev.com, final 200,
+# 65.5 MB (requests follows the redirect; docs/01-data-dictionary.md §D).
+static_gtfs: https://dev.hsl.fi/gtfs/hsl.zip
+feed_groups:
+  trip_updates: https://realtime.hsl.fi/realtime/trip-updates/v2/hsl
+  alerts: https://realtime.hsl.fi/realtime/service-alerts/v2/hsl

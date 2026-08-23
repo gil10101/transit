@@ -1,0 +1,15 @@
+# Boston MBTA. Per-type GTFS-RT feeds (TU / VP / Alerts), no auth. Cleanest feed of the set.
+# URLs verified in docs/01-data-dictionary.md §B. Occupancy populated on many vehicles.
+# Endpoint names are the feed types (per-type feeds; see ingestion/adapters/base.py).
+city: boston
+agency: MBTA
+timezone: America/New_York
+adapter: gtfs_rt
+poll_seconds: 30
+# Static GTFS verified 2026-08-23: 200, 18.6 MB, x-amz-meta-feed-version "Summer 2026 ... version D"
+# (docs/01-data-dictionary.md §D).
+static_gtfs: https://cdn.mbta.com/MBTA_GTFS.zip
+feed_groups:
+  trip_updates: https://cdn.mbta.com/realtime/TripUpdates.pb
+  vehicle_positions: https://cdn.mbta.com/realtime/VehiclePositions.pb
+  alerts: https://cdn.mbta.com/realtime/Alerts.pb

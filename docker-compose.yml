@@ -130,6 +130,55 @@ services:
       postgres:
         condition: service_healthy
 
+  # --- pollers (one image, city arg; mirrors the services-box compose) ---
+  # Live polling stays opt-in per CLAUDE.md: these sit behind the "pollers" profile so
+  # plain `make up` never hits agency endpoints. Start explicitly with
+  #   docker compose up -d poller-boston   (or --profile pollers up for all)
+  # Local-dev safe with an empty .env: every value below has a default and none of
+  # these cities needs an API key.
+  poller:
+    build: &poller-build
+      context: .
+      dockerfile: ingestion/Dockerfile
+    command: ["nyc"]
+    profiles: ["pollers"]
+    restart: unless-stopped
+    environment: &poller-env
+      KAFKA_BOOTSTRAP: redpanda:9092
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      RAW_BUCKET: ${RAW_BUCKET:-raw}
+    depends_on: &poller-deps
+      redpanda:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  poller-boston:
+    build: *poller-build
+    command: ["boston"]
+    profiles: ["pollers"]
+    restart: unless-stopped
+    environment: *poller-env
+    depends_on: *poller-deps
+
+  poller-toronto:
+    build: *poller-build
+    command: ["toronto"]
+    profiles: ["pollers"]
+    restart: unless-stopped
+    environment: *poller-env
+    depends_on: *poller-deps
+
+  poller-helsinki:
+    build: *poller-build
+    command: ["helsinki"]
+    profiles: ["pollers"]
+    restart: unless-stopped
+    environment: *poller-env
+    depends_on: *poller-deps
+
 volumes:
   redpanda-data:
   minio-data:

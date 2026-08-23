@@ -1,14 +1,19 @@
 # Data attribution and licenses
 
-Active sources (Phase 1):
+Active sources:
 
 - **NYC**: Data provided by the Metropolitan Transportation Authority (MTA). Subject to MTA
   developer data terms.
+- **Boston (MBTA)**: MBTA data provided by the Massachusetts Bay Transportation Authority.
+  Subject to the MBTA developer license agreement.
+- **Toronto (TTC)**: Contains information licensed under the Open Government Licence – Toronto.
+  (Attribution required — do not remove this notice.)
+- **Helsinki (HSL)**: HSL open data by Helsinki Region Transport (HSL), licensed under
+  CC BY 4.0.
 - **Open-Meteo**: Weather data by Open-Meteo.com (CC BY 4.0).
 
 Reserved for later phases (required notices per plan):
 
-- **Toronto (TTC)**: Contains information licensed under the Open Government Licence – Toronto.
 - **Tokyo (ODPT)**: Data from the Public Transportation Open Data Center. Accuracy and timeliness
   are not guaranteed by the operators or the Center.
 - **SF Bay (511.org)**: Data provided by 511.org.

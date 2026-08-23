@@ -1,0 +1,16 @@
+# Toronto TTC. Per-type GTFS-RT feeds, no auth. ATTRIBUTION REQUIRED (Open Government
+# Licence – Toronto; see ATTRIBUTION.md). Surface modes only (bus+streetcar; subway is
+# alerts-only). ~3% of trips carry NEGATIVE trip_ids = ADDED runs (volume yes, OTP no).
+# URLs verified in docs/01-data-dictionary.md §B.
+city: toronto
+agency: TTC
+timezone: America/Toronto
+adapter: gtfs_rt
+poll_seconds: 30
+# Static GTFS verified 2026-08-23: resolved via open.toronto.ca CKAN package API
+# ("TTC Routes and Schedules"), direct zip 200, 35.0 MB (docs/01-data-dictionary.md §D).
+static_gtfs: https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/7795b45e-e65a-4465-81fc-c36b9dfff169/resource/cfb6b2b8-6191-41e3-bda1-b175c51148cb/download/opendata_ttc_schedules.zip
+feed_groups:
+  trip_updates: https://bustime.ttc.ca/gtfsrt/trips
+  vehicle_positions: https://bustime.ttc.ca/gtfsrt/vehicles
+  alerts: https://bustime.ttc.ca/gtfsrt/alerts
