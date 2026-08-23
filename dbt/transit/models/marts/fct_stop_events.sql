@@ -1,7 +1,11 @@
 -- Atomic fact: one finalized stop visit per (city_key, service_date, trip_uid,
 -- stop_sequence). Local-time fields derive via dim_city.iana_tz; all analysis is
--- local, storage is UTC. NYC is subway-only, so the bus-timepoint early-departure
--- rule never fires here (kept as an explicit false until bus cities land).
+-- local, storage is UTC.
+--
+-- early_departure_flag (locked rule): bus departure > early_departure_grace_sec
+-- early at a scheduled timepoint. Live where the static carries timepoint
+-- (MBTA, HSL); false where it omits the column (NYC rail; TTC bus-defaults-none
+-- per dictionary §D). Requires the P3 canonical static projection + a reparse.
 
 {{ config(
     materialized='incremental',
@@ -21,9 +25,12 @@ localized as (
         f.*,
         c.iana_tz,
         c.peak_am_start, c.peak_am_end, c.peak_pm_start, c.peak_pm_end,
+        r.mode,
         {{ to_local('f.actual_arr_ts_utc', 'c.iana_tz') }} as actual_arr_ts_local
     from f
     join {{ ref('dim_city') }} c on c.city_key = f.city_key
+    left join {{ ref('stg_gtfs__routes') }} r
+      on r.city_key = f.city_key and r.route_id = f.route_id
 )
 
 select
@@ -52,7 +59,14 @@ select
     actual_dep_ts_utc,
     delay_arr_sec,
     delay_dep_sec,
-    false as early_departure_flag,
+    -- locked rule: early BUS departure at a scheduled timepoint (> grace) is a
+    -- service failure. timepoint is null where the static omits the column
+    -- (NYC: rail anyway; TTC: bus-defaults-none per §D -> flag stays false there)
+    coalesce(
+        mode = 'bus' and timepoint = 1
+        and delay_dep_sec < -{{ var('early_departure_grace_sec') }},
+        false
+    ) as early_departure_flag,
     {{ otp_band('delay_arr_sec') }} as otp_band,
     schedule_relationship,
     cancelled_flag,

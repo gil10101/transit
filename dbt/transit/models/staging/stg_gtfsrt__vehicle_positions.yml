@@ -17,3 +17,9 @@ models:
         data_tests: [not_null]
       - name: service_date
         data_tests: [not_null]
+      - name: occupancy_status
+        description: >
+          GTFS-RT OccupancyStatus enum name, null when the feed omits it.
+          Crowding input for future charts. Fixture-verified 2026-08-23:
+          boston populates it on ~70% of vehicles (276/394), toronto on ~99%
+          (1163/1177); NYC subway omits it, helsinki has no VP feed at all.

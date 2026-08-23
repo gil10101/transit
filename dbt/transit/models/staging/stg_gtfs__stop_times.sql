@@ -14,7 +14,11 @@ select
     st.departure_time,
     st.arrival_seconds,
     st.departure_seconds,
-    -- NYC subway static omits timepoint; rail defaults all-timepoint (dictionary §D)
-    cast(null as int) as timepoint
+    -- real on prod since the P3 canonical static projection (MBTA + HSL set it;
+    -- NYC and TTC statics omit the column -> null; §D: rail defaults
+    -- all-timepoint, bus defaults none). Dev lakes may predate the projection
+    -- and duckdb cannot introspect iceberg_scan sources, so dev pins null —
+    -- NYC (the only local data) carries no timepoint either way.
+    {% if target.type == 'snowflake' %}st.timepoint{% else %}cast(null as int) as timepoint{% endif %}
 from {{ source('silver', 'gtfs_static_stop_times') }} st
 join latest on st.city = latest.city and st.gtfs_version_id = latest.gtfs_version_id

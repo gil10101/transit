@@ -10,10 +10,16 @@
 --   * finalize only events at least finalize_horizon_min behind the freshest
 --     fetched_at in the data (still-active stops keep accumulating revisions);
 --     data-driven watermark keeps the model replayable
---   * schedule context comes via int_trip_matching_nyc -> int_gtfs_scheduled_stop_times;
---     stop_sequence falls back to the static one (quirk ⑤); nearest schedule row
---     wins if a trip serves a stop twice
---   * delay_arr_sec = COALESCE(feed delay, actual - scheduled)  (canonical rule)
+--   * schedule context comes via int_trip_matching (all cities, unioned) ->
+--     int_gtfs_scheduled_stop_times; the matcher joins on trip_uid because HSL
+--     trip_ids are empty. stop_sequence falls back to the static one (NYC quirk ⑤,
+--     and HSL omits stop_sequence on nearly all STUs); nearest schedule row wins
+--     if a trip serves a stop twice
+--   * delay_arr_sec = COALESCE(feed delay, actual - scheduled)  (canonical rule;
+--     a city that states arrival.delay flows through the first branch automatically)
+--   * direction_id: NYC from the matcher else the ..N/..S trip_id suffix (quirk ⑥ —
+--     never the feed's direction_id); every other city from the feed's direction_id
+--     else the matched static trip's
 
 {{ config(
     materialized='incremental',
@@ -29,10 +35,10 @@ with preds as (
         m.match_confidence,
         coalesce(p.arr_pred_ts_utc, p.dep_pred_ts_utc) as event_pred_ts
     from {{ ref('stg_gtfsrt__trip_updates') }} p
-    left join {{ ref('int_trip_matching_nyc') }} m
+    left join {{ ref('int_trip_matching') }} m
       on m.city_key = p.city_key
      and m.service_date = p.service_date
-     and m.trip_id = p.trip_id
+     and m.trip_uid = p.trip_uid
     where coalesce(p.arr_pred_ts_utc, p.dep_pred_ts_utc) is not null
     {% if is_incremental() %}
       and p.service_date >= current_date - cast(ceil({{ var('lookback_hours') }} / 24.0) as int)
@@ -111,9 +117,13 @@ select
     trip_id as trip_id_raw,
     static_trip_id,
     route_id,
-    coalesce(matched_direction_id,
-             case {{ re_extract('trip_id', '\.\.?([NS])', 1) }} when 'N' then 0 when 'S' then 1 end
-    ) as direction_id,
+    case
+        when city_key = 'nyc' then coalesce(
+            matched_direction_id,
+            case {{ re_extract('trip_id', '\.\.?([NS])', 1) }} when 'N' then 0 when 'S' then 1 end
+        )
+        else coalesce(direction_id, matched_direction_id)
+    end as direction_id,
     stop_id,
     vehicle_id,
     match_confidence,

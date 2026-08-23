@@ -4,8 +4,8 @@
 --   * OTP shares + delay stats from fct_stop_events, ADDED trips EXCLUDED
 --     (locked rule: volume yes, OTP no)
 --   * early_departure_pct from the fact's early_departure_flag — structurally
---     false for NYC (rule is scoped to bus timepoints; subway static has no
---     timepoint column), so 0.0 until bus cities land
+--     false everywhere for now: the bus-timepoint rule needs stop_times.timepoint,
+--     absent from the loaded silver static (see fct_stop_events header)
 --   * ewt_sec over frequent slices only (int_service_frequency.is_frequent):
 --     within each (stop, daypart) slice AWT = sum(g^2)/(2*sum(g)) on actual
 --     gaps, SWT likewise on the slice's scheduled headways, ewt = AWT - SWT

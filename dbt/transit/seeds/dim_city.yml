@@ -1,0 +1,45 @@
+version: 2
+
+seeds:
+  - name: dim_city
+    description: >
+      One row per scored city. iana_tz drives every local-time conversion
+      (canonical rule: store UTC, analyze local). Peak windows are 07-10/16-19
+      local for all P3 cities (dictionary states no city-specific windows).
+      P3 rows verified against fixtures recorded 2026-08-23.
+    columns:
+      - name: city_key
+        data_tests: [unique, not_null]
+      - name: city_name
+        data_tests: [not_null]
+      - name: country
+        description: ISO 3166-1 alpha-2
+        data_tests: [not_null]
+      - name: iana_tz
+        description: >
+          IANA timezone; must match the ingestion yaml timezone and the
+          TP_CITY_TZS map in infra (nyc/boston America/New_York,
+          toronto America/Toronto, helsinki Europe/Helsinki).
+        data_tests: [not_null]
+      - name: rt_delay_source
+        description: >
+          Dominant source of delay_arr_sec for the city. 'computed' = derived
+          vs static schedule; 'feed' = arrival.delay stated by the feed. The
+          canonical COALESCE(feed delay, computed) rule applies everywhere
+          regardless, so this is documentation of observed feed behavior, not
+          a switch. Fixture evidence 2026-08-23: boston 0/16825 arrivals carry
+          delay -> computed; toronto 0/22286 -> computed; helsinki 0/19949 ->
+          computed (dictionary §B HSL row AMENDED 2026-08-23 accordingly — the
+          original 2026-08-22 note said populated, no longer observed). If HSL
+          delay reappears the COALESCE picks it up automatically; flip this to
+          'feed' then, with a matching dictionary amendment.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [computed, feed]
+      - name: attribution_text
+        description: >
+          Display attribution. Toronto's is legally required (Open Government
+          Licence – Toronto; see ATTRIBUTION.md).
+        data_tests: [not_null]

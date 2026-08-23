@@ -41,7 +41,10 @@ models:
           - value_within_range:
               arguments: {min_value: 0, max_value: 1}
       - name: early_departure_pct
-        description: share of events flagged early_departure (bus-timepoint rule; 0.0 for NYC subway)
+        description: >
+          share of events flagged early_departure (bus-timepoint rule).
+          Currently 0.0 for every city: the flag needs stop_times.timepoint,
+          which the loaded silver static lacks (see fct_stop_events header)
         data_tests:
           - value_within_range:
               arguments: {min_value: 0, max_value: 1}
