@@ -18,7 +18,7 @@ import os
 import sys
 import tempfile
 import zipfile
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -28,6 +28,8 @@ from pyspark.sql import functions as F
 
 from ingestion.adapters.base import load_city_config, s3_client
 from spark_jobs.session import build_spark
+
+UTC = timezone.utc  # noqa: UP017 — EMR Serverless runs py3.9; datetime.UTC needs 3.11
 
 # Canonical projection per table: dictionary §D "key fields we use", column -> type.
 # Every city's CSV is conformed to exactly this schema before writing (missing

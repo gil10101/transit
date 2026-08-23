@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
@@ -18,6 +18,8 @@ import requests
 import yaml
 from confluent_kafka import Producer
 from confluent_kafka.admin import AdminClient, NewTopic
+
+UTC = timezone.utc  # noqa: UP017 — EMR Serverless runs py3.9; datetime.UTC needs 3.11
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config" / "cities"
 POLL_FLOOR_SECONDS = 30

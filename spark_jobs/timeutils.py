@@ -8,8 +8,10 @@ Rules (docs/transit-pulse-plan.md §4, CLAUDE.md canonical rules):
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
+
+UTC = timezone.utc  # noqa: UP017 — EMR Serverless runs py3.9; datetime.UTC needs 3.11
 
 
 def gtfs_time_to_seconds(hhmmss: str) -> int:
