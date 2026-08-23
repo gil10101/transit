@@ -26,20 +26,49 @@ class EmrResource(ConfigurableResource):
     timeout_minutes: int = 25
 
     def run_drain(self) -> str:
-        return self._run(drain_job_request(os.environ))
+        return self._run(drain_job_request(os.environ), adopt_in_flight=True)
 
     def run_static(self, city: str) -> str:
         return self._run(static_job_request(os.environ, city=city))
 
-    def _run(self, request: dict) -> str:
+    def _in_flight_run(self, client, request: dict) -> str | None:
+        """Id of an already-active run with the same job name, if any. One
+        running job holds the whole 4 vCPU app, and EMR Serverless REJECTS
+        (not queues) a submit that would exceed maximumCapacity — so when the
+        EventBridge 15-min drain is mid-flight, adopt it instead of submitting."""
+        runs = client.list_job_runs(
+            applicationId=request["applicationId"],
+            states=["SUBMITTED", "PENDING", "SCHEDULED", "RUNNING"],
+        )["jobRuns"]
+        for run in runs:
+            if run.get("name") == request["name"]:
+                return run["id"]
+        return None
+
+    def _run(self, request: dict, adopt_in_flight: bool = False) -> str:
         import boto3
 
         log = get_dagster_logger()
         client = boto3.client(
             "emr-serverless", region_name=os.environ.get("AWS_REGION", "us-east-2")
         )
-        run_id = client.start_job_run(**request)["jobRunId"]
-        log.info(f"EMR {request['name']} submitted: run {run_id}")
+        run_id = self._in_flight_run(client, request) if adopt_in_flight else None
+        if run_id is not None:
+            log.info(f"EMR {request['name']}: adopting in-flight run {run_id}")
+        else:
+            try:
+                run_id = client.start_job_run(**request)["jobRunId"]
+            except Exception as e:
+                # lost the race: a drain started between our check and submit
+                if adopt_in_flight and "maximumCapacity" in str(e):
+                    run_id = self._in_flight_run(client, request)
+                    if run_id is None:
+                        raise
+                    log.info(f"EMR {request['name']}: capacity race, adopting run {run_id}")
+                else:
+                    raise
+            else:
+                log.info(f"EMR {request['name']} submitted: run {run_id}")
         deadline = time.monotonic() + self.timeout_minutes * 60
         while True:
             job = client.get_job_run(applicationId=request["applicationId"], jobRunId=run_id)[
@@ -50,7 +79,16 @@ class EmrResource(ConfigurableResource):
                 log.info(f"EMR run {run_id} SUCCESS")
                 return run_id
             if state in EMR_TERMINAL_STATES:  # FAILED / CANCELLED
-                raise RuntimeError(f"EMR run {run_id} ended {state}: {job.get('stateDetails', '')}")
+                details = job.get("stateDetails", "")
+                # a capacity rejection surfaces as an instantly-FAILED run;
+                # the drain that holds the capacity does our work — adopt it
+                if adopt_in_flight and "maximumCapacity" in details:
+                    other = self._in_flight_run(client, request)
+                    if other is not None and other != run_id:
+                        log.info(f"EMR run {run_id} lost capacity race; adopting {other}")
+                        run_id = other
+                        continue
+                raise RuntimeError(f"EMR run {run_id} ended {state}: {details}")
             if time.monotonic() > deadline:
                 # a hung run holds the whole 4 vCPU app and queues every later
                 # drain — free the capacity before giving up
