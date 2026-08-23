@@ -29,24 +29,77 @@ from pyspark.sql import functions as F
 from ingestion.adapters.base import load_city_config, s3_client
 from spark_jobs.session import build_spark
 
-# file name -> columns cast from string
-CASTS = {
-    "routes": {"route_type": "int"},
-    "trips": {"direction_id": "int"},
-    "stops": {"stop_lat": "double", "stop_lon": "double", "location_type": "int"},
-    "stop_times": {"stop_sequence": "int", "timepoint": "int"},
-    "calendar": {
-        d: "int"
-        for d in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+# Canonical projection per table: dictionary §D "key fields we use", column -> type.
+# Every city's CSV is conformed to exactly this schema before writing (missing
+# columns become typed nulls, extras are dropped) — per-city header drift is real
+# (MBTA adds route_fare_class, TTC/HSL lack route_sort_order, HSL ships a BOM)
+# and Iceberg by-name writes reject any mismatch.
+CANONICAL = {
+    "routes": {
+        "route_id": "string",
+        "agency_id": "string",
+        "route_short_name": "string",
+        "route_long_name": "string",
+        "route_type": "int",
+        "route_color": "string",
     },
-    "calendar_dates": {"exception_type": "int"},
+    "trips": {
+        "trip_id": "string",
+        "route_id": "string",
+        "service_id": "string",
+        "direction_id": "int",
+        "trip_headsign": "string",
+        "shape_id": "string",
+        "block_id": "string",
+    },
+    "stops": {
+        "stop_id": "string",
+        "stop_name": "string",
+        "stop_lat": "double",
+        "stop_lon": "double",
+        "parent_station": "string",
+        "location_type": "int",
+        "zone_id": "string",
+    },
+    "stop_times": {
+        "trip_id": "string",
+        "stop_id": "string",
+        "stop_sequence": "int",
+        "arrival_time": "string",
+        "departure_time": "string",
+        "timepoint": "int",
+    },
+    "calendar": {
+        "service_id": "string",
+        **{
+            d: "int"
+            for d in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+        },
+        "start_date": "string",
+        "end_date": "string",
+    },
+    "calendar_dates": {"service_id": "string", "date": "string", "exception_type": "int"},
     "shapes": {
+        "shape_id": "string",
         "shape_pt_lat": "double",
-        "shape_pt_sequence": "int",
         "shape_pt_lon": "double",
+        "shape_pt_sequence": "int",
         "shape_dist_traveled": "double",
     },
 }
+
+
+def conform(df: DataFrame, schema: dict[str, str]) -> DataFrame:
+    """Project to the canonical column list: strip BOM from header names,
+    cast present columns, add absent ones as typed nulls, drop extras."""
+    df = df.toDF(*[c.lstrip("﻿").strip() for c in df.columns])
+    cols = [
+        F.col(name).cast(dtype).alias(name)
+        if name in df.columns
+        else F.lit(None).cast(dtype).alias(name)
+        for name, dtype in schema.items()
+    ]
+    return df.select(*cols)
 
 
 def gtfs_seconds(col: str):
@@ -75,6 +128,14 @@ def archive_zip(city: str, version_id: str, blob: bytes) -> None:
 
 def write_table(spark: SparkSession, df: DataFrame, name: str) -> None:
     table = f"lake.silver.gtfs_static_{name}"
+    if spark.catalog.tableExists(table):
+        existing = set(spark.table(table).columns)
+        if existing != set(df.columns):
+            # pre-canonical table (schema fixed by whichever city loaded first);
+            # rebuild on the canonical projection — versioned partitions mean
+            # every city repopulates on its next parse run
+            print(f"{table}: schema drift {sorted(existing ^ set(df.columns))}; recreating")
+            spark.sql(f"drop table {table}")
     writer = df.writeTo(table).partitionedBy("city", "gtfs_version_id")
     if spark.catalog.tableExists(table):
         writer.overwritePartitions()
@@ -83,15 +144,12 @@ def write_table(spark: SparkSession, df: DataFrame, name: str) -> None:
 
 
 def parse(spark: SparkSession, city: str, version_id: str, extract_dir: Path) -> None:
-    for name, casts in CASTS.items():
+    for name, schema in CANONICAL.items():
         src = extract_dir / f"{name}.txt"
         if not src.exists():
             print(f"{name}.txt absent in feed; skipped")
             continue
-        df = spark.read.csv(str(src), header=True)
-        for col, dtype in casts.items():
-            if col in df.columns:
-                df = df.withColumn(col, F.col(col).cast(dtype))
+        df = conform(spark.read.csv(str(src), header=True), schema)
         if name == "stop_times":
             df = df.withColumn("arrival_seconds", gtfs_seconds("arrival_time")).withColumn(
                 "departure_seconds", gtfs_seconds("departure_time")

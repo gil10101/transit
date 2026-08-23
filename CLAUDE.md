@@ -40,7 +40,7 @@ Helsinki KEPT (polled GTFS-RT, no key; MQTT is stretch-only) · Tokyo rail via *
 ## Canonical rules (implement exactly once, in shared code/macros)
 - `trip_uid = hash(city, service_date, COALESCE(trip_id, route_id||'-'||direction_id||'-'||start_time))`
 - `delay_pred_sec = COALESCE(arrival.delay, arrival.time − scheduled_arrival)` ; Tokyo uses stated delay.
-- `service_date` = local_ts − 12h, date part (GTFS noon rule; handles `25:30:00`).
+- `service_date` = feed `start_date` when set, else local_ts − 12h, date part (GTFS noon rule; handles `25:30:00`). [rev P3] Feeds that never set start_date get a per-city fallback cutover instead of −12h (TTC: −4h — its feed sets start_date on 0 trips, and −12h misdates the midnight–noon half-day); map in `spark_jobs/silver_normalize.py`.
 - Store UTC; **all analysis in local time** via `dim_city.iana_tz` (3am Tokyo compares to 3am NYC).
 - Atomic fact unique key: `(city_key, service_date, trip_uid, stop_sequence)`.
 - ADDED trips: volume yes, OTP no. Early bus departure at a timepoint (>60s) = failure flag.

@@ -137,14 +137,34 @@ def read_topic(spark: SparkSession, topic: str, record: T.StructType) -> DataFra
     return raw.select(env).select("env.*")
 
 
+# Cutover hours for the fetched_at service-date fallback, per city. The GTFS
+# noon rule (-12h) is right for feeds whose records may reference yesterday's
+# overnight trips; Toronto's feed sets start_date on NO trips (fixture-verified
+# 2026-08-23), so with -12h every record fetched between local midnight and noon
+# would be misdated to the previous service day. TTC service day rolls ~04:00
+# local -> -4h. Amendment recorded in docs/01 §F and CLAUDE.md canonical rules.
+CITY_FALLBACK_CUTOVER_HOURS = {"toronto": 4}
+DEFAULT_FALLBACK_CUTOVER_HOURS = 12
+
+
+def cutover_expr():
+    pairs: list = []
+    for city, hours in CITY_FALLBACK_CUTOVER_HOURS.items():
+        pairs += [F.lit(city), F.lit(hours)]
+    return F.create_map(*pairs) if pairs else F.create_map()
+
+
 def with_common(df: DataFrame) -> DataFrame:
-    """fetched_at typing, city tz, service_date (start_date else noon rule)."""
+    """fetched_at typing, city tz, service_date (start_date else cutover rule)."""
     tz = F.coalesce(tz_map_expr()[F.col("city")], F.lit("UTC"))
+    cutover = F.coalesce(cutover_expr()[F.col("city")], F.lit(DEFAULT_FALLBACK_CUTOVER_HOURS))
     df = df.withColumn("fetched_at", F.to_timestamp("fetched_at")).withColumn(
         "service_date",
         F.coalesce(
             F.to_date(F.col("rec.start_date"), "yyyyMMdd"),
-            F.to_date(F.from_utc_timestamp(F.col("fetched_at"), tz) - F.expr("INTERVAL 12 HOURS")),
+            F.to_date(
+                F.from_utc_timestamp(F.col("fetched_at"), tz) - F.make_dt_interval(hours=cutover)
+            ),
         ),
     )
     return df.withColumn(
