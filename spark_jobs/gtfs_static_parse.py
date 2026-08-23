@@ -1,7 +1,14 @@
 """Static GTFS: download, version, archive raw zip, parse with Spark into
 lake.silver.gtfs_static_* (partitioned city / gtfs_version_id, idempotent per version).
 
-Usage: python -m spark_jobs.gtfs_static_parse <city>
+Usage:
+    python -m spark_jobs.gtfs_static_parse <city>                # local: download + parse
+    python -m spark_jobs.gtfs_static_parse <city> <version_id>   # EMR: parse staged zip
+
+Two-arg mode reads the zip the Dagster asset already archived at
+raw/static/<city>/<version_id>/gtfs.zip. EMR Serverless base Python has boto3
+but not requests/yaml/confluent_kafka, so this module must not import
+ingestion.adapters.* — the download path (local dev only) lazy-imports its deps.
 
 gtfs_version_id = <city>-<download date>-<sha256[:8] of zip>, so re-running on an
 unchanged upstream file overwrites the same partition. GTFS times may exceed
@@ -21,12 +28,10 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
-from dotenv import load_dotenv
+import boto3
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
-from ingestion.adapters.base import load_city_config, s3_client
 from spark_jobs.session import build_spark
 
 UTC = timezone.utc  # noqa: UP017 — EMR Serverless runs py3.9; datetime.UTC needs 3.11
@@ -114,18 +119,46 @@ def gtfs_seconds(col: str):
     )
 
 
+def _s3():
+    # same env contract as ingestion.adapters.base.s3_client, duplicated here
+    # because that module needs requests/yaml/confluent_kafka — absent on EMR
+    endpoint = os.environ.get("MINIO_ENDPOINT")
+    if endpoint:
+        return boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            aws_access_key_id=os.environ.get("MINIO_ACCESS_KEY", "minioadmin"),
+            aws_secret_access_key=os.environ.get("MINIO_SECRET_KEY", "minioadmin"),
+            region_name="us-east-1",
+        )
+    return boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-2"))
+
+
+def zip_key(city: str, version_id: str) -> str:
+    return f"static/{city}/{version_id}/gtfs.zip"
+
+
 def download(url: str) -> bytes:
+    import requests  # local-dev only; absent on EMR Serverless base Python
+
     resp = requests.get(url, timeout=120)
     resp.raise_for_status()
     return resp.content
 
 
 def archive_zip(city: str, version_id: str, blob: bytes) -> None:
-    s3_client().put_object(
+    _s3().put_object(
         Bucket=os.environ.get("RAW_BUCKET", "raw"),
-        Key=f"static/{city}/{version_id}/gtfs.zip",
+        Key=zip_key(city, version_id),
         Body=blob,
     )
+
+
+def fetch_archived(city: str, version_id: str) -> bytes:
+    obj = _s3().get_object(
+        Bucket=os.environ.get("RAW_BUCKET", "raw"), Key=zip_key(city, version_id)
+    )
+    return obj["Body"].read()
 
 
 def write_table(spark: SparkSession, df: DataFrame, name: str) -> None:
@@ -162,14 +195,23 @@ def parse(spark: SparkSession, city: str, version_id: str, extract_dir: Path) ->
 
 
 def main() -> None:
-    load_dotenv()
     city = sys.argv[1] if len(sys.argv) > 1 else "nyc"
-    cfg = load_city_config(city)
-    if not cfg.static_gtfs:
-        raise SystemExit(f"{city}.yaml has no static_gtfs URL")
-    blob = download(cfg.static_gtfs)
-    version_id = f"{city}-{datetime.now(UTC):%Y%m%d}-{hashlib.sha256(blob).hexdigest()[:8]}"
-    archive_zip(city, version_id, blob)
+    version_id = sys.argv[2] if len(sys.argv) > 2 else None
+    if version_id:  # EMR mode: the Dagster asset staged the zip already
+        blob = fetch_archived(city, version_id)
+    else:  # local dev: download + version + archive here
+        from dotenv import load_dotenv
+
+        from ingestion.adapters.base import load_city_config
+
+        load_dotenv()
+        cfg = load_city_config(city)
+        if not cfg.static_gtfs:
+            raise SystemExit(f"{city}.yaml has no static_gtfs URL")
+        blob = download(cfg.static_gtfs)
+        sha8 = hashlib.sha256(blob).hexdigest()[:8]
+        version_id = f"{city}-{datetime.now(UTC):%Y%m%d}-{sha8}"
+        archive_zip(city, version_id, blob)
     spark = build_spark(f"gtfs-static-{city}")
     spark.sparkContext.setLogLevel("WARN")
     with tempfile.TemporaryDirectory() as tmp:

@@ -1,6 +1,10 @@
-"""Weekly static GTFS refresh: EMR parse per live city -> Iceberg refresh -> dbt."""
+"""Weekly static GTFS refresh: download + stage per live city -> EMR parse ->
+Iceberg refresh -> dbt. The download runs here on the box (requests available);
+EMR only parses the staged zip (its base Python has boto3 and nothing else)."""
 
+import hashlib
 import os
+from datetime import UTC, datetime
 
 from dagster import (
     AssetSelection,
@@ -20,8 +24,32 @@ from .lib import (
     latest_metadata_path,
     require_env,
     silver_tables,
+    static_gtfs_url,
 )
 from .resources import EmrResource, SnowflakeResource
+
+
+def stage_static_zip(city: str) -> str:
+    """Download <city>'s static GTFS and archive it to
+    raw/static/<city>/<version_id>/gtfs.zip; returns the version_id the EMR
+    parse job reads back. Runs on the box: EMR base Python has no requests,
+    and keeping agency egress here also keeps retries off the Spark bill."""
+    import boto3
+    import requests
+
+    url = static_gtfs_url(city)
+    resp = requests.get(url, timeout=180)
+    resp.raise_for_status()
+    blob = resp.content
+    stamp = datetime.now(UTC).strftime("%Y%m%d")
+    version_id = f"{city}-{stamp}-{hashlib.sha256(blob).hexdigest()[:8]}"
+    s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-2"))
+    s3.put_object(
+        Bucket=require_env(os.environ, "RAW_BUCKET"),
+        Key=f"static/{city}/{version_id}/gtfs.zip",
+        Body=blob,
+    )
+    return version_id
 
 
 @asset(group_name="static")
@@ -30,13 +58,14 @@ def gtfs_static(
 ) -> MaterializeResult:
     """Refresh every live city's static schedule end to end.
 
-    1. EMR runs spark_jobs/gtfs_static_parse.py once per LIVE_CITIES entry,
+    1. Download + stage each LIVE_CITIES zip (stage_static_zip), then EMR runs
+       spark_jobs/gtfs_static_parse.py <city> <version_id> per city,
        sequentially — one job holds the whole 4 vCPU app and EMR Serverless
-       rejects (not queues) over-capacity submits (quirk 3). Each job reads
-       static_gtfs from ingestion/config/cities/<city>.yaml inside the shipped
-       code zip — never hardcoded here. A failing city is recorded and the
-       remaining cities still run; the asset fails at the end so one broken
-       upstream zip cannot stall the other cities for a week.
+       rejects (not queues) over-capacity submits (quirk 3). static_gtfs URLs
+       come from ingestion/config/cities/<city>.yaml — never hardcoded here.
+       A failing city is recorded and the remaining cities still run; the
+       asset fails at the end so one broken upstream zip cannot stall the
+       other cities for a week.
     2. Re-point the gtfs_static_* Iceberg tables in Snowflake once, after the
        parses (they all append city partitions to the same tables).
     3. dbt build of the stg_gtfs__* staging models and everything downstream
@@ -47,7 +76,8 @@ def gtfs_static(
     failed: dict[str, str] = {}
     for city in LIVE_CITIES:
         try:
-            run_ids[city] = emr.run_static(city)
+            version_id = stage_static_zip(city)
+            run_ids[city] = emr.run_static(city, version_id)
         except Exception as e:  # noqa: BLE001 — keep the other cities refreshing
             failed[city] = repr(e)
 

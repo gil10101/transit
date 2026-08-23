@@ -28,8 +28,8 @@ class EmrResource(ConfigurableResource):
     def run_drain(self) -> str:
         return self._run(drain_job_request(os.environ), adopt_in_flight=True)
 
-    def run_static(self, city: str) -> str:
-        return self._run(static_job_request(os.environ, city=city))
+    def run_static(self, city: str, version_id: str) -> str:
+        return self._run(static_job_request(os.environ, city=city, version_id=version_id))
 
     def _in_flight_run(self, client, request: dict) -> str | None:
         """Id of an already-active run with the same job name, if any. One

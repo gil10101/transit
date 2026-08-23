@@ -52,12 +52,13 @@ def test_drain_request_mirrors_lambda_contract():
 
 
 def test_static_request_overrides_entrypoint_and_exports_raw_bucket():
-    req = static_job_request(ENV, city="nyc")
+    req = static_job_request(ENV, city="nyc", version_id="nyc-20260823-abc12345")
     spark = req["jobDriver"]["sparkSubmit"]
     assert spark["entryPoint"] == ENV["STATIC_ENTRY_POINT"]
-    assert spark["entryPointArguments"] == ["nyc"]
+    # [city, version_id]: EMR reads the staged zip — it cannot download (no requests)
+    assert spark["entryPointArguments"] == ["nyc", "nyc-20260823-abc12345"]
     assert spark["sparkSubmitParameters"].startswith(ENV["SPARK_PARAMS"])
-    # the parse job archives the zip from the driver; the drain params lack RAW_BUCKET
+    # the parse job reads the staged zip from raw; the drain params lack RAW_BUCKET
     assert spark["sparkSubmitParameters"].endswith(
         f"--conf spark.emr-serverless.driverEnv.RAW_BUCKET={ENV['RAW_BUCKET']}"
     )

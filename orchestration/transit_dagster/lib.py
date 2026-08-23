@@ -37,6 +37,39 @@ CITY_WEATHER = {
 }
 
 
+def cities_config_dir(config_dir: Path | None = None) -> Path:
+    """Locate ingestion/config/cities in a repo checkout or the dagster image.
+
+    Repo checkout: <repo>/ingestion/config/cities next to orchestration/;
+    dagster image: /opt/dagster/app/ingestion/config/cities (Dockerfile COPY).
+    """
+    if config_dir is not None:
+        return Path(config_dir)
+    here = Path(__file__).resolve()
+    for root in (here.parents[1], here.parents[2]):
+        candidate = root / "ingestion" / "config" / "cities"
+        if candidate.is_dir():
+            return candidate
+    raise RuntimeError(
+        "ingestion/config/cities not found near the repo/image root; "
+        "the freshness check and static refresh need the city yamls"
+    )
+
+
+def static_gtfs_url(city: str, config_dir: Path | None = None) -> str:
+    """static_gtfs URL from <city>.yaml — single source for feed URLs stays the
+    city configs (CLAUDE.md: never invent a URL). Raises when absent: a live
+    city without a static feed cannot be scheduled-refreshed."""
+    import yaml  # lazy, as above
+
+    path = cities_config_dir(config_dir) / f"{city}.yaml"
+    cfg = yaml.safe_load(path.read_text()) or {}
+    url = cfg.get("static_gtfs")
+    if not url:
+        raise RuntimeError(f"{path} has no static_gtfs URL")
+    return url
+
+
 def city_feed_endpoints(
     config_dir: Path | None = None, live: Sequence[str] = LIVE_CITIES
 ) -> dict[str, tuple[str, ...]]:
@@ -53,20 +86,7 @@ def city_feed_endpoints(
     """
     import yaml  # lazy: repo venv + dagster image have it; never ships to EMR
 
-    if config_dir is None:
-        here = Path(__file__).resolve()
-        # repo checkout: <repo>/ingestion/config/cities next to orchestration/;
-        # dagster image: /opt/dagster/app/ingestion/config/cities (Dockerfile COPY)
-        for root in (here.parents[1], here.parents[2]):
-            candidate = root / "ingestion" / "config" / "cities"
-            if candidate.is_dir():
-                config_dir = candidate
-                break
-    if config_dir is None:
-        raise RuntimeError(
-            "ingestion/config/cities not found near the repo/image root; "
-            "the raw-feed freshness check needs the city yamls"
-        )
+    config_dir = cities_config_dir(config_dir)
     out: dict[str, tuple[str, ...]] = {}
     for path in sorted(Path(config_dir).glob("*.yaml")):
         cfg = yaml.safe_load(path.read_text()) or {}
@@ -123,13 +143,19 @@ def drain_job_request(env: Mapping[str, str], client_token: str | None = None) -
 
 
 def static_job_request(
-    env: Mapping[str, str], city: str = "nyc", client_token: str | None = None
+    env: Mapping[str, str],
+    city: str = "nyc",
+    version_id: str | None = None,
+    client_token: str | None = None,
 ) -> dict:
     """StartJobRun kwargs for the weekly static GTFS parse.
 
-    Drain params plus: entryPoint swapped to gtfs_static_parse.py, the city as
-    argv, and RAW_BUCKET exported to the driver (the job archives the zip from
-    the driver; the streaming drain never needs that env so SPARK_PARAMS lacks it).
+    Drain params plus: entryPoint swapped to gtfs_static_parse.py, [city,
+    version_id] as argv, and RAW_BUCKET exported to the driver (the job reads
+    the staged zip from raw; the streaming drain never needs that env so
+    SPARK_PARAMS lacks it). version_id points at the zip the asset already
+    archived — EMR base Python lacks requests, so the download happens on the
+    Dagster box, never on EMR.
     """
     request = drain_job_request(env, client_token)
     params = request["jobDriver"]["sparkSubmit"]["sparkSubmitParameters"]
@@ -137,7 +163,7 @@ def static_job_request(
     request["name"] = "transit-gtfs-static"
     request["jobDriver"]["sparkSubmit"] = {
         "entryPoint": require_env(env, "STATIC_ENTRY_POINT"),
-        "entryPointArguments": [city],
+        "entryPointArguments": [city] + ([version_id] if version_id else []),
         "sparkSubmitParameters": (
             f"{params} --conf spark.emr-serverless.driverEnv.RAW_BUCKET={raw_bucket}"
         ),
