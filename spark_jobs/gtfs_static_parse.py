@@ -134,8 +134,19 @@ def _s3():
     return boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-2"))
 
 
+def static_prefix(city: str, version_id: str) -> str:
+    return f"static/{city}/{version_id}"
+
+
 def zip_key(city: str, version_id: str) -> str:
-    return f"static/{city}/{version_id}/gtfs.zip"
+    return f"{static_prefix(city, version_id)}/gtfs.zip"
+
+
+def raw_base_uri() -> str:
+    """Spark-readable URI for the raw bucket: EMR's native committer speaks
+    s3://, the local MinIO session config only maps s3a://."""
+    scheme = "s3" if os.environ.get("TP_CLOUD") == "1" else "s3a"
+    return f"{scheme}://{os.environ.get('RAW_BUCKET', 'raw')}"
 
 
 def download(url: str) -> bytes:
@@ -178,13 +189,26 @@ def write_table(spark: SparkSession, df: DataFrame, name: str) -> None:
         writer.create()
 
 
+def stage_texts(city: str, version_id: str, extract_dir: Path) -> None:
+    """Upload the canonical .txt members to raw. Executors run in separate
+    containers and cannot see the driver's tempdir — reading
+    file:/tmp/... fails on EMR with SparkFileNotFoundException."""
+    s3 = _s3()
+    bucket = os.environ.get("RAW_BUCKET", "raw")
+    for name in CANONICAL:
+        src = extract_dir / f"{name}.txt"
+        if src.exists():
+            s3.upload_file(str(src), bucket, f"{static_prefix(city, version_id)}/txt/{name}.txt")
+
+
 def parse(spark: SparkSession, city: str, version_id: str, extract_dir: Path) -> None:
+    base = f"{raw_base_uri()}/{static_prefix(city, version_id)}/txt"
     for name, schema in CANONICAL.items():
         src = extract_dir / f"{name}.txt"
         if not src.exists():
             print(f"{name}.txt absent in feed; skipped")
             continue
-        df = conform(spark.read.csv(str(src), header=True), schema)
+        df = conform(spark.read.csv(f"{base}/{name}.txt", header=True), schema)
         if name == "stop_times":
             df = df.withColumn("arrival_seconds", gtfs_seconds("arrival_time")).withColumn(
                 "departure_seconds", gtfs_seconds("departure_time")
@@ -216,6 +240,7 @@ def main() -> None:
     spark.sparkContext.setLogLevel("WARN")
     with tempfile.TemporaryDirectory() as tmp:
         zipfile.ZipFile(io.BytesIO(blob)).extractall(tmp)
+        stage_texts(city, version_id, Path(tmp))
         parse(spark, city, version_id, Path(tmp))
     spark.stop()
 
