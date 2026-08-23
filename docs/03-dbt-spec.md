@@ -35,8 +35,8 @@ sources:
 | `int_trip_matching_nyc` | incremental | RT trip_id → static trip via (route, direction, service_date, origin-time prefix/100 min); emits match_confidence |
 | `int_odpt_stop_map` | table | ODPT URN ↔ GTFS stop_id/route_id; `dbt_utils.relationships` tested both ways |
 | `int_stop_events_finalized` | **incremental (merge)** | THE model — see §3. unique_key `(city_key, service_date, trip_uid, stop_sequence)`, lookback var 48h |
-| `int_service_frequency` | incremental | median sched headway per (route, direction, daypart, service_date); `is_frequent = headway ≤ var('freq_headway_threshold_sec')` |
-| `int_headways` | incremental | LAG(actual_arr) per (city, route, dir, stop, service_date); sched headway from frequencies.txt else LAG(sched_arr) |
+| `int_service_frequency` | ~~incremental~~ **table [rev P5]** (small; rebuilt with static) | median sched headway per (route, direction, daypart, service_date); `is_frequent = headway ≤ var('freq_headway_threshold_sec')` |
+| ~~`int_headways`~~ **`fct_headways` [rev P5]** (marts, per docs/02 §fct_headways) | incremental (delete+insert, 48h lookback) | LAG(actual_arr) per (city, route, dir, stop, service_date); sched headway from frequencies.txt else LAG(sched_arr) |
 | `fct_*`, `dim_*` | incremental / table per schema doc | facts: merge + cluster (service_date, city_key); dims from snapshots |
 | `fct_city_scorecard_monthly` | table | full-refresh each run; methodology_version stamped |
 
@@ -84,6 +84,7 @@ Custom generic tests:
 - `local_time_consistency` (local_hour matches to_local(ts))
 - `frequent_service_has_ewt` / `scheduled_service_has_otp` (scoring path routed correctly)
 dbt_expectations: row-count deltas day-over-day within ±40% per city (feed-outage tripwire, pairs with Dagster freshness checks).
+**[rev P5]** implemented via the custom `value_within_range` generic (dbt_utils/dbt_expectations not installed): delay bounds, headway sanity, completeness warn<0.85/error<0.50, gap_ratio/EWT ranges. Still deferred: `local_time_consistency`, `frequent_service_has_ewt`/`scheduled_service_has_otp` (land with the P6 scoring path they guard), row-count delta expectations (Dagster freshness checks cover the outage tripwire today).
 
 ## 8. Vars (`dbt_project.yml`)
 ```yaml

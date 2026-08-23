@@ -59,7 +59,7 @@ Star schema. All timestamps stored as `TIMESTAMP_NTZ` with explicit `_utc` / `_l
 | valid_from, valid_to, is_current, gtfs_version_id | | |
 
 ### dim_date, dim_time_local
-Standard calendar; `dim_time_local`: local_hour PK, daypart (early_am 04–06 / am_peak / midday / pm_peak / evening / overnight 22–04), is_peak.
+Standard calendar; `dim_time_local`: local_hour PK, daypart, is_peak. **[rev P5]** daypart buckets locked as implemented in `macros/daypart.sql` (baked into int_service_frequency, fct_headways, EWT slices): am_peak 5–9 / midday 10–15 / pm_peak 16–19 / evening 20–23 / overnight 0–4 — replaces the earlier six-bucket sketch; dim_time_local (P6) must match.
 
 ### dim_weather (seed)
 weather_key PK, wmo_code_range, condition_bucket ∈ {clear, cloudy, rain, heavy_rain, snow, heavy_snow, fog, extreme}.
@@ -112,7 +112,7 @@ Grain: (city_key, mode, service_date, local_hour). distinct_vehicles, distinct_t
 (city_key, route_key, service_date): trips_scheduled (from static calendar), trips_observed, trips_added, trips_cancelled, completeness_pct = observed_scheduled / scheduled.
 
 ### fct_weather_hourly
-(city_key, local_date, local_hour) PK → joins fct_stop_events on exactly those three columns **[rev]** (explicit join contract). temp_c, precip_mm, snowfall_cm, wind_kph, weather_key FK.
+(city_key, local_date, local_hour) PK → joins fct_stop_events on exactly those three columns **[rev]** (explicit join contract). temp_c, precip_mm, snowfall_cm, wind_kph, weather_key FK. **[rev P5]** sourced from silver.weather_hourly written direct-to-Snowflake (1 row/city/hr; lake unnecessary).
 
 ### fct_alerts_daily
 (city_key, route_key, service_date): alerts_active, alert_minutes (overlap-deduped per alert_id **[rev]**), worst_effect.
@@ -136,7 +136,7 @@ Grain: (city_key, mode, service_date, local_hour). distinct_vehicles, distinct_t
 | silver.alerts | city / service_date | alert versions |
 | silver.odpt_trains | service_date | Tokyo odpt:Train observations **[rev — new]** |
 | silver.gtfs_static_{routes,trips,stops,stop_times,calendar,calendar_dates,shapes} | city / gtfs_version_id | versioned schedule |
-| silver.weather_hourly | city | Open-Meteo pulls |
+| silver.weather_hourly | city | Open-Meteo pulls **[rev P5]** direct-to-Snowflake native table, not Iceberg (1 row/city/hr; lake unnecessary; Dagster MERGE on city+local_date+local_hour) |
 
 ## Capacity check (double-checked against live sizes ✅)
 Observed per-poll payloads: MTA 8 feeds ≈ 1MB total, MBTA 0.8MB, TTC 0.7MB, HSL 0.75MB; CTA/WMATA similar; 511 RG est. 1–3MB; Zurich national est. 5–20MB (filtered to Zurich in silver); Tokyo JSON <0.5MB. Total ingest ≈ **5–30 MB/min (<0.5 MB/s)** → single-broker Kafka is loafing; EMR Serverless micro-batches trivial; Snowflake XS handles 2–4M finalized rows/day with seconds-long incremental merges. Storage ≈ 1–3 GB/day Parquet ≈ <$3/mo/yr-of-history at S3 prices. The stack accommodates with an order of magnitude of headroom.

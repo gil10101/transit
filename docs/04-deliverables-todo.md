@@ -44,8 +44,10 @@
 **P2 Cloud deploy (wk 3)** — [ ] terraform apply prod · [ ] NYC flowing e2e in cloud. **Fresh clone → running pipeline in <1 hr.**
 **P3 GTFS-RT fan-out (wk 3–4)** — [ ] Boston · [ ] Toronto (+ADDED handling) · [ ] Helsinki (trip_uid path) · [ ] Chicago · [ ] DC · [ ] SF (RG cadence) · [ ] Zurich (allow-list). **Each city = yaml + ≤1 quirk PR; completeness ≥85% after 48h.**
 **P4 Tokyo (wk 5)** — [ ] ODPT adapter (odpt:Train + TrainInformation) · [ ] URN↔GTFS mapping + tests · [ ] ToeiBus via generic adapter · [ ] MLIT seed. **Ginza-line delays match Metro's own status page during a disruption.**
-**P5 Metrics layer (wk 5–6)** — [ ] headways + EWT · [ ] int_service_frequency · [ ] activity, alerts, weather (backfill 2yr + hourly) · [ ] completeness · [ ] all dbt tests/docs · [ ] Dagster partitions/sensors/checks. **`dbt build` green; a killed feed shows up in completeness within an hour.**
-**P6 Scorecard + dashboard (wk 7–8)** — [ ] composite score (weights as vars, methodology_version) · [ ] 4 pages + ops · [ ] MLIT validation notebook · [ ] README polish + GIF. **A stranger can answer "which city is most reliable at 8am?" in two clicks.**
+**P5 Metrics layer (wk 5–6)** — [x] headways + EWT · [x] int_service_frequency · [x] activity, alerts, weather (backfill 2yr + hourly) · [x] completeness · [x] all dbt tests/docs · [x] Dagster partitions/sensors/checks. **`dbt build` green; a killed feed shows up in completeness within an hour.**
+> [rev P5] SCD2 dims (dim_route/dim_stop snapshots) moved to P6 — P5 marts join on natural keys (city, route_id, stop_id); NYC-only data makes them unambiguous until fan-out.
+> [rev P5] city×date partitioning of the dbt assets (docs/03 §10) deferred to P3 fan-out (single city, unpartitioned assets until then). The 2yr weather backfill asset is built but pending DAGSTER_SVC creds — run `make p5-backfill-weather` once enabled.
+**P6 Scorecard + dashboard (wk 7–8)** — [ ] SCD2 dims + `*_key` FK swap in marts (moved from P5) · [ ] composite score (weights as vars, methodology_version) · [ ] 4 pages + ops · [ ] MLIT validation notebook · [ ] README polish + GIF. **A stranger can answer "which city is most reliable at 8am?" in two clicks.**
 **P7 Run & write (ongoing)** — [ ] 30+ days accrued · [ ] monthly auto-report · [ ] blog writeup.
 **P8 Optional** — [ ] HSL MQTT live layer · [ ] EKS migration · [ ] JR East (Challenge window) · [ ] Sydney TfNSW (has official *historical* GTFS-RT archives — instant multi-year backfill for city #10) · [ ] MTA buses.
 
