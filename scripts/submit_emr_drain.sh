@@ -38,6 +38,8 @@ aws s3 sync .jars "s3://${ARTIFACTS}/jars/" --region "$REGION"
 zip -qr .jars/spark_jobs.zip spark_jobs ingestion -x '*__pycache__*'
 aws s3 cp .jars/spark_jobs.zip "s3://${ARTIFACTS}/code/spark_jobs.zip" --region "$REGION"
 aws s3 cp spark_jobs/run_local.py "s3://${ARTIFACTS}/code/entry.py" --region "$REGION"
+# standalone entry for the weekly static parse (Dagster STATIC_ENTRY_POINT)
+aws s3 cp spark_jobs/gtfs_static_parse.py "s3://${ARTIFACTS}/code/gtfs_static_parse.py" --region "$REGION"
 
 JARS=""
 for coord in "${KAFKA_JARS[@]}"; do

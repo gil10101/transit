@@ -80,13 +80,22 @@ class EmrResource(ConfigurableResource):
                 return run_id
             if state in EMR_TERMINAL_STATES:  # FAILED / CANCELLED
                 details = job.get("stateDetails", "")
-                # a capacity rejection surfaces as an instantly-FAILED run;
-                # the drain that holds the capacity does our work — adopt it
-                if adopt_in_flight and "maximumCapacity" in details:
-                    other = self._in_flight_run(client, request)
-                    if other is not None and other != run_id:
-                        log.info(f"EMR run {run_id} lost capacity race; adopting {other}")
-                        run_id = other
+                # a capacity rejection surfaces as an instantly-FAILED run (one
+                # running job holds the whole 4 vCPU app)
+                if "maximumCapacity" in details:
+                    # same-name run holds the capacity -> it does our work: adopt
+                    if adopt_in_flight:
+                        other = self._in_flight_run(client, request)
+                        if other is not None and other != run_id:
+                            log.info(f"EMR run {run_id} lost capacity race; adopting {other}")
+                            run_id = other
+                            continue
+                    # different job (e.g. static parse vs a scheduled drain):
+                    # wait for the slot and resubmit, bounded by the deadline
+                    if time.monotonic() < deadline:
+                        log.info(f"EMR run {run_id} hit capacity; resubmitting in 90s")
+                        time.sleep(90)
+                        run_id = client.start_job_run(**request)["jobRunId"]
                         continue
                 raise RuntimeError(f"EMR run {run_id} ended {state}: {details}")
             if time.monotonic() > deadline:
