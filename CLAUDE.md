@@ -28,7 +28,7 @@ Helsinki KEPT (polled GTFS-RT, no key; MQTT is stretch-only) · Tokyo rail via *
 (its GTFS-RT is alerts-only) · Toronto scored on surface modes only.
 
 ## Verified facts you must respect (from live testing — don't "fix" these)
-1. **NYC**: no API key; 8 feeds; `arrival.delay` is ABSENT (exception: the L feed sets delay + stop_sequence; other 7 set neither — fixtures 2026-08-22) → delay computed vs static schedule, COALESCE picks up L's feed delay; trip_ids are origin-time-encoded (`070950_A..S58R`) → `int_trip_matching_nyc` on (route, direction, service_date, origin-time). Subway VP has no lat/lon. NYCT protobuf extension present.
+1. **NYC**: no API key; 8 feeds; `arrival.delay` is ABSENT (exception: the L feed sets delay + stop_sequence; other 7 set neither — fixtures 2026-08-22) → delay computed vs static schedule, COALESCE picks up L's feed delay; trip_ids are origin-time-encoded (`070950_A..S58R`) → `int_trip_matching_nyc` on (route, direction, service_date, origin-time). Subway VP has no lat/lon. NYCT protobuf extension present. Supplemented static (`gtfs_supplemented.zip`, verified 200 on 2026-08-22) in use since P5 — includes service-change trips.
 2. **HSL**: no key; `trip_id` is EMPTY → trips resolve via (route_id, direction_id, start_date, start_time); `arrival.delay` IS populated.
 3. **TTC**: no key, attribution required; ~3% of trips are ADDED (negative ids) → count in service volume, exclude from OTP.
 4. **CTA**: keyless request returns HTML, not protobuf → key required (`?key=`).
