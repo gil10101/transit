@@ -77,15 +77,39 @@ services:
       retries: 20
 
   dagster-webserver:
-    build: orchestration
+    build: &dagster-build
+      # repo-root context: the image bakes dbt/transit and scripts/ (see orchestration/Dockerfile)
+      context: .
+      dockerfile: orchestration/Dockerfile
     command: dagster-webserver -h 0.0.0.0 -p 3000 -w /opt/dagster/app/workspace.yaml
     ports:
-      - "3070:3000"  # host 3000 is commonly taken by dev servers
+      - "127.0.0.1:3070:3000"  # loopback only; host 3000 commonly taken by dev servers
+    # P5 cloud env, all optional locally: empty values load the UI fine and the
+    # assets fail lazily at materialize time. On EC2 the same names come from
+    # the services-module user_data (values there are terraform-sourced).
     environment: &dagster-env
       DAGSTER_PG_HOST: postgres
       DAGSTER_PG_USER: ${DAGSTER_PG_USER:-dagster}
       DAGSTER_PG_PASSWORD: ${DAGSTER_PG_PASSWORD:-dagster}
       DAGSTER_PG_DB: ${DAGSTER_PG_DB:-dagster}
+      AWS_REGION: ${AWS_REGION:-us-east-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      RAW_BUCKET: ${RAW_BUCKET:-}
+      LAKE_BUCKET: ${LAKE_BUCKET:-}
+      APP_ID: ${APP_ID:-}
+      EXEC_ROLE_ARN: ${EXEC_ROLE_ARN:-}
+      ENTRY_POINT: ${ENTRY_POINT:-}
+      STATIC_ENTRY_POINT: ${STATIC_ENTRY_POINT:-}
+      SPARK_PARAMS: ${SPARK_PARAMS:-}
+      LOG_URI: ${LOG_URI:-}
+      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT:-}
+      SNOWFLAKE_USER: ${SNOWFLAKE_USER:-}
+      SNOWFLAKE_ROLE: ${SNOWFLAKE_ROLE:-TRANSIT_PIPELINE}
+      SNOWFLAKE_KEY_SSM_PARAM: ${SNOWFLAKE_KEY_SSM_PARAM:-}
+      SNOWFLAKE_PRIVATE_KEY_PATH: ${SNOWFLAKE_PRIVATE_KEY_PATH:-}
+      DBT_TARGET: ${DBT_TARGET:-prod}
     depends_on:
       postgres:
         condition: service_healthy
@@ -99,7 +123,7 @@ services:
       retries: 20
 
   dagster-daemon:
-    build: orchestration
+    build: *dagster-build
     command: dagster-daemon run -w /opt/dagster/app/workspace.yaml
     environment: *dagster-env
     depends_on:

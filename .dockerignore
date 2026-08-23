@@ -1,0 +1,17 @@
+# Both images build with repo-root context (scripts/deploy_images.sh); keep the
+# multi-GB local-only trees out of the build context.
+.git
+.venv
+**/.terraform
+**/__pycache__
+.pytest_cache
+.ruff_cache
+dbt/transit/target
+dbt/transit/logs
+dbt/transit/dbt_packages
+dbt/transit/*.duckdb
+tests/fixtures
+.env
+.jars
+.playwright-mcp
+*.log
