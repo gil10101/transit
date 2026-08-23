@@ -4,6 +4,7 @@ import os
 
 from dagster import (
     AssetSelection,
+    DefaultScheduleStatus,
     MaterializeResult,
     ScheduleDefinition,
     asset,
@@ -33,7 +34,7 @@ def gtfs_static_nyc(
 
     import boto3
 
-    s3 = boto3.client("s3")
+    s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-2"))
     bucket = require_env(os.environ, "LAKE_BUCKET")
     statements: list[str] = []
     refreshed: list[str] = []
@@ -61,6 +62,7 @@ static_job = define_asset_job(
 )
 
 static_schedule = ScheduleDefinition(
+    default_status=DefaultScheduleStatus.RUNNING,
     job=static_job,
     cron_schedule="0 9 * * 0",  # Sun 09:00 UTC — off the 2h chain grid (:05) so the
     # static parse never queues behind a chain drain on the 4 vCPU app

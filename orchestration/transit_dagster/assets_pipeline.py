@@ -13,6 +13,7 @@ from dagster import (
     AssetKey,
     AssetSelection,
     AssetSpec,
+    DefaultScheduleStatus,
     MaterializeResult,
     ScheduleDefinition,
     asset,
@@ -64,7 +65,7 @@ def snowflake_iceberg_refresh(snowflake: SnowflakeResource):
     skipped (skippable specs)."""
     import boto3
 
-    s3 = boto3.client("s3")
+    s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-2"))
     bucket = require_env(os.environ, "LAKE_BUCKET")
     statements: list[str] = []
     refreshed: list[tuple[str, str]] = []
@@ -94,6 +95,7 @@ warehouse_chain_job = define_asset_job(
 )
 
 pipeline_schedule = ScheduleDefinition(
+    default_status=DefaultScheduleStatus.RUNNING,
     job=warehouse_chain_job,
     cron_schedule="5 */2 * * *",  # :05 keeps clear of the :00 EventBridge drain submit
     execution_timezone="UTC",

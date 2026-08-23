@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 from dagster import (
     AssetSelection,
+    DefaultScheduleStatus,
     MaterializeResult,
     MetadataValue,
     ScheduleDefinition,
@@ -95,6 +96,7 @@ weather_job = define_asset_job(
 )
 
 weather_schedule = ScheduleDefinition(
+    default_status=DefaultScheduleStatus.RUNNING,
     job=weather_job,
     cron_schedule="20 * * * *",
     execution_timezone="UTC",

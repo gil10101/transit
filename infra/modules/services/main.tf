@@ -167,6 +167,8 @@ locals {
           DAGSTER_PG_PASSWORD: dagster
           DAGSTER_PG_DB: dagster
           AWS_REGION: ${var.region}
+          # the image's botocore (pinned old by a dependency) reads only AWS_DEFAULT_REGION
+          AWS_DEFAULT_REGION: ${var.region}
           RAW_BUCKET: ${var.raw_bucket}
           LAKE_BUCKET: ${var.lakehouse_bucket}
           KAFKA_BOOTSTRAP: ${var.kafka_private_ip}:9092
@@ -200,6 +202,7 @@ locals {
     Type=oneshot
     RemainAfterExit=yes
     ExecStartPre=/bin/bash -c 'aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${local.registry}'
+    ExecStartPre=/usr/bin/docker compose -f /opt/transit/docker-compose.yml pull --quiet
     ExecStart=/usr/bin/docker compose -f /opt/transit/docker-compose.yml up -d
     ExecStop=/usr/bin/docker compose -f /opt/transit/docker-compose.yml down
     [Install]

@@ -9,6 +9,7 @@ from dagster import (
     AssetCheckResult,
     AssetKey,
     AssetSelection,
+    DefaultScheduleStatus,
     Failure,
     MaterializeResult,
     MetadataValue,
@@ -29,7 +30,7 @@ def raw_feed_freshness() -> MaterializeResult:
     40 min. boto3 listing only — never wakes the warehouse."""
     import boto3
 
-    s3 = boto3.client("s3")
+    s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-2"))
     bucket = require_env(os.environ, "RAW_BUCKET")
     report = evaluate_feed_freshness(s3, bucket, now=datetime.now(UTC))
     age_min = {
@@ -50,6 +51,7 @@ freshness_job = define_asset_job(
 )
 
 freshness_schedule = ScheduleDefinition(
+    default_status=DefaultScheduleStatus.RUNNING,
     job=freshness_job,
     # every 15 min + 40-min threshold => worst-case detection ~55 min after a
     # kill (meets the docs/04 "within an hour" DoD); boto3 LISTs only, no cost

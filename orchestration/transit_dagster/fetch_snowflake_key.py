@@ -21,7 +21,8 @@ def main() -> int:
         return 0
     import boto3
 
-    value = boto3.client("ssm").get_parameter(Name=param, WithDecryption=True)["Parameter"]["Value"]
+    ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "us-east-2"))
+    value = ssm.get_parameter(Name=param, WithDecryption=True)["Parameter"]["Value"]
     if value.strip() == "PLACEHOLDER":
         print(f"ssm {param} still PLACEHOLDER; skipping key install", file=sys.stderr)
         return 0
