@@ -51,6 +51,14 @@ module "services" {
   raw_bucket       = module.lake.raw_bucket
   lakehouse_bucket = module.lake.lakehouse_bucket
   kafka_private_ip = module.kafka.private_ip
+  # P5: Dagster submits the same EMR jobs as the drain Lambda — single-source
+  # the job-submit strings from the spark module.
+  emr_application_id     = module.spark.application_id
+  emr_execution_role_arn = module.spark.execution_role_arn
+  emr_entry_point        = module.spark.entry_point
+  emr_static_entry_point = module.spark.static_entry_point
+  emr_spark_params       = module.spark.spark_params
+  emr_log_uri            = module.spark.log_uri
 }
 
 module "snowflake" {
@@ -62,4 +70,5 @@ module "snowflake" {
   account_id             = data.aws_caller_identity.current.account_id
   snowflake_iam_user_arn = var.snowflake_iam_user_arn
   snowflake_external_id  = var.snowflake_external_id
+  dagster_public_key     = var.dagster_public_key
 }

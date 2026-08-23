@@ -1,9 +1,9 @@
 terraform {
-  required_version = ">= 1.10"
+  required_version = ">= 1.11" # value_wo (write-only args) on the SSM key param
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.0"
+      version = ">= 5.77" # aws_ssm_parameter value_wo support
     }
     snowflake = {
       source  = "snowflakedb/snowflake"

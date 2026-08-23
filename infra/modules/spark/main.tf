@@ -113,6 +113,13 @@ resource "aws_iam_role_policy" "scheduler" {
 }
 
 locals {
+  # Single source for the EMR job-submit strings: the drain Lambda below and the
+  # Dagster resources on the services box (P5) both consume exactly these values
+  # (Dagster via module outputs -> services module user_data env). Staged by
+  # scripts/submit_emr_drain.sh: entry.py (= run_local.py) and gtfs_static_parse.py.
+  entry_point        = "s3://${var.artifacts_bucket}/code/entry.py"
+  static_entry_point = "s3://${var.artifacts_bucket}/code/gtfs_static_parse.py"
+  log_uri            = "s3://${var.artifacts_bucket}/emr-logs/"
   jars = join(",", [
     "s3://${var.artifacts_bucket}/jars/spark-sql-kafka-0-10_2.12-3.5.4.jar",
     "s3://${var.artifacts_bucket}/jars/spark-token-provider-kafka-0-10_2.12-3.5.4.jar",
@@ -220,9 +227,9 @@ resource "aws_lambda_function" "drain" {
     variables = {
       APP_ID        = aws_emrserverless_application.streaming.id
       EXEC_ROLE_ARN = aws_iam_role.execution.arn
-      ENTRY_POINT   = "s3://${var.artifacts_bucket}/code/entry.py"
+      ENTRY_POINT   = local.entry_point
       SPARK_PARAMS  = local.spark_params
-      LOG_URI       = "s3://${var.artifacts_bucket}/emr-logs/"
+      LOG_URI       = local.log_uri
     }
   }
 }
@@ -261,3 +268,7 @@ resource "aws_scheduler_schedule" "drain" {
 
 output "application_id" { value = aws_emrserverless_application.streaming.id }
 output "execution_role_arn" { value = aws_iam_role.execution.arn }
+output "entry_point" { value = local.entry_point }
+output "static_entry_point" { value = local.static_entry_point }
+output "spark_params" { value = local.spark_params }
+output "log_uri" { value = local.log_uri }

@@ -1,7 +1,8 @@
 SHELL := /bin/bash
 export JAVA_HOME ?= /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 
-.PHONY: up down record-fixtures poll-nyc spark-local gtfs-static dbt-build test lint
+.PHONY: up down record-fixtures poll-nyc spark-local gtfs-static dbt-build test lint \
+	dagster-deploy p5-backfill-weather
 
 up:
 	docker compose up -d --wait
@@ -49,8 +50,23 @@ infra-apply:
 deploy-images:
 	bash scripts/deploy_images.sh
 
+# rebuild/push only the Dagster image (fast orchestration iteration), then
+# restart on the box: aws ssm ... 'systemctl restart transit.service'
+dagster-deploy:
+	bash scripts/deploy_images.sh dagster
+
 emr-drain:
 	bash scripts/submit_emr_drain.sh
 
 snowflake-refresh:
 	uv run python scripts/snowflake_register_iceberg.py
+
+# --- P5 ---
+
+# One-off 2-year Open-Meteo archive backfill into TRANSIT.SILVER.WEATHER_HOURLY.
+# Manual-trigger by design (no schedule). Runs inside the dagster container, which
+# needs Snowflake env (SNOWFLAKE_ACCOUNT/USER/ROLE + key) — see docs/operations.md
+# "Dagster (P5)". On the services box run the same command via SSM shell.
+p5-backfill-weather:
+	docker compose exec dagster-daemon \
+	  dagster asset materialize -m transit_dagster.definitions --select weather_backfill_2yr

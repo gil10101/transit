@@ -14,6 +14,29 @@ variable "instance_type" {
   default = "t4g.medium"
 }
 
+# --- P5: EMR job-submit strings for the Dagster containers, single-sourced from
+# the spark module's outputs (identical to what the drain Lambda receives).
+variable "emr_application_id" { type = string }
+variable "emr_execution_role_arn" { type = string }
+variable "emr_entry_point" { type = string }
+variable "emr_static_entry_point" { type = string }
+variable "emr_spark_params" { type = string }
+variable "emr_log_uri" { type = string }
+
+# --- P5: Snowflake identity for Dagster (key-pair auth; private key via SSM, below).
+variable "snowflake_account" {
+  type    = string
+  default = "wqteqyy-ib47757"
+}
+variable "snowflake_user" {
+  type    = string
+  default = "DAGSTER_SVC"
+}
+variable "snowflake_role" {
+  type    = string
+  default = "TRANSIT_PIPELINE"
+}
+
 data "aws_caller_identity" "current" {}
 
 data "aws_ssm_parameter" "al2023_arm" {
@@ -28,6 +51,22 @@ resource "aws_ecr_repository" "ingestion" {
 resource "aws_ecr_repository" "dagster" {
   name         = "${var.prefix}/dagster"
   force_delete = true
+}
+
+# DAGSTER_SVC's Snowflake private key. Terraform creates only a placeholder; the
+# real PEM is set out-of-band by the operator and NEVER enters git or tf state:
+#   aws ssm put-parameter --name /<prefix>/dagster/snowflake_key \
+#     --type SecureString --value "file://dagster_key.p8" --overwrite
+# The Dagster container entrypoint fetches it at start into
+# SNOWFLAKE_PRIVATE_KEY_PATH (chmod 600). value_wo (write-only) keeps the value
+# out of terraform state entirely — the provider never reads it back, so the
+# operator-set PEM is neither reverted nor persisted (a plain `value` would be
+# stored decrypted in raw state even with ignore_changes).
+resource "aws_ssm_parameter" "dagster_snowflake_key" {
+  name             = "/${var.prefix}/dagster/snowflake_key"
+  type             = "SecureString"
+  value_wo         = "PLACEHOLDER"
+  value_wo_version = 1
 }
 
 resource "aws_iam_role" "services" {
@@ -74,6 +113,20 @@ resource "aws_iam_role_policy" "services" {
         Action    = ["iam:PassRole"]
         Resource  = "*"
         Condition = { StringEquals = { "iam:PassedToService" = "emr-serverless.amazonaws.com" } }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = aws_ssm_parameter.dagster_snowflake_key.arn
+      },
+      {
+        # SecureString decrypt: default aws/ssm key only, via SSM only. All
+        # containers on the box share this role through IMDS (hop_limit 2) —
+        # box-wide by design on this single-instance setup.
+        Effect    = "Allow"
+        Action    = ["kms:Decrypt"]
+        Resource  = data.aws_kms_alias.ssm.target_key_arn
+        Condition = { StringEquals = { "kms:ViaService" = "ssm.${var.region}.amazonaws.com" } }
       }
     ]
   })
@@ -113,7 +166,22 @@ locals {
           DAGSTER_PG_USER: dagster
           DAGSTER_PG_PASSWORD: dagster
           DAGSTER_PG_DB: dagster
-        ports: ["3000:3000"]
+          AWS_REGION: ${var.region}
+          RAW_BUCKET: ${var.raw_bucket}
+          LAKE_BUCKET: ${var.lakehouse_bucket}
+          KAFKA_BOOTSTRAP: ${var.kafka_private_ip}:9092
+          APP_ID: ${var.emr_application_id}
+          EXEC_ROLE_ARN: ${var.emr_execution_role_arn}
+          ENTRY_POINT: ${var.emr_entry_point}
+          STATIC_ENTRY_POINT: ${var.emr_static_entry_point}
+          SPARK_PARAMS: '${var.emr_spark_params}'
+          LOG_URI: ${var.emr_log_uri}
+          SNOWFLAKE_ACCOUNT: ${var.snowflake_account}
+          SNOWFLAKE_USER: ${var.snowflake_user}
+          SNOWFLAKE_ROLE: ${var.snowflake_role}
+          SNOWFLAKE_KEY_SSM_PARAM: ${aws_ssm_parameter.dagster_snowflake_key.name}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /home/appuser/.snowflake/dagster_key.p8
+        ports: ["127.0.0.1:3000:3000"]  # loopback only; SSM port-forward reaches localhost
       dagster-daemon:
         image: ${local.registry}/${aws_ecr_repository.dagster.name}:latest
         command: ["dagster-daemon", "run", "-w", "/opt/dagster/app/workspace.yaml"]
@@ -157,6 +225,11 @@ resource "aws_instance" "services" {
     volume_type = "gp3"
   }
 
+  # NOTE: user_data changes update in place (stop/start, instance id kept) but
+  # cloud-init runs once per instance, so an updated compose/unit does NOT land
+  # on the box by itself. After an apply that changes them, re-land with:
+  #   aws ssm send-command ... 'cloud-init clean --logs && reboot'
+  # (procedure in docs/operations.md "Dagster (P5)").
   user_data = <<-EOF
     #!/bin/bash
     set -euo pipefail
@@ -180,3 +253,7 @@ output "instance_id" { value = aws_instance.services.id }
 output "public_ip" { value = aws_instance.services.public_ip }
 output "ecr_ingestion_url" { value = aws_ecr_repository.ingestion.repository_url }
 output "ecr_dagster_url" { value = aws_ecr_repository.dagster.repository_url }
+
+data "aws_kms_alias" "ssm" {
+  name = "alias/aws/ssm"
+}
