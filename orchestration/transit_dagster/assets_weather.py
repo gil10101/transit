@@ -13,16 +13,10 @@ from dagster import (
     define_asset_job,
 )
 
-from .lib import OPEN_METEO_HOURLY_VARS, weather_rows, year_chunks
+# LIVE_CITIES + CITY_WEATHER live in lib.py since P3 (single source across the
+# weather/static/freshness assets, unit-testable without dagster installed).
+from .lib import CITY_WEATHER, LIVE_CITIES, OPEN_METEO_HOURLY_VARS, weather_rows, year_chunks
 from .resources import SnowflakeResource
-
-# Cities with a live ingestion pipeline (P5: NYC only; extend at P3 fan-out).
-LIVE_CITIES = ["nyc"]
-
-# Centroid + tz per city, duplicated from the dim_city seed
-# (dbt/transit/seeds/dim_city.csv) on purpose: weather pulls must never wake
-# the warehouse just to read a dim. Keep in sync when cities are added.
-CITY_WEATHER = {"nyc": {"lat": 40.7128, "lon": -74.0060, "tz": "America/New_York"}}
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"

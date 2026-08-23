@@ -1,8 +1,8 @@
 SHELL := /bin/bash
 export JAVA_HOME ?= /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 
-.PHONY: up down record-fixtures poll-nyc spark-local gtfs-static dbt-build test lint \
-	dagster-deploy p5-backfill-weather
+.PHONY: up down record-fixtures poll-nyc poll-boston poll-toronto poll-helsinki \
+	spark-local gtfs-static dbt-build test lint dagster-deploy p5-backfill-weather
 
 up:
 	docker compose up -d --wait
@@ -15,6 +15,15 @@ record-fixtures:
 
 poll-nyc:
 	uv run python -m ingestion.poller nyc
+
+poll-boston:
+	uv run python -m ingestion.poller boston
+
+poll-toronto:
+	uv run python -m ingestion.poller toronto
+
+poll-helsinki:
+	uv run python -m ingestion.poller helsinki
 
 spark-local:
 	uv run python -m spark_jobs.run_local

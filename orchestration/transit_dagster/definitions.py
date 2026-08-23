@@ -20,7 +20,7 @@ from .assets_pipeline import (
     transit_dbt_assets,
     warehouse_chain_job,
 )
-from .assets_static import gtfs_static_nyc, static_job, static_schedule
+from .assets_static import gtfs_static, static_job, static_schedule
 from .assets_weather import (
     weather_backfill_2yr,
     weather_hourly,
@@ -42,7 +42,7 @@ defs = Definitions(
         emr_drain,
         snowflake_iceberg_refresh,
         transit_dbt_assets,
-        gtfs_static_nyc,
+        gtfs_static,
         weather_hourly,
         weather_backfill_2yr,  # manual trigger only: no job/schedule
         raw_feed_freshness,

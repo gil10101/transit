@@ -172,7 +172,7 @@ resource "snowflake_grant_account_role" "pipeline_to_dagster" {
 resource "snowflake_grant_privileges_to_account_role" "pipeline_db_usage" {
   account_role_name = snowflake_account_role.transit_pipeline.name
   # CREATE SCHEMA: dbt materializes store_failures audit schemas (<schema>_dbt_test__audit)
-  privileges        = ["USAGE", "CREATE SCHEMA"]
+  privileges = ["USAGE", "CREATE SCHEMA"]
   on_account_object {
     object_type = "DATABASE"
     object_name = snowflake_database.transit.name

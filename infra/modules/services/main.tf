@@ -141,14 +141,33 @@ locals {
   registry = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com"
   compose  = <<-YAML
     services:
+      # P3: one poller container per live city, same image, city as the only arg
+      # (python -m ingestion.poller <city>). Keep in sync with LIVE_CITIES in
+      # orchestration/transit_dagster/lib.py. `poller` stays nyc so existing
+      # health checks / container names survive.
       poller:
         image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
         command: ["nyc"]
         restart: always
-        environment:
+        environment: &penv
           KAFKA_BOOTSTRAP: ${var.kafka_private_ip}:9092
           RAW_BUCKET: ${var.raw_bucket}
           LAKE_BUCKET: ${var.lakehouse_bucket}
+      poller-boston:
+        image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
+        command: ["boston"]
+        restart: always
+        environment: *penv
+      poller-toronto:
+        image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
+        command: ["toronto"]
+        restart: always
+        environment: *penv
+      poller-helsinki:
+        image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
+        command: ["helsinki"]
+        restart: always
+        environment: *penv
       postgres:
         image: postgres:16-alpine
         restart: always

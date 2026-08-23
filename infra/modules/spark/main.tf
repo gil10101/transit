@@ -117,6 +117,10 @@ locals {
   # Dagster resources on the services box (P5) both consume exactly these values
   # (Dagster via module outputs -> services module user_data env). Staged by
   # scripts/submit_emr_drain.sh: entry.py (= run_local.py) and gtfs_static_parse.py.
+  # P3: city -> IANA tz map injected into Spark (EMR python has no yaml, so
+  # session.py can't read the city configs — quirk 3 in docs/operations.md).
+  # Keep in sync with scripts/submit_emr_drain.sh CITY_TZS and the city yamls.
+  city_tzs           = "nyc=America/New_York,boston=America/New_York,toronto=America/Toronto,helsinki=Europe/Helsinki"
   entry_point        = "s3://${var.artifacts_bucket}/code/entry.py"
   static_entry_point = "s3://${var.artifacts_bucket}/code/gtfs_static_parse.py"
   log_uri            = "s3://${var.artifacts_bucket}/emr-logs/"
@@ -143,12 +147,12 @@ locals {
     "--conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
     "--conf spark.emr-serverless.driverEnv.TP_CLOUD=1",
     "--conf spark.emr-serverless.driverEnv.TP_TRIGGER=available_now",
-    "--conf spark.emr-serverless.driverEnv.TP_CITY_TZS=nyc=America/New_York",
+    "--conf spark.emr-serverless.driverEnv.TP_CITY_TZS=${local.city_tzs}",
     "--conf spark.emr-serverless.driverEnv.TP_LAKE_URI=s3://${var.lakehouse_bucket}",
     "--conf spark.emr-serverless.driverEnv.KAFKA_BOOTSTRAP=${var.kafka_private_ip}:9092",
     "--conf spark.executorEnv.TP_CLOUD=1",
     "--conf spark.executorEnv.TP_TRIGGER=available_now",
-    "--conf spark.executorEnv.TP_CITY_TZS=nyc=America/New_York",
+    "--conf spark.executorEnv.TP_CITY_TZS=${local.city_tzs}",
     "--conf spark.executorEnv.TP_LAKE_URI=s3://${var.lakehouse_bucket}",
     "--conf spark.executorEnv.KAFKA_BOOTSTRAP=${var.kafka_private_ip}:9092",
   ])

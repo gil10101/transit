@@ -19,28 +19,36 @@ from dagster import (
     define_asset_job,
 )
 
-from .lib import evaluate_feed_freshness, require_env
+from .lib import city_feed_endpoints, evaluate_feed_freshness, require_env
 from .resources import SnowflakeResource
 
 
 @asset(group_name="checks")
 def raw_feed_freshness() -> MaterializeResult:
     """The killed-feed tripwire (DoD: trips within the hour): the newest raw
-    object under each of the 8 NYC endpoint prefixes must be younger than
-    40 min. boto3 listing only — never wakes the warehouse."""
+    object under every live city's endpoint prefixes must be younger than
+    40 min. Endpoints are the feed_groups keys in ingestion/config/cities/*.yaml
+    (P3: nyc 8, boston 3, toronto 3, helsinki 2 — config-driven, so a new city
+    yaml joins the tripwire without touching this code). boto3 listing only —
+    never wakes the warehouse."""
     import boto3
 
     s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-2"))
     bucket = require_env(os.environ, "RAW_BUCKET")
-    report = evaluate_feed_freshness(s3, bucket, now=datetime.now(UTC))
-    age_min = {
-        ep: (round(r["age_sec"] / 60, 1) if r["age_sec"] is not None else None)
-        for ep, r in report.items()
-    }
-    stale = sorted(ep for ep, r in report.items() if r["stale"])
+    now = datetime.now(UTC)
+    age_min: dict[str, float | None] = {}
+    stale: list[str] = []
+    for city, endpoints in city_feed_endpoints().items():
+        report = evaluate_feed_freshness(s3, bucket, now=now, city=city, endpoints=endpoints)
+        for ep, r in report.items():
+            age_min[f"{city}/{ep}"] = (
+                round(r["age_sec"] / 60, 1) if r["age_sec"] is not None else None
+            )
+            if r["stale"]:
+                stale.append(f"{city}/{ep}")
     if stale:
         raise Failure(
-            description=f"raw feeds stale (>40 min or no objects): {', '.join(stale)}",
+            description=f"raw feeds stale (>40 min or no objects): {', '.join(sorted(stale))}",
             metadata={"age_min": MetadataValue.json(age_min)},
         )
     return MaterializeResult(metadata={"age_min": MetadataValue.json(age_min)})

@@ -2,8 +2,9 @@
 
 City x date partitioning of the dbt assets (docs/03 §partitioning) is
 deliberately deferred: dagster-dbt partitioned assets need per-partition dbt
-vars and backfill policies that buy nothing while NYC is the only live city.
-Unpartitioned assets until the P3 fan-out; docs/03 remains the goal state.
+vars and backfill policies. P3 batch 1 (4 cities) still runs whole-warehouse
+unpartitioned builds — volumes stay small enough; revisit at P3 batch 2/P6.
+docs/03 remains the goal state.
 """
 
 import os

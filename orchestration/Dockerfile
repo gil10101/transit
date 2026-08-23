@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl git && rm 
 RUN pip install --no-cache-dir uv && uv pip install --system --no-cache \
     "dagster>=1.9,<2" "dagster-webserver>=1.9,<2" "dagster-postgres" \
     "dagster-dbt" "dbt-snowflake>=1.9" "boto3>=1.34" \
-    "snowflake-connector-python" "requests>=2.32"
+    "snowflake-connector-python" "requests>=2.32" "pyyaml>=6.0"
 
 ENV DAGSTER_HOME=/opt/dagster/home
 WORKDIR /opt/dagster/app
@@ -20,6 +20,9 @@ COPY orchestration/workspace.yaml /opt/dagster/app/workspace.yaml
 COPY orchestration/entrypoint.sh /opt/dagster/app/entrypoint.sh
 # single source for the silver table list (imported by transit_dagster.lib)
 COPY scripts/snowflake_register_iceberg.py /opt/dagster/app/scripts/snowflake_register_iceberg.py
+# city yamls: the raw-feed freshness tripwire reads feed_groups per live city
+# (transit_dagster.lib.city_feed_endpoints)
+COPY ingestion/config /opt/dagster/app/ingestion/config
 COPY dbt/transit /opt/dagster/app/dbt/transit
 COPY orchestration/transit_dagster /opt/dagster/app/transit_dagster
 

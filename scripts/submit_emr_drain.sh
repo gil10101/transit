@@ -13,6 +13,9 @@ LAKEHOUSE=$(terraform -chdir=infra/envs/dev output -raw lakehouse_bucket)
 KAFKA_IP=$(terraform -chdir=infra/envs/dev output -raw kafka_private_ip)
 
 SPARK_VER=3.5.4 # EMR 7.5 Spark line; kafka connector must match the major.minor
+# city -> IANA tz map for Spark (EMR python has no yaml). Keep in sync with
+# infra/modules/spark/main.tf locals.city_tzs and ingestion/config/cities/*.yaml.
+CITY_TZS="nyc=America/New_York,boston=America/New_York,toronto=America/Toronto,helsinki=Europe/Helsinki"
 KAFKA_JARS=(
   "org.apache.spark:spark-sql-kafka-0-10_2.12:${SPARK_VER}"
   "org.apache.spark:spark-token-provider-kafka-0-10_2.12:${SPARK_VER}"
@@ -51,7 +54,7 @@ aws emr-serverless start-job-run \
   --job-driver "{
     \"sparkSubmit\": {
       \"entryPoint\": \"s3://${ARTIFACTS}/code/entry.py\",
-      \"sparkSubmitParameters\": \"--py-files s3://${ARTIFACTS}/code/spark_jobs.zip --jars ${JARS} --conf spark.driver.cores=2 --conf spark.driver.memory=6g --conf spark.executor.cores=2 --conf spark.executor.memory=6g --conf spark.executor.instances=1 --conf spark.dynamicAllocation.initialExecutors=1 --conf spark.dynamicAllocation.maxExecutors=1 --conf spark.emr-serverless.driverEnv.TP_TRIGGER=available_now --conf spark.executorEnv.TP_TRIGGER=available_now --conf spark.sql.catalog.lake=org.apache.iceberg.spark.SparkCatalog --conf spark.sql.catalog.lake.type=hadoop --conf spark.sql.catalog.lake.warehouse=s3://${LAKEHOUSE}/iceberg --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions --conf spark.emr-serverless.driverEnv.TP_CLOUD=1 --conf spark.emr-serverless.driverEnv.TP_CITY_TZS=nyc=America/New_York --conf spark.emr-serverless.driverEnv.TP_LAKE_URI=s3://${LAKEHOUSE} --conf spark.emr-serverless.driverEnv.KAFKA_BOOTSTRAP=${KAFKA_IP}:9092 --conf spark.executorEnv.TP_CLOUD=1 --conf spark.executorEnv.TP_CITY_TZS=nyc=America/New_York --conf spark.executorEnv.TP_LAKE_URI=s3://${LAKEHOUSE} --conf spark.executorEnv.KAFKA_BOOTSTRAP=${KAFKA_IP}:9092\"
+      \"sparkSubmitParameters\": \"--py-files s3://${ARTIFACTS}/code/spark_jobs.zip --jars ${JARS} --conf spark.driver.cores=2 --conf spark.driver.memory=6g --conf spark.executor.cores=2 --conf spark.executor.memory=6g --conf spark.executor.instances=1 --conf spark.dynamicAllocation.initialExecutors=1 --conf spark.dynamicAllocation.maxExecutors=1 --conf spark.emr-serverless.driverEnv.TP_TRIGGER=available_now --conf spark.executorEnv.TP_TRIGGER=available_now --conf spark.sql.catalog.lake=org.apache.iceberg.spark.SparkCatalog --conf spark.sql.catalog.lake.type=hadoop --conf spark.sql.catalog.lake.warehouse=s3://${LAKEHOUSE}/iceberg --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions --conf spark.emr-serverless.driverEnv.TP_CLOUD=1 --conf spark.emr-serverless.driverEnv.TP_CITY_TZS=${CITY_TZS} --conf spark.emr-serverless.driverEnv.TP_LAKE_URI=s3://${LAKEHOUSE} --conf spark.emr-serverless.driverEnv.KAFKA_BOOTSTRAP=${KAFKA_IP}:9092 --conf spark.executorEnv.TP_CLOUD=1 --conf spark.executorEnv.TP_CITY_TZS=${CITY_TZS} --conf spark.executorEnv.TP_LAKE_URI=s3://${LAKEHOUSE} --conf spark.executorEnv.KAFKA_BOOTSTRAP=${KAFKA_IP}:9092\"
     }
   }" \
   --configuration-overrides "{
