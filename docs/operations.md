@@ -268,6 +268,17 @@ bill is mostly PUT requests), Lambda/ECR/SSM under $1.
    re-run the same command with `--state ENABLED`. The app restarts by itself on the next
    submit. Re-enabling the schedule is the step that is easy to forget — silver simply
    stops advancing, with nothing in the logs to say why.
+0b. **`CONCURRENT_STREAM_LOG_UPDATE — Multiple streaming jobs detected` means two drains
+   ran at once.** Every drain writes the same Spark checkpoint, and Structured Streaming
+   allows exactly one writer per checkpoint location. On 2026-08-24 four drains stacked up
+   (the 15-minute schedule kept firing while a catch-up run was still going) and the
+   survivor died after 58 minutes of work with this error. The drain Lambda now lists
+   active runs and skips the fire when one is in flight, so this should not recur; if it
+   does, cancel all but the oldest — the checkpoint is contended, not corrupted, and a
+   single fresh drain resumes from the last committed offset. Note the failure is reported
+   as `Target log directory already exists` because EMR retries the driver in the same
+   container: the retry's error masks the real one, so always read the driver log for the
+   FIRST exception rather than trusting `stateDetails`.
 1. **Snowflake session timezone defaults to America/Los_Angeles.** NTZ-vs-TZ comparisons
    silently skew delays by hours (OTP read 3.9% instead of 74%). `TERRAFORM_SVC` has
    `TIMEZONE='UTC'` set; any new user/tool needs the same (`DAGSTER_SVC` gets it pinned
