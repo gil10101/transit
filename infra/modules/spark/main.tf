@@ -11,8 +11,18 @@ variable "release_label" {
   default = "emr-7.5.0"
 }
 variable "max_vcpu" {
-  type    = number
-  default = 4
+  type = number
+  # 8, not 4. Every job here is one 2-vCPU driver plus one 2-vCPU executor, so a
+  # 4-vCPU ceiling admits TWO drivers and then has nothing left for either
+  # executor: both jobs sit in RUNNING forever, re-requesting a worker that can
+  # never be allocated ("Worker could not be allocated as the application has
+  # exceeded maximumCapacity", 287 times in one 4.5-hour hung drain on
+  # 2026-08-24) while every later submit is rejected. At 8 two full jobs fit, so
+  # a scheduled drain and the weekly static parse overlap cleanly, and a third
+  # submit is REJECTED at the API — a clean failure the retry path handles,
+  # not a deadlock. Serverless bills used vCPU-hours, not the ceiling, so idle
+  # cost is unchanged.
+  default = 8
 }
 
 resource "aws_emrserverless_application" "streaming" {
