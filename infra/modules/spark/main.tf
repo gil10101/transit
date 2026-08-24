@@ -77,9 +77,10 @@ resource "aws_iam_role_policy" "execution" {
   })
 }
 
-# --- scheduled micro-batch drain: EventBridge fires StartJobRun every 15 min.
+# --- scheduled micro-batch drain: EventBridge fires the invoker Lambda hourly.
 # Continuous EMR Serverless streaming costs ~10x the plan's budget; availableNow
-# drains reuse the same checkpoints for exactly-once with <=15 min silver lag.
+# drains reuse the same checkpoints for exactly-once with <=1 h silver lag, which
+# still beats the 2-hour Dagster chain that rebuilds gold.
 
 variable "artifacts_bucket" { type = string }
 variable "lakehouse_bucket" { type = string }
@@ -230,8 +231,11 @@ resource "aws_iam_role_policy" "drain_lambda" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["emr-serverless:StartJobRun"]
+        Effect = "Allow"
+        # ListJobRuns so the handler can skip a fire while a drain is still in
+        # flight — overlapping runs share one Spark checkpoint, and Structured
+        # Streaming assumes a single writer per checkpoint location
+        Action   = ["emr-serverless:StartJobRun", "emr-serverless:ListJobRuns"]
         Resource = "*"
       },
       {

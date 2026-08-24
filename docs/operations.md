@@ -220,6 +220,31 @@ ship here; only the poller service is withheld.
 Chicago joins as batch 2b when the CTA beta key activates: yaml + fixtures + append
 to `LIVE_CITIES`/`TP_CITY_TZS`/compose, same checklist.
 
+## Cost shape (measured 2026-08-24)
+
+AWS Cost Explorer reports ~$0 for this account, so these are list prices computed from
+measured usage. Roughly $99/month of the original ~$152 was EMR Serverless, because cost
+tracks the NUMBER of drains far more than the volume drained: each run billed ~0.47
+vCPU-hour for ~7 minutes of a 4-vCPU app, most of it Spark start-up. Two changes followed:
+
+- **Drains are hourly, not every 15 minutes** (`drain_schedule`). Nothing downstream wanted
+  15-minute freshness — gold is rebuilt by the 2-hour Dagster chain, and the killed-feed
+  tripwire reads raw S3 prefixes, not silver. Expect roughly a 40–55% cut rather than a
+  clean 4× — each hourly run drains 4× the data, so only the start-up share disappears.
+  Re-measure with the sampler in `scripts/` rather than trusting the projection.
+- **State-store retention is 5 versions, not 100** (`spark.sql.streaming.minBatchesToRetain`).
+  The dedup state under `checkpoints/silver_stop_time_predictions/state/` had grown to
+  13 GB in 23,686 objects — larger than every data table combined — while `offsets/` and
+  `commits/` stayed correctly bounded at 100 files. Spark's maintenance thread prunes the
+  old versions on subsequent runs; **never delete a live checkpoint by hand or with an S3
+  lifecycle rule**, since losing offsets replays Kafka from the beginning and duplicates
+  silver rows. Shuffle-partition count is deliberately untouched: a stateful streaming
+  query cannot change it without discarding its checkpoint.
+
+Everything else is small: EC2 + EBS ~$42/month (two ARM instances 24/7), Snowflake ~$6
+(2.8 credits/30d on an XS that only runs during the chain), S3 ~$5 (24 GB stored, but the
+bill is mostly PUT requests), Lambda/ECR/SSM under $1.
+
 ## Known quirks (cost real debugging time — do not rediscover)
 
 0. **A `transit-drain` stuck in RUNNING for more than ~10 minutes means the EMR app is
