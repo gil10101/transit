@@ -24,12 +24,17 @@ class EmrResource(ConfigurableResource):
 
     poll_seconds: int = 30
     timeout_minutes: int = 25
+    # statics wait for a drain gap first, then parse; both fit in 40 but not 25
+    static_timeout_minutes: int = 40
 
     def run_drain(self) -> str:
         return self._run(drain_job_request(os.environ), adopt_in_flight=True)
 
     def run_static(self, city: str, version_id: str) -> str:
-        return self._run(static_job_request(os.environ, city=city, version_id=version_id))
+        return self._run(
+            static_job_request(os.environ, city=city, version_id=version_id),
+            timeout_minutes=self.static_timeout_minutes,
+        )
 
     def _in_flight_run(self, client, request: dict) -> str | None:
         """Id of an already-active run with the same job name, if any. One
@@ -45,13 +50,54 @@ class EmrResource(ConfigurableResource):
                 return run["id"]
         return None
 
-    def _run(self, request: dict, adopt_in_flight: bool = False) -> str:
+    def _any_active_run(self, client, request: dict) -> str | None:
+        runs = client.list_job_runs(
+            applicationId=request["applicationId"],
+            states=["SUBMITTED", "PENDING", "SCHEDULED", "RUNNING"],
+        )["jobRuns"]
+        return runs[0]["id"] if runs else None
+
+    def _resubmit_when_idle(self, client, request: dict, deadline: float, log) -> str:
+        """Wait for the app to go idle, then submit with a FRESH clientToken.
+
+        Two hard-won facts drive this shape:
+        - reusing the original clientToken makes EMR return the same
+          already-FAILED run id forever (idempotency), so the old fixed-90s
+          resubmit could never succeed;
+        - back-to-back 15-min drains can hold the 4 vCPU app nearly
+          continuously, so blind resubmission mostly lands on a busy app.
+        Polling for the idle gap (~20s) catches the minutes between drains.
+        """
+        import uuid
+
+        while time.monotonic() < deadline:
+            holder = self._any_active_run(client, request)
+            if holder is None:
+                fresh = {**request, "clientToken": str(uuid.uuid4())}
+                try:
+                    run_id = client.start_job_run(**fresh)["jobRunId"]
+                except Exception as e:
+                    if "maximumCapacity" not in str(e):
+                        raise
+                    continue  # lost the gap race; keep waiting
+                log.info(f"EMR {request['name']} resubmitted in idle gap: run {run_id}")
+                return run_id
+            time.sleep(20)
+        raise TimeoutError(
+            f"EMR {request['name']}: no capacity gap before the "
+            f"{self.timeout_minutes}-min deadline"
+        )
+
+    def _run(
+        self, request: dict, adopt_in_flight: bool = False, timeout_minutes: int | None = None
+    ) -> str:
         import boto3
 
         log = get_dagster_logger()
         client = boto3.client(
             "emr-serverless", region_name=os.environ.get("AWS_REGION", "us-east-2")
         )
+        deadline = time.monotonic() + (timeout_minutes or self.timeout_minutes) * 60
         run_id = self._in_flight_run(client, request) if adopt_in_flight else None
         if run_id is not None:
             log.info(f"EMR {request['name']}: adopting in-flight run {run_id}")
@@ -59,17 +105,18 @@ class EmrResource(ConfigurableResource):
             try:
                 run_id = client.start_job_run(**request)["jobRunId"]
             except Exception as e:
+                if "maximumCapacity" not in str(e):
+                    raise
                 # lost the race: a drain started between our check and submit
-                if adopt_in_flight and "maximumCapacity" in str(e):
+                if adopt_in_flight:
                     run_id = self._in_flight_run(client, request)
                     if run_id is None:
                         raise
                     log.info(f"EMR {request['name']}: capacity race, adopting run {run_id}")
                 else:
-                    raise
+                    run_id = self._resubmit_when_idle(client, request, deadline, log)
             else:
                 log.info(f"EMR {request['name']} submitted: run {run_id}")
-        deadline = time.monotonic() + self.timeout_minutes * 60
         while True:
             job = client.get_job_run(applicationId=request["applicationId"], jobRunId=run_id)[
                 "jobRun"
@@ -91,11 +138,10 @@ class EmrResource(ConfigurableResource):
                             run_id = other
                             continue
                     # different job (e.g. static parse vs a scheduled drain):
-                    # wait for the slot and resubmit, bounded by the deadline
+                    # wait for an idle gap and resubmit, bounded by the deadline
                     if time.monotonic() < deadline:
-                        log.info(f"EMR run {run_id} hit capacity; resubmitting in 90s")
-                        time.sleep(90)
-                        run_id = client.start_job_run(**request)["jobRunId"]
+                        log.info(f"EMR run {run_id} hit capacity; waiting for an idle gap")
+                        run_id = self._resubmit_when_idle(client, request, deadline, log)
                         continue
                 raise RuntimeError(f"EMR run {run_id} ended {state}: {details}")
             if time.monotonic() > deadline:
@@ -106,9 +152,7 @@ class EmrResource(ConfigurableResource):
                     log.warning(f"EMR run {run_id} cancelled after timeout")
                 except Exception as e:  # noqa: BLE001 — cancel is best-effort
                     log.warning(f"cancel of EMR run {run_id} failed: {e!r}")
-                raise TimeoutError(
-                    f"EMR run {run_id} still {state} after {self.timeout_minutes} min"
-                )
+                raise TimeoutError(f"EMR run {run_id} still {state} after the deadline")
             log.debug(f"EMR run {run_id} {state}; polling again in {self.poll_seconds}s")
             time.sleep(self.poll_seconds)
 
