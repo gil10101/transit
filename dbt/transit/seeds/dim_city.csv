@@ -1,8 +1,8 @@
-city_key,city_name,country,iana_tz,peak_am_start,peak_am_end,peak_pm_start,peak_pm_end,rt_delay_source,crowding_usable,attribution_text
-nyc,New York,US,America/New_York,07:00,10:00,16:00,19:00,computed,false,Data provided by the Metropolitan Transportation Authority
-boston,Boston,US,America/New_York,07:00,10:00,16:00,19:00,computed,true,MBTA data
-toronto,Toronto,CA,America/Toronto,07:00,10:00,16:00,19:00,computed,true,Contains information licensed under the Open Government Licence – Toronto
-helsinki,Helsinki,FI,Europe/Helsinki,07:00,10:00,16:00,19:00,computed,false,HSL open data
-dc,Washington DC,US,America/New_York,07:00,10:00,16:00,19:00,computed,false,Data provided by the Washington Metropolitan Area Transit Authority
-sf,San Francisco Bay Area,US,America/Los_Angeles,07:00,10:00,16:00,19:00,mixed,true,Data provided by 511.org
-zurich,Zurich,CH,Europe/Zurich,07:00,10:00,16:00,19:00,feed,false,Data from opentransportdata.swiss (Open Data Platform Mobility Switzerland)
+city_key,city_name,country,iana_tz,peak_am_start,peak_am_end,peak_pm_start,peak_pm_end,rt_delay_source,crowding_usable,attribution_text,metrics_from
+nyc,New York,US,America/New_York,07:00,10:00,16:00,19:00,computed,false,Data provided by the Metropolitan Transportation Authority,2026-08-23
+boston,Boston,US,America/New_York,07:00,10:00,16:00,19:00,computed,true,MBTA data,2026-08-24
+toronto,Toronto,CA,America/Toronto,07:00,10:00,16:00,19:00,computed,true,Contains information licensed under the Open Government Licence – Toronto,2026-08-24
+helsinki,Helsinki,FI,Europe/Helsinki,07:00,10:00,16:00,19:00,computed,false,HSL open data,2026-08-24
+dc,Washington DC,US,America/New_York,07:00,10:00,16:00,19:00,computed,false,Data provided by the Washington Metropolitan Area Transit Authority,2026-08-25
+sf,San Francisco Bay Area,US,America/Los_Angeles,07:00,10:00,16:00,19:00,mixed,true,Data provided by 511.org,2026-08-25
+zurich,Zurich,CH,Europe/Zurich,07:00,10:00,16:00,19:00,feed,false,Data from opentransportdata.swiss (Open Data Platform Mobility Switzerland),

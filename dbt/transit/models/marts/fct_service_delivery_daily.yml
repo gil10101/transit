@@ -40,20 +40,23 @@ models:
               arguments: {min_value: 0, max_value: 1.2}
               config: {severity: warn}
           # docs/03 §7 completeness_above: warn <85%, error <50% per city/day.
-          # Judges only closed service days at or after var completeness_enforced_from:
-          # the current day is always partially observed, and days before 24/7 cloud
-          # polling began (2026-08-23) are partial by construction — both would fail
-          # spuriously and forever.
+          # Judges only CLOSED service days at or after that city's own
+          # dim_city.metrics_from. A single global floor was wrong: cities onboard on
+          # different days, and a city's first day is partial by construction —
+          # Helsinki's poller came up at 00:07 local, so its 2026-08-23 service day is
+          # a three-hour tail that scored 2.1%. That is arithmetic, not a defect, but
+          # at error severity it halted the whole downstream subgraph and
+          # fct_route_reliability_daily never rebuilt. Blank metrics_from = not scored.
           - value_within_range:
               name: completeness_above_warn_85pct
               arguments: {min_value: 0.85}
               config:
                 severity: warn
-                where: "service_date < current_date and service_date >= '{{ var('completeness_enforced_from') }}'"
+                where: "service_date < current_date and service_date >= metrics_from"
           - value_within_range:
               name: completeness_above_error_50pct
               arguments: {min_value: 0.50}
               config:
                 severity: error
                 store_failures: true
-                where: "service_date < current_date and service_date >= '{{ var('completeness_enforced_from') }}'"
+                where: "service_date < current_date and service_date >= metrics_from"

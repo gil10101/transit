@@ -71,18 +71,31 @@ unioned as (
            0, 0, 0, 0, trips_cancelled
     from cancelled
 
+),
+
+rolled as (
+
+    select
+        md5(concat_ws('|', city_key, route_id, service_date)) as delivery_key,
+        city_key,
+        route_id,
+        service_date,
+        sum(trips_scheduled) as trips_scheduled,
+        sum(trips_observed) as trips_observed,
+        sum(trips_added) as trips_added,
+        sum(trips_cancelled) as trips_cancelled,
+        cast(sum(trips_observed_scheduled) as double)
+            / nullif(sum(trips_scheduled), 0) as completeness_pct
+    from unioned
+    group by city_key, route_id, service_date
+
 )
 
+-- metrics_from rides along so the completeness tests can judge each city only
+-- from its own first FULL service day. dbt's generic-test parser refuses ref()
+-- inside a test's `where`, so the floor has to be a column on the fact.
 select
-    md5(concat_ws('|', city_key, route_id, service_date)) as delivery_key,
-    city_key,
-    route_id,
-    service_date,
-    sum(trips_scheduled) as trips_scheduled,
-    sum(trips_observed) as trips_observed,
-    sum(trips_added) as trips_added,
-    sum(trips_cancelled) as trips_cancelled,
-    cast(sum(trips_observed_scheduled) as double)
-        / nullif(sum(trips_scheduled), 0) as completeness_pct
-from unioned
-group by city_key, route_id, service_date
+    r.*,
+    c.metrics_from
+from rolled r
+left join {{ ref('dim_city') }} c on c.city_key = r.city_key
