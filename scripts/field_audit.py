@@ -124,22 +124,27 @@ def hop_raw() -> None:
         if not prefixes:
             print(f"{city}: no raw prefix (poller not deployed)")
             continue
-        prefix = prefixes[0]
-        newest = None
-        for page in s3.get_paginator("list_objects_v2").paginate(Bucket=RAW_BUCKET, Prefix=prefix):
-            for obj in page.get("Contents", []):
-                if newest is None or obj["LastModified"] > newest["LastModified"]:
-                    newest = obj
-        if newest is None:
-            print(f"{city}: prefix {prefix} empty")
-            continue
-        blob = s3.get_object(Bucket=RAW_BUCKET, Key=newest["Key"])["Body"].read()
-        feed_name = newest["Key"].rsplit("/", 2)[-2]
-        try:
-            stats = audit_feed_message(decode(blob))
-            print(f"{city} {feed_name} @ {newest['LastModified']:%H:%MZ}: {stats}")
-        except Exception as e:  # noqa: BLE001
-            print(f"{city} {newest['Key']}: DECODE FAIL {e!r}")
+        # sample a trip-update feed when the city has one: it carries the delay,
+        # stop and schedule fields the metrics are built on. Alphabetical order
+        # would pick "alerts", whose stats say nothing about OTP or headways.
+        chosen = [p for p in prefixes if "trip_update" in p or "trips" in p] or prefixes
+        for prefix in chosen[:1]:
+            newest = None
+            pages = s3.get_paginator("list_objects_v2").paginate(Bucket=RAW_BUCKET, Prefix=prefix)
+            for page in pages:
+                for obj in page.get("Contents", []):
+                    if newest is None or obj["LastModified"] > newest["LastModified"]:
+                        newest = obj
+            if newest is None:
+                print(f"{city}: prefix {prefix} empty")
+                continue
+            blob = s3.get_object(Bucket=RAW_BUCKET, Key=newest["Key"])["Body"].read()
+            feed_name = newest["Key"].rsplit("/", 2)[-2]
+            try:
+                stats = audit_feed_message(decode(blob))
+                print(f"{city} {feed_name} @ {newest['LastModified']:%H:%MZ}: {stats}")
+            except Exception as e:  # noqa: BLE001
+                print(f"{city} {newest['Key']}: DECODE FAIL {e!r}")
 
 
 # ---------------------------------------------------------------------------
