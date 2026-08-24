@@ -232,6 +232,17 @@ to `LIVE_CITIES`/`TP_CITY_TZS`/compose, same checklist.
    `aws emr-serverless list-job-runs --states RUNNING` and cancel the oldest — the drain is
    checkpointed, so the next one resumes where it stopped. Watch it with
    `scripts/field_audit.py silver` (the `fresh_utc` column is the giveaway).
+   **Changing `maximum_capacity` needs an idle, STOPPED application**, and the 15-minute
+   drain schedule refills it faster than terraform can act. Open a window first:
+   ```sh
+   aws scheduler update-schedule --name transit-pulse-emr-drain --region us-east-2 \
+     --state DISABLED --schedule-expression 'rate(15 minutes)' --flexible-time-window Mode=OFF \
+     --target 'Arn=arn:aws:lambda:us-east-2:622221238588:function:transit-pulse-emr-drain,RoleArn=arn:aws:iam::622221238588:role/transit-pulse-emr-scheduler'
+   ```
+   wait for the running job to finish, `aws emr-serverless stop-application`, apply, then
+   re-run the same command with `--state ENABLED`. The app restarts by itself on the next
+   submit. Re-enabling the schedule is the step that is easy to forget — silver simply
+   stops advancing, with nothing in the logs to say why.
 1. **Snowflake session timezone defaults to America/Los_Angeles.** NTZ-vs-TZ comparisons
    silently skew delays by hours (OTP read 3.9% instead of 74%). `TERRAFORM_SVC` has
    `TIMEZONE='UTC'` set; any new user/tool needs the same (`DAGSTER_SVC` gets it pinned
