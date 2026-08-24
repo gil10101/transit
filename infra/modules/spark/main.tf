@@ -85,8 +85,15 @@ variable "artifacts_bucket" { type = string }
 variable "lakehouse_bucket" { type = string }
 variable "kafka_private_ip" { type = string }
 variable "drain_schedule" {
-  type    = string
-  default = "rate(15 minutes)"
+  type = string
+  # Hourly, not every 15 minutes. Each drain bills ~7 minutes of a 4-vCPU app to
+  # move a few minutes of data — Spark start-up dominates, so cost tracks the
+  # number of runs far more than the volume drained (measured 2026-08-24: 0.47
+  # vCPU-hr per run, 96 runs/day ≈ $99/month, the entire budget). Nothing
+  # downstream consumes 15-minute freshness: gold is rebuilt by the 2-hour
+  # Dagster chain, and the killed-feed tripwire watches raw S3 prefixes, not
+  # silver. Raising cadence past 1 hour would start to bite that chain.
+  default = "rate(1 hour)"
 }
 
 resource "aws_iam_role" "scheduler" {
@@ -155,6 +162,15 @@ locals {
     "--conf spark.sql.catalog.lake.type=hadoop",
     "--conf spark.sql.catalog.lake.warehouse=s3://${var.lakehouse_bucket}/iceberg",
     "--conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+    # Keep 5 state-store versions, not the default 100. The dedup state for
+    # silver_stop_time_predictions is ~100 MB per version across the shuffle
+    # partitions, so retaining 100 of them grew the checkpoint to 13 GB — larger
+    # than every data table in the lakehouse combined (measured 2026-08-24;
+    # offsets/ and commits/ were correctly bounded, state/ was 23,686 files).
+    # Recovery only ever needs the last committed version; 5 is head-room.
+    # NB: shuffle-partition count is deliberately NOT changed — a stateful
+    # streaming query cannot change it without discarding its checkpoint.
+    "--conf spark.sql.streaming.minBatchesToRetain=5",
     "--conf spark.emr-serverless.driverEnv.TP_CLOUD=1",
     "--conf spark.emr-serverless.driverEnv.TP_TRIGGER=available_now",
     "--conf spark.emr-serverless.driverEnv.TP_CITY_TZS=${local.city_tzs}",
