@@ -21,7 +21,6 @@ from dagster_dbt import DbtCliResource
 from .lib import (
     LIVE_CITIES,
     city_static_sources,
-    iceberg_refresh_statements,
     latest_metadata_path,
     require_env,
     silver_tables,
@@ -117,28 +116,35 @@ def gtfs_static(
             failed[city] = repr(e)
 
     refreshed: list[str] = []
+    rebound: list[str] = []
     if run_ids:  # at least one parse landed: re-pin + rebuild for those cities
         import boto3
 
         s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-2"))
         bucket = require_env(os.environ, "LAKE_BUCKET")
-        statements: list[str] = []
+        pins: list[tuple[str, str]] = []
         for table in silver_tables():
             if not table.startswith("gtfs_static_"):
                 continue
             meta = latest_metadata_path(s3, bucket, table)
             if meta is None:
                 continue
-            statements += iceberg_refresh_statements(table, meta)
+            pins.append((table, meta))
             refreshed.append(table)
-        if statements:
-            snowflake.execute(statements)
+        if pins:
+            # refresh_iceberg, not a plain statement list: a parse that hit
+            # schema drift recreates the Iceberg table under a new UUID, and a
+            # bare `alter ... refresh` then fails and leaves Snowflake pointing
+            # at deleted parquet files
+            outcomes = snowflake.refresh_iceberg(pins)
+            rebound = [t for t, how in outcomes.items() if how != "refreshed"]
         dbt.cli(["build", "--select", "stg_gtfs__*+"]).wait()
 
     metadata = {
         "emr_job_run_ids": MetadataValue.json(run_ids),
         "refreshed": ", ".join(refreshed) or "(none)",
         "skipped_no_static": ", ".join(skipped) or "(none)",
+        "rebound_new_uuid": ", ".join(rebound) or "(none)",
     }
     if failed:
         raise Failure(

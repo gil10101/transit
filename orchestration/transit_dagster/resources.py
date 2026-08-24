@@ -14,7 +14,13 @@ from contextlib import contextmanager
 
 from dagster import ConfigurableResource, get_dagster_logger
 
-from .lib import drain_job_request, require_env, static_job_request
+from .lib import (
+    CATALOG_INTEGRATION,
+    EXTERNAL_VOLUME,
+    drain_job_request,
+    require_env,
+    static_job_request,
+)
 
 EMR_TERMINAL_STATES = {"SUCCESS", "FAILED", "CANCELLED"}
 
@@ -231,6 +237,46 @@ class SnowflakeResource(ConfigurableResource):
     def fetch_one(self, sql: str, schema: str = "SILVER") -> tuple:
         with self.connection(schema=schema) as conn:
             return conn.cursor().execute(sql).fetchone()
+
+    def refresh_iceberg(self, tables: Sequence[tuple[str, str]]) -> dict[str, str]:
+        """Pin each external Iceberg table to its latest metadata, rebuilding the
+        Snowflake table when Spark has replaced the underlying Iceberg table.
+
+        gtfs_static_parse drops and recreates a table whose columns drifted, and
+        a recreated Iceberg table carries a NEW UUID. Snowflake then rejects
+        `alter iceberg table ... refresh` with 091391 "The UUID of Iceberg table
+        ... does not match", and the external table is left pointing at parquet
+        files the reparse already deleted — every read fails until someone
+        rebinds it by hand (2026-08-24: all seven cities parsed and none of them
+        reached the warehouse). Recreating rebinds it; ownership stays with the
+        connection's role, which is the only grantee on these tables.
+        """
+        done: dict[str, str] = {}
+        with self.connection(schema="SILVER") as conn:
+            cur = conn.cursor()
+            for table, metadata_path in tables:
+                name = f"TRANSIT.SILVER.{table.upper()}"
+                create = (
+                    f"create iceberg table if not exists {name} "
+                    f"external_volume = '{EXTERNAL_VOLUME}' catalog = '{CATALOG_INTEGRATION}' "
+                    f"metadata_file_path = '{metadata_path}'"
+                )
+                try:
+                    cur.execute(create)
+                    cur.execute(f"alter iceberg table {name} refresh '{metadata_path}'")
+                    done[table] = "refreshed"
+                except Exception as e:  # noqa: BLE001 — one table must not stop the rest
+                    if "does not match" not in str(e):
+                        raise
+                    cur.execute(
+                        create.replace(
+                            "create iceberg table if not exists",
+                            "create or replace iceberg table",
+                            1,
+                        )
+                    )
+                    done[table] = "rebound (new iceberg uuid)"
+        return done
 
     def merge_weather(self, rows: Sequence[tuple]) -> int:
         """Upsert weather rows on (city, local_date, local_hour) via a session
