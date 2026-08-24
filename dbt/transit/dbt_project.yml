@@ -21,6 +21,12 @@ vars:
   # v1 finalization knobs (documented in int_stop_events_finalized)
   finalize_horizon_min: 20
   prediction_staleness_min: 30
+  # An event whose winning prediction was last seen more than this long before
+  # the event itself is a schedule echo, not an observation — it still counts as
+  # service volume but scores no otp_band. NYC median lead is 0 min, p95 45
+  # (measured 2026-08-24), so 60 excludes the tail without touching normal
+  # tracking. HSL publishes trips days ahead, which is the extreme case.
+  max_prediction_lead_min: 60
 
 seeds:
   transit:

@@ -66,6 +66,9 @@ otp as (
     from events
     where coalesce(schedule_relationship, 'SCHEDULED') <> 'ADDED'
       and not coalesce(skipped_flag, false)
+      -- same reason the band is null for these: the delay averages below would
+      -- otherwise be computed from arrival times nobody observed
+      and not coalesce(stale_observation_flag, false)
     group by city_key, service_date, route_id, direction_id
 
 ),

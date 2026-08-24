@@ -7,10 +7,15 @@
 -- (MBTA, HSL); false where it omits the column (NYC rail; TTC bus-defaults-none
 -- per dictionary §D). Requires the P3 canonical static projection + a reparse.
 
+-- on_schema_change: a new column must reach the existing table rather than be
+-- silently dropped. The default ignores schema drift, so an added column lives
+-- in the model and not in the relation until someone thinks to full-refresh —
+-- which is exactly how stale_observation_flag first failed its own test.
 {{ config(
     materialized='incremental',
     incremental_strategy='delete+insert',
-    unique_key=['city_key', 'service_date', 'trip_uid', 'stop_sequence']
+    unique_key=['city_key', 'service_date', 'trip_uid', 'stop_sequence'],
+    on_schema_change='append_new_columns'
 ) }}
 
 with f as (
@@ -67,11 +72,31 @@ select
         and delay_dep_sec < -{{ var('early_departure_grace_sec') }},
         false
     ) as early_departure_flag,
-    -- a SKIPPED stop is not an on-time observation — the vehicle never served
-    -- it (WMATA bus marks ~30% of STUs SKIPPED, fixtures 2026-08-23). Null band
-    -- drops skips from every count(otp_band) numerator AND denominator.
+    -- An event finalized from a prediction we last saw long before the event is
+    -- a schedule echo, not an observation: the feed stopped covering the trip
+    -- (or our polling gapped) and the stale estimate became the "actual"
+    -- arrival. Measured 2026-08-24: NYC median lead is 0 min and p95 is 45, but
+    -- 3,840 events (3.6%) exceeded 60 min, up to 205. HSL is the extreme case —
+    -- it publishes trips up to 3 days ahead, so a poll can carry an arrival
+    -- "prediction" for a journey that has not begun.
+    coalesce(
+        {{ seconds_between('last_seen_utc', 'actual_arr_ts_utc') }}
+            > {{ var('max_prediction_lead_min') }} * 60,
+        false
+    ) as stale_observation_flag,
+    -- Neither a SKIPPED stop nor a stale observation is an on-time observation:
+    -- the vehicle never served the stop (WMATA bus marks ~30% of STUs SKIPPED,
+    -- fixtures 2026-08-23), or we never saw it do so. Null band drops both from
+    -- every count(otp_band) numerator AND denominator. The rows stay, so
+    -- service volume and completeness still count the trip — the same split the
+    -- locked rule makes for ADDED trips.
     case
         when coalesce(skipped_flag, false) then null
+        when coalesce(
+            {{ seconds_between('last_seen_utc', 'actual_arr_ts_utc') }}
+                > {{ var('max_prediction_lead_min') }} * 60,
+            false
+        ) then null
         else {{ otp_band('delay_arr_sec') }}
     end as otp_band,
     schedule_relationship,
