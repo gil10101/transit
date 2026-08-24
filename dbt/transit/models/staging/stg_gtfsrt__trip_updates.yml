@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: stg_gtfsrt__trip_updates
+    description: >
+      Typed view over silver.stop_time_predictions: one row per (trip-update
+      version, stop_time_update). Trips whose update carries no STUs survive as
+      a single all-null-stop row via the silver explode_outer — zurich CANCELED
+      trips ship exactly that way (fixtures 2026-08-23) and are counted by
+      fct_service_delivery_daily from here. Staging normalizes
+      schedule_relationship where a feed's dialect diverges from the locked
+      ADDED rule (silver keeps the raw value): toronto NEW / negative-id
+      SCHEDULED -> ADDED; dc UNSCHEDULED (rail 'NR' shuttles) -> ADDED.
+      stu_schedule_relationship passes through raw — SKIPPED stops (WMATA bus
+      marks ~30% of STUs SKIPPED) become skipped_flag downstream and are
+      excluded from OTP bands, route-day delay stats, and headways there.
+      Batch-2 quirks staged as-is: zurich never sets direction_id (the matched
+      static trip supplies it downstream) nor vehicle_id; sf trip_id/route_id
+      keep their 511 agency namespace ('SF:…', 'AC:…' — operator = prefix,
+      shared with the regional static so joins keep working); sf start_date is
+      absent for the BA/ST/3D/CT operators (service_date already resolved in
+      silver via the default noon-rule fallback).
+    columns:
+      - name: city_key
+        data_tests: [not_null]
+      - name: trip_uid
+        description: canonical trip identity (hash) shared with vehicle positions
+        data_tests: [not_null]
+      - name: service_date
+        data_tests: [not_null]
+      - name: fetched_at
+        description: poll time of this prediction version (finalization watermark basis)
+        data_tests: [not_null]

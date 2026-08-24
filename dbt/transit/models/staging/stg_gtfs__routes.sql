@@ -13,7 +13,12 @@ select
     r.route_long_name,
     r.route_type,
     -- base GTFS types 0-4 plus Google extended route types (HSL uses them:
-    -- 701/702/704 bus, 109 suburban rail, 900 tram — 92% of its routes)
+    -- 701/702/704 bus, 109 suburban rail, 900 tram — 92% of its routes).
+    -- zurich's Swiss national static is extended-ONLY (no 0-7 anywhere,
+    -- fixture-verified 2026-08-23): 1xx rail (RT-matched routes 102-116),
+    -- 700 bus, 900 tram, 1000 water -> ferry — all covered below; the static's
+    -- aerial 13xx / funicular 14xx / taxi 15xx land on 'other' (marginal for
+    -- city scoring; revisit only if a scored route surfaces there)
     case
         when r.route_type = 0 then 'tram'
         when r.route_type = 1 then 'metro'

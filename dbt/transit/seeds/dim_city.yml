@@ -6,9 +6,14 @@ seeds:
       One row per scored city. iana_tz drives every local-time conversion
       (canonical rule: store UTC, analyze local). Peak windows are 07-10/16-19
       local for all P3 cities (dictionary states no city-specific windows).
-      P3 rows verified against fixtures recorded 2026-08-23.
+      Batch-1 rows verified against fixtures recorded 2026-08-23; batch-2 rows
+      (dc, sf, zurich) against fixtures recorded 2026-08-23 (UTC evening).
     columns:
       - name: city_key
+        description: >
+          Matches the ingestion yaml `city:` (ingestion/config/cities/*.yaml)
+          and the silver `city` column — dc, sf, zurich for batch 2 (docs/02
+          predates this and still says 'sfbay'; code uses 'sf' everywhere).
         data_tests: [unique, not_null]
       - name: city_name
         data_tests: [not_null]
@@ -18,28 +23,52 @@ seeds:
       - name: iana_tz
         description: >
           IANA timezone; must match the ingestion yaml timezone and the
-          TP_CITY_TZS map in infra (nyc/boston America/New_York,
-          toronto America/Toronto, helsinki Europe/Helsinki).
+          TP_CITY_TZS map in infra (nyc/boston/dc America/New_York,
+          toronto America/Toronto, helsinki Europe/Helsinki,
+          sf America/Los_Angeles, zurich Europe/Zurich). NB the Swiss national
+          static declares agency_timezone=Europe/Berlin for all agencies —
+          an alias at equal offset; tz cross-checks must tolerate it, zurich
+          stays Europe/Zurich here.
         data_tests: [not_null]
       - name: rt_delay_source
         description: >
           Dominant source of delay_arr_sec for the city. 'computed' = derived
-          vs static schedule; 'feed' = arrival.delay stated by the feed. The
-          canonical COALESCE(feed delay, computed) rule applies everywhere
-          regardless, so this is documentation of observed feed behavior, not
-          a switch. Fixture evidence 2026-08-23: boston 0/16825 arrivals carry
-          delay -> computed; toronto 0/22286 -> computed; helsinki 0/19949 ->
-          computed (dictionary §B HSL row AMENDED 2026-08-23 accordingly — the
-          original 2026-08-22 note said populated, no longer observed). If HSL
-          delay reappears the COALESCE picks it up automatically; flip this to
-          'feed' then, with a matching dictionary amendment.
+          vs static schedule; 'feed' = arrival.delay stated by the feed;
+          'mixed' = per-operator, some feed some computed. The canonical
+          COALESCE(feed delay, computed) rule applies everywhere regardless, so
+          this is documentation of observed feed behavior, not a switch.
+          Fixture evidence 2026-08-23: boston 0/16825 arrivals carry delay ->
+          computed; toronto 0/22286 -> computed; helsinki 0/19949 -> computed
+          (dictionary §B HSL row AMENDED 2026-08-23 accordingly — the original
+          2026-08-22 note said populated, no longer observed). Batch 2
+          (fixtures 2026-08-23): dc 0/20245 arrivals across rail+bus ->
+          computed; zurich 5961/6017 (99%) -> feed (first 'feed' city; the
+          COALESCE absorbs its ADDED time-only tail); sf -> mixed,
+          all-or-nothing per operator (SF/SM/BA/GG 100% feed delay,
+          AC/SC/MA/CC/SR/ST/3D/SO/WH/CT 0% -> computed; 59% of arrivals
+          overall). If a 'computed' city starts stating delay the COALESCE
+          picks it up automatically; flip the value then, with a matching
+          dictionary amendment.
         data_tests:
           - not_null
           - accepted_values:
               arguments:
-                values: [computed, feed]
+                values: [computed, feed, mixed]
+      - name: crowding_usable
+        description: >
+          Whether occupancy_status from the city's vehicle positions is a real
+          crowding signal (input to the optional P6 crowding metric). Fixture
+          evidence 2026-08-23: boston true (276/394 VPs, MANY/FEW_SEATS+FULL);
+          toronto true (1163/1177 VPs); sf true (1190/1501 VPs, 5 distinct
+          values). false: nyc (subway VP carries no occupancy), helsinki (no VP
+          feed polled — MQTT is stretch-only), dc (field present but
+          non-informative — rail all EMPTY, bus ~96% NO_DATA_AVAILABLE; W1
+          sentinel test_occupancy_present_but_flagged_unusable flips if WMATA
+          starts sending real values -> flip this then), zurich (no
+          VehiclePositions product at all).
+        data_tests: [not_null]
       - name: attribution_text
         description: >
-          Display attribution. Toronto's is legally required (Open Government
-          Licence – Toronto; see ATTRIBUTION.md).
+          Display attribution (full notices in ATTRIBUTION.md). Toronto's is
+          legally required (Open Government Licence – Toronto).
         data_tests: [not_null]

@@ -2,7 +2,11 @@
 --
 -- Route-day reliability per (city, route, service_date, direction):
 --   * OTP shares + delay stats from fct_stop_events, ADDED trips EXCLUDED
---     (locked rule: volume yes, OTP no)
+--     (locked rule: volume yes, OTP no) and SKIPPED stop events EXCLUDED from
+--     the whole aggregation — their predictions describe stops never served
+--     (WMATA bus marks ~30% of STUs SKIPPED, fixtures 2026-08-23; fct_headways
+--     and otp_band itself already exclude them, this keeps the delay stats
+--     clean too)
 --   * early_departure_pct from the fact's early_departure_flag — structurally
 --     false everywhere for now: the bus-timepoint rule needs stop_times.timepoint,
 --     absent from the loaded silver static (see fct_stop_events header)
@@ -61,6 +65,7 @@ otp as (
         avg(case when early_departure_flag then 1.0 else 0.0 end) as early_departure_pct
     from events
     where coalesce(schedule_relationship, 'SCHEDULED') <> 'ADDED'
+      and not coalesce(skipped_flag, false)
     group by city_key, service_date, route_id, direction_id
 
 ),

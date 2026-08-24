@@ -67,7 +67,13 @@ select
         and delay_dep_sec < -{{ var('early_departure_grace_sec') }},
         false
     ) as early_departure_flag,
-    {{ otp_band('delay_arr_sec') }} as otp_band,
+    -- a SKIPPED stop is not an on-time observation — the vehicle never served
+    -- it (WMATA bus marks ~30% of STUs SKIPPED, fixtures 2026-08-23). Null band
+    -- drops skips from every count(otp_band) numerator AND denominator.
+    case
+        when coalesce(skipped_flag, false) then null
+        else {{ otp_band('delay_arr_sec') }}
+    end as otp_band,
     schedule_relationship,
     cancelled_flag,
     skipped_flag,

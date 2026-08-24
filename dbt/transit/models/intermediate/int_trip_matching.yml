@@ -3,11 +3,19 @@ version: 2
 models:
   - name: int_trip_matching_generic
     description: >
-      RT -> static trip matches for boston/toronto (exact trip_id equijoin) and
-      helsinki (route + direction + origin-time seconds among service-date-active
-      trips; RT trip_id is empty there). Exact matches only, confidence 1.0.
-      Unmatched RT trips (e.g. TTC negative-id ADDED runs) are absent — their
-      events still flow through int_stop_events_finalized with null schedule.
+      RT -> static trip matches for the non-NYC cities. Exact trip_id equijoin,
+      confidence 1.0: boston, dc, zurich (fixtures 2026-08-23; zurich matches
+      the Swiss national static, which also supplies its direction_id — the
+      feed never sets one). Route + nearest origin time within 5 min,
+      confidence 0.7: toronto (RT ids share no namespace with the CKAN static)
+      and PROVISIONALLY sf (agency-namespaced ids are likely an exact join, but
+      the 511 static is unverified behind the 60 req/hr key — flip to the exact
+      branch once it is verified and loaded, docs/01 §D; sf's direction_id
+      tightens the candidate set). helsinki: (route, direction, origin-time
+      seconds) among service-date-active trips, confidence 1.0 — RT trip_id is
+      empty there. Unmatched RT trips (e.g. TTC NEW / dc UNSCHEDULED runs,
+      both normalized to ADDED in staging) are absent — their events still
+      flow through int_stop_events_finalized with null schedule.
     columns:
       - name: trip_uid
         description: canonical trip identity; downstream join key
@@ -15,11 +23,12 @@ models:
       - name: static_trip_id
         data_tests: [not_null]
       - name: match_confidence
+        description: 1.0 exact/helsinki; 0.7 toronto + provisional sf origin-time
         data_tests:
           - not_null
           - accepted_values:
               arguments:
-                values: [1.0]
+                values: [1.0, 0.7]
                 quote: false
 
   - name: int_trip_matching
@@ -35,7 +44,10 @@ models:
       - name: static_trip_id
         data_tests: [not_null]
       - name: match_confidence
-        description: 1.0 exact (all cities); 0.9/0.7 NYC origin-time fallback tiers
+        description: >
+          1.0 exact (boston/dc/zurich/helsinki + NYC token match); 0.9/0.7 NYC
+          origin-time fallback tiers; 0.7 toronto + provisional sf origin-time
+          matches from the generic fuzzy branch
         data_tests:
           - not_null
           - accepted_values:

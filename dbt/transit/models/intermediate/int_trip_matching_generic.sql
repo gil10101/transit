@@ -1,12 +1,27 @@
 -- Generic RT -> static trip matching for cities without NYC's trip_id encoding
--- (P3: boston, toronto, helsinki). Column-compatible with int_trip_matching_nyc;
--- int_trip_matching unions the two.
+-- (P3: boston, toronto, helsinki; P3 batch 2: dc, sf, zurich). Column-compatible
+-- with int_trip_matching_nyc; int_trip_matching unions the two.
 --
 --   * boston: RT trip_id IS the static trip_id (fixture-verified 2026-08-23)
 --     -> exact equijoin, confidence 1.0. Unmatched trips are simply absent here;
 --     int_stop_events_finalized left-joins, so their events still flow with
 --     null schedule (OTP null) — except helsinki, whose feed also omits
 --     stop_sequence, so unmatched HSL trips drop from finalized entirely.
+--   * dc: same exact equijoin (fixtures 2026-08-23: rail 140/142 join static —
+--     both misses UNSCHEDULED 'NR' shuttles — and bus 3635/3635). dc static is
+--     TWO zips (rail + bus); dc.yaml lists both and the loader lands them under
+--     ONE gtfs_version_id, so the stg_gtfs__* latest-version filter keeps both
+--     modes' schedules.
+--   * sf: same exact equijoin — every RT trip_id in the fixture joins the 511
+--     regional static (2,494/2,494, integrator-verified 2026-08-24 against the
+--     DataFeeds operator_id=RG zip). Ids are agency-namespaced ('3D:1350',
+--     'SF:…'); direction_id is set on 100% of sf TUs but the matched static
+--     trip supplies it downstream like every other exact city.
+--   * zurich: same exact equijoin vs the Swiss NATIONAL static (fixtures
+--     2026-08-23: 399/402 = 99.3%; SCHEDULED+CANCELED = 100%, only the 3 ADDED
+--     runtime 'ojp:…' trips miss). The feed NEVER sets direction_id, so the
+--     matched static trip supplies direction downstream (national trips.txt
+--     carries the column).
 --   * toronto: RT trip_ids share NO namespace with the static zip (2/1,478
 --     joinable, review-verified 2026-08-23 — bustime ids vs CKAN schedule ids),
 --     and the feed omits direction_id/start_time/start_date. Matched like a
@@ -14,7 +29,9 @@
 --     origin is the earliest-stop_sequence arrival prediction, nearest static
 --     origin within 5 min wins -> confidence 0.7 (prediction = schedule+delay,
 --     so the tolerance absorbs origin delay). Direction comes from the static
---     trip.
+--     trip. (sf shared this branch provisionally on 2026-08-23 and moved to
+--     the exact branch a day later once its static was verified, so toronto is
+--     again the only fuzzy city.)
 --   * helsinki: RT trip_id is EMPTY (dictionary §B) -> resolve against static
 --     via (route_id, direction_id, origin departure time) among trips active on
 --     the service_date (int_service_dates), confidence 1.0. Times compare as
@@ -33,7 +50,7 @@ with rt_exact as (
         trip_uid,
         route_id
     from {{ ref('stg_gtfsrt__trip_updates') }}
-    where city_key = 'boston'
+    where city_key in ('boston', 'dc', 'zurich', 'sf')
       and trip_id is not null
 
 ),
@@ -51,7 +68,7 @@ static_by_id as (
             order by route_id
         ) as rn
     from {{ ref('stg_gtfs__trips') }}
-    where city_key = 'boston'
+    where city_key in ('boston', 'dc', 'zurich', 'sf')
 
 ),
 
@@ -75,7 +92,7 @@ exact as (
 ),
 
 -- toronto: origin proxy = the earliest-stop_sequence arrival prediction
-rt_toronto_first_stu as (
+rt_fuzzy_first_stu as (
 
     select
         city_key,
@@ -83,6 +100,7 @@ rt_toronto_first_stu as (
         trip_id,
         trip_uid,
         route_id,
+        direction_id,
         arr_pred_ts_utc,
         row_number() over (
             partition by city_key, service_date, trip_uid
@@ -95,7 +113,7 @@ rt_toronto_first_stu as (
 
 ),
 
-rt_toronto as (
+rt_fuzzy as (
 
     select
         r.city_key,
@@ -103,17 +121,18 @@ rt_toronto as (
         r.trip_id,
         r.trip_uid,
         r.route_id,
+        r.direction_id,
         {{ seconds_between(
             'cast(r.service_date as timestamp)',
             to_local('r.arr_pred_ts_utc', 'c.iana_tz')
         ) }} as origin_pred_seconds
-    from rt_toronto_first_stu r
+    from rt_fuzzy_first_stu r
     join {{ ref('dim_city') }} c on c.city_key = r.city_key
     where r.rn = 1
 
 ),
 
-tor_origins as (
+fuzzy_origins as (
 
     select
         city_key,
@@ -128,7 +147,7 @@ tor_origins as (
 
 ),
 
-tor_static as (
+fuzzy_static as (
 
     select
         t.city_key,
@@ -141,7 +160,7 @@ tor_static as (
     join {{ ref('int_service_dates') }} d
       on d.city_key = t.city_key
      and d.service_id = t.service_id
-    join tor_origins o
+    join fuzzy_origins o
       on o.city_key = t.city_key
      and o.trip_id = t.trip_id
      and o.stop_rn = 1
@@ -149,8 +168,10 @@ tor_static as (
 
 ),
 
--- nearest static origin within 5 min; the tolerance absorbs origin delay
-toronto as (
+-- nearest static origin within 5 min; the tolerance absorbs origin delay.
+-- The direction_id predicate stays for any future fuzzy city that states it;
+-- toronto never does, so its join is route+time only, unchanged from P3
+fuzzy as (
 
     select
         r.city_key,
@@ -165,12 +186,15 @@ toronto as (
             partition by r.city_key, r.service_date, r.trip_uid
             order by abs(s.origin_seconds - r.origin_pred_seconds), s.static_trip_id
         ) as pick
-    from rt_toronto r
-    join tor_static s
+    from rt_fuzzy r
+    join fuzzy_static s
       on s.city_key = r.city_key
      and s.service_date = r.service_date
      and s.route_id = r.route_id
      and abs(s.origin_seconds - r.origin_pred_seconds) <= 300
+    where r.direction_id is null
+       or s.direction_id is null
+       or r.direction_id = s.direction_id
 
 ),
 
@@ -263,7 +287,7 @@ from exact
 union all
 select city_key, service_date, trip_id, trip_uid, route_id,
        static_trip_id, direction_id, match_confidence
-from toronto
+from fuzzy
 where pick = 1
 union all
 select city_key, service_date, trip_id, trip_uid, route_id,

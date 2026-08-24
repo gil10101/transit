@@ -30,6 +30,7 @@ seeds:
         peak_am_end: time
         peak_pm_start: time
         peak_pm_end: time
+        crowding_usable: boolean
 
 models:
   transit:
