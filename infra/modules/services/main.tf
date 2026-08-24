@@ -386,6 +386,14 @@ resource "aws_instance" "services" {
       -o /usr/local/lib/docker/cli-plugins/docker-compose
     chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
     mkdir -p /opt/transit
+    # compose treats a missing env_file as fatal, and on a re-landed boot the
+    # already-enabled transit.service can reach `compose up` before this script
+    # has written the real secrets.env. Create it empty first (0600) so the
+    # stack always starts: fetch_secrets.sh overwrites it on the same start, and
+    # a poller that briefly sees no key crash-loops visibly instead of taking
+    # every other city down with it.
+    touch /opt/transit/secrets.env
+    chmod 600 /opt/transit/secrets.env
     echo '${base64encode(local.compose)}' | base64 -d > /opt/transit/docker-compose.yml
     echo '${base64encode(local.fetch_secrets)}' | base64 -d > /opt/transit/fetch_secrets.sh
     chmod 700 /opt/transit/fetch_secrets.sh

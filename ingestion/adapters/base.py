@@ -25,6 +25,9 @@ UTC = timezone.utc  # noqa: UP017 — EMR Serverless runs py3.9; datetime.UTC ne
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config" / "cities"
 POLL_FLOOR_SECONDS = 30
+# Under the broker's default 1 MiB message.max.bytes, with room for the JSON
+# framing and Kafka's own record overhead.
+MAX_MESSAGE_BYTES = 900_000
 
 TOPICS = {
     "trip_updates": "transit.trip_updates",
@@ -182,12 +185,28 @@ class KafkaEmitter:
                 print(f"created topic {topic}")
 
     def emit(self, envelope: dict) -> None:
+        """Emit one envelope, splitting the payload when the encoded message
+        would exceed the broker's per-message limit.
+
+        511's regional feed carries every Bay Area operator in one response
+        (~3,800 trip updates, 2.4 MB encoded) and the broker rejects that with
+        MSG_SIZE_TOO_LARGE. Chunks keep the envelope's metadata identical and
+        only slice `payload`, so downstream is unchanged: silver explodes the
+        payload array either way, and dedup is per record."""
         topic = TOPICS[envelope["feed"]]
-        self.producer.produce(
-            topic,
-            key=envelope["city"].encode(),
-            value=json.dumps(envelope, separators=(",", ":")).encode(),
-        )
+        for chunk in self._size_bounded(envelope):
+            self.producer.produce(topic, key=envelope["city"].encode(), value=chunk)
+
+    def _size_bounded(self, envelope: dict) -> list[bytes]:
+        encoded = json.dumps(envelope, separators=(",", ":")).encode()
+        payload = envelope.get("payload") or []
+        if len(encoded) <= MAX_MESSAGE_BYTES or len(payload) <= 1:
+            return [encoded]
+        mid = len(payload) // 2
+        out = []
+        for half in (payload[:mid], payload[mid:]):
+            out += self._size_bounded({**envelope, "payload": half})
+        return out
 
     def flush(self) -> None:
         self.producer.flush(10)
