@@ -149,6 +149,10 @@ locals {
     "--conf spark.emr-serverless.driverEnv.TP_TRIGGER=available_now",
     "--conf spark.emr-serverless.driverEnv.TP_CITY_TZS=${local.city_tzs}",
     "--conf spark.emr-serverless.driverEnv.TP_LAKE_URI=s3://${var.lakehouse_bucket}",
+    # silver reads config/<city>_route_allowlist.csv from here to filter the
+    # national feeds (Zurich) down to the scored city — driver only, the filter
+    # is built on the driver and broadcast with the plan
+    "--conf spark.emr-serverless.driverEnv.ARTIFACTS_BUCKET=${var.artifacts_bucket}",
     "--conf spark.emr-serverless.driverEnv.KAFKA_BOOTSTRAP=${var.kafka_private_ip}:9092",
     "--conf spark.executorEnv.TP_CLOUD=1",
     "--conf spark.executorEnv.TP_TRIGGER=available_now",

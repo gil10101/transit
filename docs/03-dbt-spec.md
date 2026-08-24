@@ -72,7 +72,9 @@ Trips scheduled but never observed within lookback → emitted as `cancelled_fla
 `routes_snapshot`, `stops_snapshot`: strategy=check on all columns, invalidated by new `gtfs_version_id` → SCD2 backing dim_route/dim_stop.
 
 ## 5. Seeds
-`dim_city`, `weather_condition_map` (WMO→bucket), `mlit_tokyo_benchmark`, `otp_band_definitions`, `zurich_route_allowlist` (generated helper, checked in — **[rev P3b] not yet generated**: it needs the 235 MB national static, and it pairs with the silver-side Zurich filter dict §B specifies, which `spark_jobs/silver_normalize.py` does not implement yet; flagged to the integrator with the P3 batch-2 handoff — until both land, zurich silver/staging carry the whole national feed under city 'zurich').
+`dim_city`, `weather_condition_map` (WMO→bucket), `mlit_tokyo_benchmark`, `otp_band_definitions`, `zurich_route_allowlist` (generated helper, checked in).
+
+> **[rev P3b, integrator 2026-08-24]** `zurich_route_allowlist` is produced by `scripts/generate_zurich_allowlist.py` from the parsed national static: a route is Zurich's when the **majority of its stops** fall inside the canton box (lat 47.16–47.71, lon 8.35–8.99). Majority, not "any stop" — intercity trains call at Zürich HB but are national services, and scoring them as Zurich's would measure Swiss long-distance punctuality instead. The generator writes the seed **and** `s3://<artifacts>/config/zurich_route_allowlist.csv`, which `spark_jobs/silver_normalize.national_filter` reads so the drop happens in silver (dictionary §B) rather than after the whole national feed has been stored. The two outputs come from one run on purpose — they must never diverge. Until the file exists, silver **drops** zurich rows rather than passing all of Switzerland through, and the Zurich poller stays undeployed (docs/04 [rev P3 batch 2b]).
 
 ## 6. Macros
 `to_local(ts, city_key)` (join dim_city, convert_timezone), `service_date(local_ts)` (noon−12h rule), `otp_band(delay_col)`, `h3_cell(lat, lon, res)`, `clamp(x, lo, hi)`.
