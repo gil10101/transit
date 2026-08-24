@@ -170,16 +170,24 @@ def archive_zip(city: str, version_id: str, blob: bytes, source: str = "default"
 
 def archived_sources(city: str, version_id: str) -> list[str]:
     """Source names staged under this version, from the raw layout the Dagster
-    asset (or local main) wrote: static/<city>/<version>/<source>/gtfs.zip."""
+    asset (or local main) wrote: static/<city>/<version>/<source>/gtfs.zip.
+
+    Requires exactly one path segment before gtfs.zip. Before the multi-source
+    layout the zip sat at <version>/gtfs.zip, and where an old file shares
+    today's version id (the id is date + content hash, so an unchanged upstream
+    zip re-staged after UTC midnight collides) a laxer match reads the legacy
+    key as a source literally named "gtfs.zip" and then fetches
+    <version>/gtfs.zip/gtfs.zip — NoSuchKey.
+    """
     bucket = os.environ.get("RAW_BUCKET", "raw")
     prefix = f"{static_prefix(city, version_id)}/"
     pages = _s3().get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix)
-    names = {
-        key[len(prefix) :].split("/")[0]
-        for page in pages
-        for key in (obj["Key"] for obj in page.get("Contents", []))
-        if key.endswith("/gtfs.zip")
-    }
+    names = set()
+    for page in pages:
+        for key in (obj["Key"] for obj in page.get("Contents", [])):
+            rest = key[len(prefix) :]
+            if rest.endswith("/gtfs.zip") and rest.count("/") == 1:
+                names.add(rest.split("/")[0])
     if not names:
         raise SystemExit(f"no staged zips under s3://{bucket}/{prefix}")
     return sorted(names)
