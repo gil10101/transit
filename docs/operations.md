@@ -196,14 +196,26 @@ the operator runs, in this order:
 3. Re-land user_data on the services box (compose + unit + fetch script changed):
    SSM shell → `cloud-init clean --logs && reboot` (procedure in "Dagster (P5)").
 4. `make emr-drain` once — re-stages `spark_jobs.zip` so EMR sees the new city yamls.
-5. Verify: `/opt/transit/secrets.env` exists on the box with mode 600 (`stat -c '%a'`,
+5. **One-time backfill of the SKIPPED fix** (do this once, after the first post-deploy
+   chain run): `dbt build --full-refresh --select fct_stop_events fct_route_reliability_daily`
+   against `--target prod`. Both marts are incremental (`delete+insert` over a
+   service_date lookback), and batch 2 changed a rule that applies to every city —
+   a SKIPPED stop now scores no `otp_band` and drops out of route-day OTP. Without the
+   full refresh, rows older than the lookback keep the old definition and the OTP series
+   has a silent step at the deploy boundary. `assert_skipped_stops_have_no_otp_band`
+   locks the invariant going forward.
+6. Verify: `/opt/transit/secrets.env` exists on the box with mode 600 (`stat -c '%a'`,
    never `cat` it); per-city raw prefixes advancing — sf writes every ~200s by design
-   (511's 60 req/hr cap), dc/zurich every 30s; `raw_feed_freshness` green on 27
-   endpoints; weekly `gtfs_static` refreshes nyc/boston/toronto/helsinki/zurich (watch
-   zurich's 235 MB national-zip parse vs the 25-min EMR timeout; dc + sf stay
-   skipped-and-reported until the static-auth/URL gaps close — docs/01 §D OPEN items);
-   dbt marts show the new cities. Completeness ≥85% after 48h is the docs/04
-   acceptance gate.
+   (511's 60 req/hr cap), dc every 30s; `raw_feed_freshness` green on its endpoints;
+   weekly `gtfs_static` refreshes nyc/boston/toronto/helsinki/dc (rail+bus, one version)
+   /sf; dbt marts show the new cities. Completeness ≥85% after 48h is the docs/04
+   acceptance gate. `uv run python scripts/field_audit.py` samples every hop per city
+   (source → raw → silver → static → gold) and is the fastest way to see a new city's
+   fields land.
+
+Zurich is intentionally NOT in this rollout — its national feed needs the silver
+allow-list first (docs/04 [rev P3 batch 2b]). Its key params, yaml and matcher branch
+ship here; only the poller service is withheld.
 
 Chicago joins as batch 2b when the CTA beta key activates: yaml + fixtures + append
 to `LIVE_CITIES`/`TP_CITY_TZS`/compose, same checklist.

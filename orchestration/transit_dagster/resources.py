@@ -83,10 +83,7 @@ class EmrResource(ConfigurableResource):
                 log.info(f"EMR {request['name']} resubmitted in idle gap: run {run_id}")
                 return run_id
             time.sleep(20)
-        raise TimeoutError(
-            f"EMR {request['name']}: no capacity gap before the "
-            f"{self.timeout_minutes}-min deadline"
-        )
+        raise TimeoutError(f"EMR {request['name']}: no capacity gap before the deadline")
 
     def _run(
         self, request: dict, adopt_in_flight: bool = False, timeout_minutes: int | None = None

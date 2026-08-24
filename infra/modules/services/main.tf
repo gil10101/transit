@@ -246,12 +246,13 @@ locals {
         restart: always
         environment: *penv
         env_file: [/opt/transit/secrets.env]
-      poller-zurich:
-        image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
-        command: ["zurich"]
-        restart: always
-        environment: *penv
-        env_file: [/opt/transit/secrets.env]
+      # poller-zurich is deliberately absent until the Zurich allow-list ships.
+      # /la/gtfs-rt is the NATIONAL feed: without the silver-side filter every
+      # Swiss operator would be stored as city='zurich' (wrong reliability
+      # answers), and archiving the unfiltered feed at 30s runs ~0.5-1 TB/month
+      # against the <$100/mo budget. Sequence in docs/04 [rev P3 batch 2b]:
+      # static parse -> generate zurich_route_allowlist -> silver filter ->
+      # add this service. The SSM key params and its yaml are already in place.
       postgres:
         image: postgres:16-alpine
         restart: always

@@ -58,8 +58,11 @@ def stage_static_zip(city: str) -> str | None:
         for source in sources:
             headers, params = resolve_auth(source.auth)
             with requests.get(
-                source.url, headers=headers or None, params=params or None,
-                timeout=300, stream=True,
+                source.url,
+                headers=headers or None,
+                params=params or None,
+                timeout=300,
+                stream=True,
             ) as resp:
                 resp.raise_for_status()
                 tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)

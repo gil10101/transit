@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from dagster import (
     AssetSelection,
     DefaultScheduleStatus,
+    Failure,
     MaterializeResult,
     MetadataValue,
     ScheduleDefinition,
@@ -36,22 +37,34 @@ def weather_hourly(snowflake: SnowflakeResource) -> MaterializeResult:
     overwritten by later pulls as forecasts settle into observations), merged
     on (city, local_date, local_hour)."""
     counts = {}
+    failed = {}
     for city in LIVE_CITIES:
         spec = CITY_WEATHER[city]
-        payload = _fetch(
-            FORECAST_URL,
-            {
-                "latitude": spec["lat"],
-                "longitude": spec["lon"],
-                "hourly": OPEN_METEO_HOURLY_VARS,
-                "past_days": 2,
-                "timezone": "UTC",
-            },
-        )
-        rows = weather_rows(city, spec["tz"], payload, datetime.now(UTC))
-        snowflake.merge_weather(rows)
-        counts[city] = len(rows)
-    return MaterializeResult(metadata={"rows_merged": MetadataValue.json(counts)})
+        try:
+            payload = _fetch(
+                FORECAST_URL,
+                {
+                    "latitude": spec["lat"],
+                    "longitude": spec["lon"],
+                    "hourly": OPEN_METEO_HOURLY_VARS,
+                    "past_days": 2,
+                    "timezone": "UTC",
+                },
+            )
+            rows = weather_rows(city, spec["tz"], payload, datetime.now(UTC))
+            snowflake.merge_weather(rows)
+            counts[city] = len(rows)
+        except Exception as e:  # noqa: BLE001 — one city's blip must not gap the rest
+            # past_days=2 means the next hourly run re-fetches whatever this one
+            # missed, so a transient failure self-heals; isolating it just keeps
+            # the other cities' merge from being cancelled with it.
+            failed[city] = repr(e)
+    metadata = {"rows_merged": MetadataValue.json(counts)}
+    if failed:
+        metadata["errors"] = MetadataValue.json(failed)
+    if not counts:
+        raise Failure(description="weather pull failed for every city", metadata=metadata)
+    return MaterializeResult(metadata=metadata)
 
 
 @asset(group_name="weather")
