@@ -222,6 +222,16 @@ to `LIVE_CITIES`/`TP_CITY_TZS`/compose, same checklist.
 
 ## Known quirks (cost real debugging time — do not rediscover)
 
+0. **A `transit-drain` stuck in RUNNING for more than ~10 minutes means the EMR app is
+   deadlocked, not busy.** Every job is a 2-vCPU driver plus a 2-vCPU executor, so the old
+   4-vCPU `maximum_capacity` admitted two drivers and left nothing for either executor:
+   both jobs spin forever re-requesting a worker ("Worker could not be allocated as the
+   application has exceeded maximumCapacity" — 287 times in a 4.5-hour hang on 2026-08-24)
+   and every later submit is rejected. Silver went 18 hours stale before anyone noticed.
+   `max_vcpu` is 8 now so a drain and the weekly static parse coexist. If it ever recurs:
+   `aws emr-serverless list-job-runs --states RUNNING` and cancel the oldest — the drain is
+   checkpointed, so the next one resumes where it stopped. Watch it with
+   `scripts/field_audit.py silver` (the `fresh_utc` column is the giveaway).
 1. **Snowflake session timezone defaults to America/Los_Angeles.** NTZ-vs-TZ comparisons
    silently skew delays by hours (OTP read 3.9% instead of 74%). `TERRAFORM_SVC` has
    `TIMEZONE='UTC'` set; any new user/tool needs the same (`DAGSTER_SVC` gets it pinned
