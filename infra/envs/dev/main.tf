@@ -59,6 +59,12 @@ module "services" {
   emr_static_entry_point = module.spark.static_entry_point
   emr_spark_params       = module.spark.spark_params
   emr_log_uri            = module.spark.log_uri
+  # P3 batch 2: poller API keys -> SSM SecureStrings via write-only args
+  # (TF_VAR_wmata_api_key etc. at apply time; never in state)
+  wmata_api_key      = var.wmata_api_key
+  bay511_api_token   = var.bay511_api_token
+  swiss_otd_token    = var.swiss_otd_token
+  swiss_otd_sa_token = var.swiss_otd_sa_token
 }
 
 module "snowflake" {

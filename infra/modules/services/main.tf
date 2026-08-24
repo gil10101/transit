@@ -37,6 +37,42 @@ variable "snowflake_role" {
   default = "TRANSIT_PIPELINE"
 }
 
+# --- P3 batch 2: poller API keys (dc/sf/zurich). Values arrive as TF_VAR_* at
+# apply time (integrator exports them from .env — never in repo) and land in
+# SSM SecureStrings through value_wo, so they never enter terraform state.
+# Empty (a plan/apply without the TF_VARs exported) writes PLACEHOLDER; the
+# real value is then set out-of-band exactly like the dagster key. Rotation is
+# always out-of-band (docs/operations.md "Poller API keys"):
+#   aws ssm put-parameter --name /<prefix>/keys/<name> --type SecureString \
+#     --value "$FROM_ENV" --overwrite     # never echo the value
+# then `systemctl restart transit.service` (fetch runs at service start).
+# value_wo never reverts an out-of-band value: the provider only re-sends on a
+# value_wo_version bump.
+variable "wmata_api_key" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+variable "bay511_api_token" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+variable "swiss_otd_token" {
+  # Swiss tokens are irreplaceable if revoked (opentransportdata.swiss) — SSM
+  # SecureString + local .env are the ONLY homes. One token per API product:
+  # this one is for /la/gtfs-rt.
+  type      = string
+  default   = ""
+  sensitive = true
+}
+variable "swiss_otd_sa_token" {
+  # Separate token for the /la/gtfs-sa service-alerts product. Irreplaceable.
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
 data "aws_caller_identity" "current" {}
 
 data "aws_ssm_parameter" "al2023_arm" {
@@ -66,6 +102,28 @@ resource "aws_ssm_parameter" "dagster_snowflake_key" {
   name             = "/${var.prefix}/dagster/snowflake_key"
   type             = "SecureString"
   value_wo         = "PLACEHOLDER"
+  value_wo_version = 1
+}
+
+# P3 batch 2 poller API keys, same value_wo pattern as the dagster key (values
+# never in state). Seeded from TF_VAR_* at apply time; coalesce writes
+# PLACEHOLDER when a TF_VAR is missing so a plain plan/apply still converges.
+# The box fetches these into /opt/transit/secrets.env at every transit.service
+# start (local.fetch_secrets below).
+locals {
+  poller_secret_values = {
+    wmata    = var.wmata_api_key
+    bay511   = var.bay511_api_token
+    swiss_rt = var.swiss_otd_token
+    swiss_sa = var.swiss_otd_sa_token
+  }
+}
+
+resource "aws_ssm_parameter" "poller_key" {
+  for_each         = toset(["wmata", "bay511", "swiss_rt", "swiss_sa"])
+  name             = "/${var.prefix}/keys/${each.key}"
+  type             = "SecureString"
+  value_wo         = coalesce(local.poller_secret_values[each.key], "PLACEHOLDER")
   value_wo_version = 1
 }
 
@@ -115,9 +173,12 @@ resource "aws_iam_role_policy" "services" {
         Condition = { StringEquals = { "iam:PassedToService" = "emr-serverless.amazonaws.com" } }
       },
       {
-        Effect   = "Allow"
-        Action   = ["ssm:GetParameter"]
-        Resource = aws_ssm_parameter.dagster_snowflake_key.arn
+        Effect = "Allow"
+        Action = ["ssm:GetParameter"]
+        Resource = concat(
+          [aws_ssm_parameter.dagster_snowflake_key.arn],
+          [for p in values(aws_ssm_parameter.poller_key) : p.arn],
+        )
       },
       {
         # SecureString decrypt: default aws/ssm key only, via SSM only. All
@@ -168,6 +229,29 @@ locals {
         command: ["helsinki"]
         restart: always
         environment: *penv
+      # P3 batch 2 — keyed cities. API keys come from /opt/transit/secrets.env
+      # (WMATA_API_KEY / BAY511_API_TOKEN / SWISS_OTD_TOKEN / SWISS_OTD_SA_TOKEN),
+      # written from SSM by fetch_secrets.sh at every transit.service start, so
+      # `systemctl restart transit.service` picks up rotated keys. env_file only
+      # on the keyed pollers — key values never land in this compose file.
+      poller-dc:
+        image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
+        command: ["dc"]
+        restart: always
+        environment: *penv
+        env_file: [/opt/transit/secrets.env]
+      poller-sf:
+        image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
+        command: ["sf"]
+        restart: always
+        environment: *penv
+        env_file: [/opt/transit/secrets.env]
+      poller-zurich:
+        image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
+        command: ["zurich"]
+        restart: always
+        environment: *penv
+        env_file: [/opt/transit/secrets.env]
       postgres:
         image: postgres:16-alpine
         restart: always
@@ -202,15 +286,53 @@ locals {
           SNOWFLAKE_ROLE: ${var.snowflake_role}
           SNOWFLAKE_KEY_SSM_PARAM: ${aws_ssm_parameter.dagster_snowflake_key.name}
           SNOWFLAKE_PRIVATE_KEY_PATH: /home/appuser/.snowflake/dagster_key.p8
+        # the weekly static refresh downloads key-gated schedule zips (WMATA
+        # rail+bus need the api_key header), so Dagster reads the same
+        # secrets.env the keyed pollers do — same box, same instance role
+        env_file: &dsecrets [/opt/transit/secrets.env]
         ports: ["127.0.0.1:3000:3000"]  # loopback only; SSM port-forward reaches localhost
       dagster-daemon:
         image: ${local.registry}/${aws_ecr_repository.dagster.name}:latest
         command: ["dagster-daemon", "run", "-w", "/opt/dagster/app/workspace.yaml"]
         restart: always
         environment: *denv
+        env_file: *dsecrets
     volumes:
       pg-data:
   YAML
+
+  # P3 batch 2: SSM SecureStrings -> /opt/transit/secrets.env (0600), run as the
+  # first transit.service ExecStartPre so a restart re-fetches rotated values.
+  # SECURITY: values are captured into a shell variable and printf'd (a bash
+  # builtin) straight into the 0600 file — never echoed to stdout/journal, never
+  # passed to an external process's argv. Failures log the parameter NAME only.
+  # A missing/PLACEHOLDER param skips its var (that city's poller crash-loops on
+  # auth, visible in docker logs) but the file is always written, so compose and
+  # the keyless cities never stall on it.
+  fetch_secrets = <<-SCRIPT
+    #!/bin/bash
+    set -uo pipefail
+    umask 077
+    out=/opt/transit/secrets.env
+    tmp="$out.tmp"
+    : > "$tmp"
+    fetch() {
+      local v
+      if v=$(aws ssm get-parameter --region ${var.region} --name "$2" \
+               --with-decryption --query Parameter.Value --output text 2>/dev/null) \
+         && [ -n "$v" ] && [ "$v" != "PLACEHOLDER" ]; then
+        printf '%s=%s\n' "$1" "$v" >> "$tmp"
+      else
+        echo "WARN: $2 unavailable or placeholder; $1 not written" >&2
+      fi
+    }
+    fetch WMATA_API_KEY ${aws_ssm_parameter.poller_key["wmata"].name}
+    fetch BAY511_API_TOKEN ${aws_ssm_parameter.poller_key["bay511"].name}
+    fetch SWISS_OTD_TOKEN ${aws_ssm_parameter.poller_key["swiss_rt"].name}
+    fetch SWISS_OTD_SA_TOKEN ${aws_ssm_parameter.poller_key["swiss_sa"].name}
+    chmod 600 "$tmp"
+    mv "$tmp" "$out"
+  SCRIPT
 
   unit = <<-UNIT
     [Unit]
@@ -220,6 +342,7 @@ locals {
     [Service]
     Type=oneshot
     RemainAfterExit=yes
+    ExecStartPre=/bin/bash /opt/transit/fetch_secrets.sh
     ExecStartPre=/bin/bash -c 'aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${local.registry}'
     ExecStartPre=/usr/bin/docker compose -f /opt/transit/docker-compose.yml pull --quiet
     ExecStart=/usr/bin/docker compose -f /opt/transit/docker-compose.yml up -d
@@ -263,6 +386,8 @@ resource "aws_instance" "services" {
     chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
     mkdir -p /opt/transit
     echo '${base64encode(local.compose)}' | base64 -d > /opt/transit/docker-compose.yml
+    echo '${base64encode(local.fetch_secrets)}' | base64 -d > /opt/transit/fetch_secrets.sh
+    chmod 700 /opt/transit/fetch_secrets.sh
     echo '${base64encode(local.unit)}' | base64 -d > /etc/systemd/system/transit.service
     systemctl daemon-reload
     systemctl enable --now transit.service

@@ -20,35 +20,60 @@ from dagster_dbt import DbtCliResource
 
 from .lib import (
     LIVE_CITIES,
+    city_static_sources,
     iceberg_refresh_statements,
     latest_metadata_path,
     require_env,
     silver_tables,
-    static_gtfs_url,
 )
 from .resources import EmrResource, SnowflakeResource
 
 
-def stage_static_zip(city: str) -> str:
-    """Download <city>'s static GTFS and archive it to
-    raw/static/<city>/<version_id>/gtfs.zip; returns the version_id the EMR
-    parse job reads back. Runs on the box: EMR base Python has no requests,
-    and keeping agency egress here also keeps retries off the Spark bill."""
+def stage_static_zip(city: str) -> str | None:
+    """Download every static GTFS source for <city> and archive them to
+    raw/static/<city>/<version_id>/<source>/gtfs.zip; returns the version_id the
+    EMR parse job reads back, or None when the city has no static feed.
+
+    Runs on the box: EMR base Python has no requests, and keeping agency egress
+    here also keeps download retries off the Spark bill. Zips stream to a temp
+    file (the Swiss national zip is ~235 MB — never hold that in the daemon's
+    heap) and all of a city's sources share ONE version_id so the staging
+    models' max(gtfs_version_id) per city cannot hide one source's schedule.
+    """
+    import tempfile
+
     import boto3
     import requests
 
-    url = static_gtfs_url(city)
-    resp = requests.get(url, timeout=180)
-    resp.raise_for_status()
-    blob = resp.content
-    stamp = datetime.now(UTC).strftime("%Y%m%d")
-    version_id = f"{city}-{stamp}-{hashlib.sha256(blob).hexdigest()[:8]}"
+    from ingestion.city_static import resolve_auth
+
+    sources = city_static_sources(city)
+    if not sources:
+        return None
     s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-2"))
-    s3.put_object(
-        Bucket=require_env(os.environ, "RAW_BUCKET"),
-        Key=f"static/{city}/{version_id}/gtfs.zip",
-        Body=blob,
-    )
+    bucket = require_env(os.environ, "RAW_BUCKET")
+    digest = hashlib.sha256()
+    staged = []
+    try:
+        for source in sources:
+            headers, params = resolve_auth(source.auth)
+            with requests.get(
+                source.url, headers=headers or None, params=params or None,
+                timeout=300, stream=True,
+            ) as resp:
+                resp.raise_for_status()
+                tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+                with tmp:
+                    for chunk in resp.iter_content(chunk_size=1 << 20):
+                        digest.update(chunk)
+                        tmp.write(chunk)
+            staged.append((source.name, tmp.name))
+        version_id = f"{city}-{datetime.now(UTC):%Y%m%d}-{digest.hexdigest()[:8]}"
+        for name, path in staged:
+            s3.upload_file(path, bucket, f"static/{city}/{version_id}/{name}/gtfs.zip")
+    finally:
+        for _, path in staged:
+            os.unlink(path)
     return version_id
 
 
@@ -74,9 +99,16 @@ def gtfs_static(
     """
     run_ids: dict[str, str] = {}
     failed: dict[str, str] = {}
+    skipped: list[str] = []
     for city in LIVE_CITIES:
         try:
             version_id = stage_static_zip(city)
+            if version_id is None:
+                # RT-only for now (an upstream static URL is never guessed —
+                # CLAUDE.md). Skipping keeps the other cities' weekly refresh
+                # green; docs/01 §D tracks the open verification.
+                skipped.append(city)
+                continue
             run_ids[city] = emr.run_static(city, version_id)
         except Exception as e:  # noqa: BLE001 — keep the other cities refreshing
             failed[city] = repr(e)
@@ -103,6 +135,7 @@ def gtfs_static(
     metadata = {
         "emr_job_run_ids": MetadataValue.json(run_ids),
         "refreshed": ", ".join(refreshed) or "(none)",
+        "skipped_no_static": ", ".join(skipped) or "(none)",
     }
     if failed:
         raise Failure(

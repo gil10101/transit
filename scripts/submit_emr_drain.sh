@@ -15,7 +15,7 @@ KAFKA_IP=$(terraform -chdir=infra/envs/dev output -raw kafka_private_ip)
 SPARK_VER=3.5.4 # EMR 7.5 Spark line; kafka connector must match the major.minor
 # city -> IANA tz map for Spark (EMR python has no yaml). Keep in sync with
 # infra/modules/spark/main.tf locals.city_tzs and ingestion/config/cities/*.yaml.
-CITY_TZS="nyc=America/New_York,boston=America/New_York,toronto=America/Toronto,helsinki=Europe/Helsinki"
+CITY_TZS="nyc=America/New_York,boston=America/New_York,toronto=America/Toronto,helsinki=Europe/Helsinki,dc=America/New_York,sf=America/Los_Angeles,zurich=Europe/Zurich"
 KAFKA_JARS=(
   "org.apache.spark:spark-sql-kafka-0-10_2.12:${SPARK_VER}"
   "org.apache.spark:spark-token-provider-kafka-0-10_2.12:${SPARK_VER}"

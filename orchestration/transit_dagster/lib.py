@@ -20,11 +20,12 @@ from zoneinfo import ZoneInfo
 # Live cities (single source for the P3 fan-out across the Dagster assets)
 # ---------------------------------------------------------------------------
 
-# Cities with a live ingestion pipeline. P3 batch 1 adds the keyless GTFS-RT
-# trio (2026-08-23); batch 2 (chicago/dc/sf/zurich) appends here when keys land.
+# Cities with a live ingestion pipeline. P3 batch 1 added the keyless GTFS-RT
+# trio; batch 2 (2026-08-23) adds the keyed dc/sf/zurich. Chicago appends here
+# when its CTA GTFS-RT beta key activates.
 # The services-box compose (infra/modules/services/main.tf) runs one poller per
 # entry — keep the two lists in step.
-LIVE_CITIES = ("nyc", "boston", "toronto", "helsinki")
+LIVE_CITIES = ("nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich")
 
 # Centroid + tz per city, duplicated from the dim_city seed
 # (dbt/transit/seeds/dim_city.csv) on purpose: weather pulls must never wake
@@ -34,6 +35,9 @@ CITY_WEATHER = {
     "boston": {"lat": 42.3601, "lon": -71.0589, "tz": "America/New_York"},
     "toronto": {"lat": 43.6532, "lon": -79.3832, "tz": "America/Toronto"},
     "helsinki": {"lat": 60.1699, "lon": 24.9384, "tz": "Europe/Helsinki"},
+    "dc": {"lat": 38.9072, "lon": -77.0369, "tz": "America/New_York"},
+    "sf": {"lat": 37.7749, "lon": -122.4194, "tz": "America/Los_Angeles"},
+    "zurich": {"lat": 47.3769, "lon": 8.5417, "tz": "Europe/Zurich"},
 }
 
 
@@ -56,18 +60,22 @@ def cities_config_dir(config_dir: Path | None = None) -> Path:
     )
 
 
-def static_gtfs_url(city: str, config_dir: Path | None = None) -> str:
-    """static_gtfs URL from <city>.yaml — single source for feed URLs stays the
-    city configs (CLAUDE.md: never invent a URL). Raises when absent: a live
-    city without a static feed cannot be scheduled-refreshed."""
+def city_static_sources(city: str, config_dir: Path | None = None):
+    """Static GTFS sources for <city> from its yaml, normalized by
+    ingestion.city_static (a URL string, or {name: {url, auth}} for agencies
+    that split the schedule across zips or gate it behind a key).
+
+    Feed URLs live in the city configs and nowhere else (CLAUDE.md: never invent
+    a URL). Returns [] when the city has no static feed — the weekly asset skips
+    it rather than failing the other cities' refresh.
+    """
     import yaml  # lazy, as above
+
+    from ingestion.city_static import static_sources
 
     path = cities_config_dir(config_dir) / f"{city}.yaml"
     cfg = yaml.safe_load(path.read_text()) or {}
-    url = cfg.get("static_gtfs")
-    if not url:
-        raise RuntimeError(f"{path} has no static_gtfs URL")
-    return url
+    return static_sources(cfg.get("static_gtfs"))
 
 
 def city_feed_endpoints(

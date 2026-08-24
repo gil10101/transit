@@ -76,12 +76,20 @@ def audit_feed_message(msg) -> dict:
             sev += a.HasField("severity_level")
             period += len(a.active_period) > 0
     return {
-        "TU": tu, "trip_id": pct(tid, tu), "start_date": pct(sdate, tu),
+        "TU": tu,
+        "trip_id": pct(tid, tu),
+        "start_date": pct(sdate, tu),
         "sched_rel": dict(rel) or "—",
-        "STU": stu, "arr.delay": pct(delay, stu), "arr.time": pct(atime, stu),
+        "STU": stu,
+        "arr.delay": pct(delay, stu),
+        "arr.time": pct(atime, stu),
         "stop_seq": pct(seq, stu),
-        "VP": vp, "pos": pct(latlon, vp), "occupancy": pct(occ, vp),
-        "alerts": al, "effect": pct(effect, al), "severity": pct(sev, al),
+        "VP": vp,
+        "pos": pct(latlon, vp),
+        "occupancy": pct(occ, vp),
+        "alerts": al,
+        "effect": pct(effect, al),
+        "severity": pct(sev, al),
         "active_period": pct(period, al),
     }
 
@@ -118,9 +126,7 @@ def hop_raw() -> None:
             continue
         prefix = prefixes[0]
         newest = None
-        for page in s3.get_paginator("list_objects_v2").paginate(
-            Bucket=RAW_BUCKET, Prefix=prefix
-        ):
+        for page in s3.get_paginator("list_objects_v2").paginate(Bucket=RAW_BUCKET, Prefix=prefix):
             for obj in page.get("Contents", []):
                 if newest is None or obj["LastModified"] > newest["LastModified"]:
                     newest = obj
@@ -166,10 +172,11 @@ def q(cur, sql: str):
 def hop_silver(cur) -> None:
     print("\n== SILVER (predictions) — every metric's raw material ==")
     print(
-        "city | rows(2d) | fresh_utc | null trip_uid/svc_date/route/stop/seq"
-        " | arr_pred | dup_grain"
+        "city | rows(2d) | fresh_utc | null trip_uid/svc_date/route/stop/seq | arr_pred | dup_grain"
     )
-    for row in q(cur, """
+    for row in q(
+        cur,
+        """
         select city, count(*),
                max(fetched_at),
                sum(iff(trip_uid is null,1,0)), sum(iff(service_date is null,1,0)),
@@ -182,7 +189,8 @@ def hop_silver(cur) -> None:
         from silver.stop_time_predictions
         where service_date >= dateadd(day,-2,current_date)
         group by city order by city
-    """):
+    """,
+    ):
         c, n, fresh, *nulls, dup = row
         key_nulls = "/".join(pct(x, n) for x in nulls[:5])
         print(f"{c} | {n:,} | {fresh:%m-%d %H:%M} | {key_nulls} | null {pct(nulls[5], n)} | {dup}")
@@ -190,11 +198,17 @@ def hop_silver(cur) -> None:
 
 def hop_static(cur) -> None:
     print("\n== STATIC (schedule) — matcher + completeness + mode split need this ==")
-    has_tp = q(cur, """
+    has_tp = (
+        q(
+            cur,
+            """
         select count(*) from transit.information_schema.columns
         where table_schema='SILVER' and table_name='GTFS_STATIC_STOP_TIMES'
           and column_name='TIMEPOINT'
-    """)[0][0] > 0
+    """,
+        )[0][0]
+        > 0
+    )
     tp_expr = (
         "(select 100*avg(iff(s.timepoint is not null,1,0))"
         " from silver.gtfs_static_stop_times s"
@@ -205,7 +219,9 @@ def hop_static(cur) -> None:
     if not has_tp:
         print("timepoint column ABSENT — pre-canonical schema; reparse not landed yet")
     print("city | version | trips | stop_times | timepoint% | routes | svc_ids_active_today")
-    for row in q(cur, f"""
+    for row in q(
+        cur,
+        f"""
         with v as (
             select city, max(gtfs_version_id) vid
             from silver.gtfs_static_trips group by 1
@@ -223,7 +239,8 @@ def hop_static(cur) -> None:
                    and to_date(c.start_date,'YYYYMMDD') <= current_date
                    and to_date(c.end_date,'YYYYMMDD') >= current_date)
         from v order by 1
-    """):
+    """,
+    ):
         c, vid, trips, st, tp, routes, svc = row
         tp_s = "n/a" if tp == -1 else f"{tp:.0f}%"
         print(f"{c} | {vid} | {trips:,} | {st:,} | {tp_s} | {routes} | {svc}")
@@ -235,7 +252,9 @@ def hop_gold(cur) -> None:
         "fct_stop_events by city (2d): rows | sched-matched% | conf dist"
         " | delay p50/p95 s | on_time% | early_dep"
     )
-    for row in q(cur, """
+    for row in q(
+        cur,
+        """
         select city_key, count(*),
                100*avg(iff(sched_arr_ts_utc is not null,1,0)),
                listagg(distinct match_confidence, ','),
@@ -245,26 +264,33 @@ def hop_gold(cur) -> None:
         from gold.fct_stop_events
         where service_date >= dateadd(day,-2,current_date)
         group by 1 order by 1
-    """):
+    """,
+    ):
         c, n, m, conf, p50, p95, otp, early = row
         print(f"{c} | {n:,} | {m:.0f}% | [{conf}] | {p50}/{p95} | {otp:.1f}% | {early}")
     print("reliability daily (yesterday): city | routes | avg_otp% | avg_ewt_s | bunching%")
-    for row in q(cur, """
+    for row in q(
+        cur,
+        """
         select city_key, count(distinct route_id), round(100*avg(otp_pct),1),
                round(avg(ewt_sec)), round(100*avg(bunching_pct),1)
         from gold.fct_route_reliability_daily
         where service_date = dateadd(day,-1,current_date)
         group by 1 order by 1
-    """):
+    """,
+    ):
         print(" | ".join(str(x) for x in row))
     print("service delivery (yesterday): city | scheduled | observed | completeness%")
-    for row in q(cur, """
+    for row in q(
+        cur,
+        """
         select city_key, sum(trips_scheduled), sum(trips_observed),
                round(100*avg(completeness_pct),1)
         from gold.fct_service_delivery_daily
         where service_date = dateadd(day,-1,current_date)
         group by 1 order by 1
-    """):
+    """,
+    ):
         print(" | ".join(str(x) for x in row))
 
 

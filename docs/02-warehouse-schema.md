@@ -23,13 +23,14 @@ Star schema. All timestamps stored as `TIMESTAMP_NTZ` with explicit `_utc` / `_l
 ### dim_city (seed-driven)
 | Column | Type | Notes |
 |---|---|---|
-| city_key | varchar PK | 'nyc','chicago','dc','boston','sfbay','toronto','zurich','helsinki','tokyo' |
+| city_key | varchar PK | 'nyc','chicago','dc','boston','sf','toronto','zurich','helsinki','tokyo' — **[rev P3b]** SF Bay's key is `sf` (was sketched 'sfbay'; ingestion yamls, silver, and the seed all use 'sf') |
 | city_name, country | varchar | |
 | iana_tz | varchar | e.g. 'Asia/Tokyo' — drives every `_local` derivation |
 | population | int | context/per-capita |
 | peak_am_start, peak_am_end, peak_pm_start, peak_pm_end | time | per-city override (Tokyo skews) |
 | modes_covered | array | **[rev]** honest coverage: toronto = ['bus','tram'] (subway alerts-only); tokyo = ['metro','tram','bus'] |
-| rt_delay_source | varchar | **[rev]** 'computed' \| 'feed_delay' \| 'odpt_stated' — documents where delay comes from per city |
+| rt_delay_source | varchar | **[rev P3b]** 'computed' \| 'feed' \| 'mixed' \| 'odpt_stated'(P4) — documents where delay comes from per city ('feed' is the implemented spelling of the earlier 'feed_delay' sketch; 'mixed' = per-operator, sf: SF/SM/BA/GG feed, rest computed — fixtures 2026-08-23) |
+| crowding_usable | boolean | **[rev P3b]** occupancy_status from the city's VPs is a real crowding signal (P6 crowding metric input): boston/toronto/sf true; nyc/helsinki/dc/zurich false (dc present-but-noninformative, zurich has no VP product) |
 | attribution_text | varchar | TTC/ODPT/511/Swiss license notices |
 
 ### dim_agency

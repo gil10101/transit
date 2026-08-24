@@ -120,7 +120,7 @@ locals {
   # P3: city -> IANA tz map injected into Spark (EMR python has no yaml, so
   # session.py can't read the city configs — quirk 3 in docs/operations.md).
   # Keep in sync with scripts/submit_emr_drain.sh CITY_TZS and the city yamls.
-  city_tzs           = "nyc=America/New_York,boston=America/New_York,toronto=America/Toronto,helsinki=Europe/Helsinki"
+  city_tzs           = "nyc=America/New_York,boston=America/New_York,toronto=America/Toronto,helsinki=Europe/Helsinki,dc=America/New_York,sf=America/Los_Angeles,zurich=Europe/Zurich"
   entry_point        = "s3://${var.artifacts_bucket}/code/entry.py"
   static_entry_point = "s3://${var.artifacts_bucket}/code/gtfs_static_parse.py"
   log_uri            = "s3://${var.artifacts_bucket}/emr-logs/"

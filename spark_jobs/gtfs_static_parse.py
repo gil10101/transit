@@ -138,8 +138,8 @@ def static_prefix(city: str, version_id: str) -> str:
     return f"static/{city}/{version_id}"
 
 
-def zip_key(city: str, version_id: str) -> str:
-    return f"{static_prefix(city, version_id)}/gtfs.zip"
+def zip_key(city: str, version_id: str, source: str = "default") -> str:
+    return f"{static_prefix(city, version_id)}/{source}/gtfs.zip"
 
 
 def raw_base_uri() -> str:
@@ -149,25 +149,45 @@ def raw_base_uri() -> str:
     return f"{scheme}://{os.environ.get('RAW_BUCKET', 'raw')}"
 
 
-def download(url: str) -> bytes:
+def download(url: str, auth: dict | None = None) -> bytes:
     import requests  # local-dev only; absent on EMR Serverless base Python
 
-    resp = requests.get(url, timeout=120)
+    from ingestion.city_static import resolve_auth
+
+    headers, params = resolve_auth(auth or {})
+    resp = requests.get(url, headers=headers or None, params=params or None, timeout=180)
     resp.raise_for_status()
     return resp.content
 
 
-def archive_zip(city: str, version_id: str, blob: bytes) -> None:
+def archive_zip(city: str, version_id: str, blob: bytes, source: str = "default") -> None:
     _s3().put_object(
         Bucket=os.environ.get("RAW_BUCKET", "raw"),
-        Key=zip_key(city, version_id),
+        Key=zip_key(city, version_id, source),
         Body=blob,
     )
 
 
-def fetch_archived(city: str, version_id: str) -> bytes:
+def archived_sources(city: str, version_id: str) -> list[str]:
+    """Source names staged under this version, from the raw layout the Dagster
+    asset (or local main) wrote: static/<city>/<version>/<source>/gtfs.zip."""
+    bucket = os.environ.get("RAW_BUCKET", "raw")
+    prefix = f"{static_prefix(city, version_id)}/"
+    pages = _s3().get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix)
+    names = {
+        key[len(prefix) :].split("/")[0]
+        for page in pages
+        for key in (obj["Key"] for obj in page.get("Contents", []))
+        if key.endswith("/gtfs.zip")
+    }
+    if not names:
+        raise SystemExit(f"no staged zips under s3://{bucket}/{prefix}")
+    return sorted(names)
+
+
+def fetch_archived(city: str, version_id: str, source: str = "default") -> bytes:
     obj = _s3().get_object(
-        Bucket=os.environ.get("RAW_BUCKET", "raw"), Key=zip_key(city, version_id)
+        Bucket=os.environ.get("RAW_BUCKET", "raw"), Key=zip_key(city, version_id, source)
     )
     return obj["Body"].read()
 
@@ -189,40 +209,55 @@ def write_table(spark: SparkSession, df: DataFrame, name: str) -> None:
         writer.create()
 
 
-def stage_texts(city: str, version_id: str, extract_dir: Path) -> None:
-    """Upload the canonical .txt members to raw. Executors run in separate
-    containers and cannot see the driver's tempdir — reading
-    file:/tmp/... fails on EMR with SparkFileNotFoundException."""
+def stage_texts(city: str, version_id: str, source: str, extract_dir: Path) -> list[str]:
+    """Upload one source's canonical .txt members to raw; returns the table
+    names present. Executors run in separate containers and cannot see the
+    driver's tempdir — reading file:/tmp/... fails on EMR with
+    SparkFileNotFoundException."""
     s3 = _s3()
     bucket = os.environ.get("RAW_BUCKET", "raw")
+    present = []
     for name in CANONICAL:
         src = extract_dir / f"{name}.txt"
         if src.exists():
-            s3.upload_file(str(src), bucket, f"{static_prefix(city, version_id)}/txt/{name}.txt")
+            key = f"{static_prefix(city, version_id)}/{source}/txt/{name}.txt"
+            s3.upload_file(str(src), bucket, key)
+            present.append(name)
+    return present
 
 
-def parse(spark: SparkSession, city: str, version_id: str, extract_dir: Path) -> None:
-    base = f"{raw_base_uri()}/{static_prefix(city, version_id)}/txt"
+def parse(spark: SparkSession, city: str, version_id: str, tables: dict[str, list[str]]) -> None:
+    """Write one Iceberg partition per table from every source that carries it.
+
+    `tables` maps table name -> source names holding it. Sources are conformed
+    individually before union: WMATA's rail and bus zips (like most multi-feed
+    agencies) do not agree on column order, and a positional union would
+    silently transpose columns.
+    """
+    base = f"{raw_base_uri()}/{static_prefix(city, version_id)}"
     for name, schema in CANONICAL.items():
-        src = extract_dir / f"{name}.txt"
-        if not src.exists():
-            print(f"{name}.txt absent in feed; skipped")
+        sources = tables.get(name) or []
+        if not sources:
+            print(f"{name}.txt absent in every source; skipped")
             continue
-        df = conform(spark.read.csv(f"{base}/{name}.txt", header=True), schema)
+        df = None
+        for source in sources:
+            part = conform(spark.read.csv(f"{base}/{source}/txt/{name}.txt", header=True), schema)
+            df = part if df is None else df.unionByName(part)
         if name == "stop_times":
             df = df.withColumn("arrival_seconds", gtfs_seconds("arrival_time")).withColumn(
                 "departure_seconds", gtfs_seconds("departure_time")
             )
         df = df.withColumn("city", F.lit(city)).withColumn("gtfs_version_id", F.lit(version_id))
         write_table(spark, df, name)
-        print(f"gtfs_static_{name}: {df.count()} rows @ {version_id}")
+        print(f"gtfs_static_{name}: {df.count()} rows from {sources} @ {version_id}")
 
 
 def main() -> None:
     city = sys.argv[1] if len(sys.argv) > 1 else "nyc"
     version_id = sys.argv[2] if len(sys.argv) > 2 else None
-    if version_id:  # EMR mode: the Dagster asset staged the zip already
-        blob = fetch_archived(city, version_id)
+    if version_id:  # EMR mode: the Dagster asset staged every zip already
+        sources = archived_sources(city, version_id)
     else:  # local dev: download + version + archive here
         from dotenv import load_dotenv
 
@@ -230,18 +265,28 @@ def main() -> None:
 
         load_dotenv()
         cfg = load_city_config(city)
-        if not cfg.static_gtfs:
+        if not cfg.static_sources:
             raise SystemExit(f"{city}.yaml has no static_gtfs URL")
-        blob = download(cfg.static_gtfs)
-        sha8 = hashlib.sha256(blob).hexdigest()[:8]
-        version_id = f"{city}-{datetime.now(UTC):%Y%m%d}-{sha8}"
-        archive_zip(city, version_id, blob)
+        digest = hashlib.sha256()
+        blobs = {}
+        for source in cfg.static_sources:
+            blobs[source.name] = download(source.url, source.auth)
+            digest.update(blobs[source.name])
+        version_id = f"{city}-{datetime.now(UTC):%Y%m%d}-{digest.hexdigest()[:8]}"
+        for name, blob in blobs.items():
+            archive_zip(city, version_id, blob, name)
+        sources = sorted(blobs)
     spark = build_spark(f"gtfs-static-{city}")
     spark.sparkContext.setLogLevel("WARN")
-    with tempfile.TemporaryDirectory() as tmp:
-        zipfile.ZipFile(io.BytesIO(blob)).extractall(tmp)
-        stage_texts(city, version_id, Path(tmp))
-        parse(spark, city, version_id, Path(tmp))
+    tables: dict[str, list[str]] = {}
+    for source in sources:
+        blob = fetch_archived(city, version_id, source)
+        with tempfile.TemporaryDirectory() as tmp:
+            zipfile.ZipFile(io.BytesIO(blob)).extractall(tmp)
+            for name in stage_texts(city, version_id, source, Path(tmp)):
+                tables.setdefault(name, []).append(source)
+        del blob
+    parse(spark, city, version_id, tables)
     spark.stop()
 
 

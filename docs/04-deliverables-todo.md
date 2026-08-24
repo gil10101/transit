@@ -9,9 +9,9 @@
 | Toronto TTC (surface) | ✅ WORKS, no key | 200 OK, 1,876 TU / 1,458 VP; 59 ADDED trips observed → handled in schema |
 | Helsinki HSL | ✅ WORKS, no key | 200 OK, 942 TU + 21 alerts; empty trip_id + populated delay field confirmed → trip_uid rule covers it |
 | Chicago CTA | ✅ endpoint live, key required | keyless request returns HTML, not a feed → register (free) |
-| DC WMATA | ✅ exists behind auth | 401 as expected |
-| SF Bay 511 | ✅ exists behind auth | 401 as expected; 60 req/hr default limit |
-| Zurich opentransportdata.swiss | ✅ exists behind auth, correct endpoint = `/la/gtfs-rt` | 401; legacy `gtfsrt2020` is dead (404) |
+| DC WMATA | ✅ WORKS with key (verified 2026-08-23) | 200, rail TU ~94KB decodes; 6 endpoints × 30s fits 50k/day |
+| SF Bay 511 | ✅ WORKS with token (verified 2026-08-23) | 200, ~1.5MB; 60 req/hr TOTAL until increase → poll 200s (docs/01 §B) |
+| Zurich opentransportdata.swiss | ✅ WORKS with token (verified 2026-08-23), endpoints `/la/gtfs-rt` + `/la/gtfs-sa` | 200, ~6MB national feed; RAW Authorization header (no Bearer), follow redirects; separate SA token; legacy `gtfsrt2020` dead (404) |
 | Tokyo ODPT (odpt:Train + ToeiBus GTFS-RT) | ✅ exists behind auth | 403 both; **rail GTFS-RT = alerts only → odpt:Train JSON is the primary rail source (plan corrected)** |
 | Open-Meteo forecast + historical archive | ✅ WORKS, no key | 200 both — multi-year weather backfill confirmed available |
 
@@ -20,13 +20,13 @@
 **Stack capacity: confirmed.** Total ingest <0.5 MB/s across all nine cities (measured payload sizes), ~2–4M finalized fact rows/day. Single-broker Kafka, EMR Serverless micro-batches, and Snowflake XS all have ≥10× headroom. Only sizing rule: filter the Zurich national feed to the Zurich allow-list at the silver step.
 
 ## Keys & registrations to obtain (all free — do in week 1)
-- [ ] CTA Developer Center → GTFS-RT key
-- [ ] WMATA developer.wmata.com → api key (default 50k/day is enough)
-- [ ] 511.org token request form; reply asking for rate-limit increase (else poll at 90–120s)
-- [ ] opentransportdata.swiss account → token
+- [x] CTA Developer Center → GTFS-RT key — key issued (in `.env`) but **beta activation pending**; chicago stays out of LIVE_CITIES until it works
+- [x] WMATA developer.wmata.com → api key (default 50k/day is enough) — in `.env`, verified 2026-08-23
+- [x] 511.org token request form — in `.env`, verified 2026-08-23; **rate-limit increase still pending** → poll at 200s (docs/01 §B rev), not 90–120s
+- [x] opentransportdata.swiss account → **two** tokens, one per API product (gtfs-rt + gtfs-sa) — in `.env`, verified 2026-08-23; irreplaceable if revoked
 - [ ] ODPT developer site → consumerKey (permanent center, not the Challenge)
 - [ ] MBTA V3 key (optional, GTFS-RT is keyless)
-- [ ] AWS account guardrails: budget alarm at $50, IAM user for Terraform
+- [x] AWS account guardrails: budget alarm, IAM user for Terraform (P2)
 
 ## Deliverables (definition of done per artifact)
 1. **Repo** — layout per plan §10; README with architecture diagram, demo GIF, findings, cost note, ATTRIBUTION.md (TTC/ODPT/511/Swiss).
@@ -42,8 +42,10 @@
 **P0 Scaffold (wk 1)** — [ ] repo + compose stack (Redpanda, MinIO, Dagster, dbt-duckdb) · [ ] Terraform backend · [ ] CI skeleton · [ ] all keys above. **`docker compose up` gives a working local stack.**
 **P1 NYC vertical slice (wk 1–2)** — [ ] MTA poller → Kafka · [ ] Spark bronze+silver · [ ] NYC trip matcher · [ ] `int_stop_events_finalized` v1 · [ ] OTP-by-hour chart. **One day of NYC data produces believable delay numbers (spot-check 10 trips by hand against a live tracker).**
 **P2 Cloud deploy (wk 3)** — [ ] terraform apply prod · [ ] NYC flowing e2e in cloud. **Fresh clone → running pipeline in <1 hr.**
-**P3 GTFS-RT fan-out (wk 3–4)** — [x] Boston · [x] Toronto (+ADDED handling) · [x] Helsinki (trip_uid path) · [ ] Chicago · [ ] DC · [ ] SF (RG cadence) · [ ] Zurich (allow-list). **Each city = yaml + ≤1 quirk PR; completeness ≥85% after 48h.**
+**P3 GTFS-RT fan-out (wk 3–4)** — [x] Boston · [x] Toronto (+ADDED handling) · [x] Helsinki (trip_uid path) · [ ] Chicago · [x] DC · [x] SF (RG cadence) · [~] Zurich (feed + matcher built; **allow-list NOT built** — see below). **Each city = yaml + ≤1 quirk PR; completeness ≥85% after 48h.**
 > [rev P3 batch 1, 2026-08-23] Boston/Toronto/Helsinki BUILT (yaml+fixtures, dbt generic matcher, 4-city TP_CITY_TZS/pollers/Dagster fan-out) but PENDING the 48h completeness ≥85% acceptance — rollout checklist in docs/operations.md "P3 batch 1 rollout"; re-verify completeness there before calling the cities done. Batch 2: DC/SF/Zurich keys verified live in `.env`; Chicago pending GTFS-RT beta key activation.
+> [rev P3 batch 2b, integrator 2026-08-24] **Zurich's poller is deliberately NOT deployed with DC and SF.** The `/la/gtfs-rt` feed is national, and CLAUDE.md's locked decision filters it to a Zurich route allow-list in silver — that allow-list needs the 235 MB national static parsed first, and `spark_jobs/silver_normalize.py` has no filter yet. Deploying Zurich before both land would file every Swiss operator under `city='zurich'` (wrong answers to the reliability question) and archive ~0.5–1 TB/month of mostly-irrelevant raw protobuf against the <$100/mo budget. Order: static refresh (Zurich zip parses) → generate `zurich_route_allowlist` from the parsed stops/routes → silver filter → deploy the Zurich poller. DC + SF ship now.
+> [rev P3 batch 2, 2026-08-23] DC/SF/Zurich BUILT (yaml+fixtures+keyed auth, 7-city TP_CITY_TZS/pollers/Dagster fan-out, keys as SSM SecureStrings via write-only terraform args) but PENDING the 48h completeness ≥85% acceptance — rollout checklist in docs/operations.md "P3 batch 2 rollout" (deploy images → export TF_VARs → apply → re-land user_data). SF polls at 200s until 511 grants the rate increase. Chicago = batch 2b on key activation.
 > [rev P3 batch 1] TTC quirks beyond ADDED: RT trip_ids share no namespace with the CKAN static (matcher falls back to route+origin-time, confidence 0.7); feed sets start_date on 0 trips (service-date fallback cutover −4h, see docs/01 §F); static omits `timepoint`, so the early-departure bus rule is live for MBTA/HSL but structurally false for TTC (bus-defaults-none, §D).
 **P4 Tokyo (wk 5)** — [ ] ODPT adapter (odpt:Train + TrainInformation) · [ ] URN↔GTFS mapping + tests · [ ] ToeiBus via generic adapter · [ ] MLIT seed. **Ginza-line delays match Metro's own status page during a disruption.**
 **P5 Metrics layer (wk 5–6)** — [x] headways + EWT · [x] int_service_frequency · [x] activity, alerts, weather (backfill 2yr + hourly) · [x] completeness · [x] all dbt tests/docs · [x] Dagster partitions/sensors/checks. **`dbt build` green; a killed feed shows up in completeness within an hour.**

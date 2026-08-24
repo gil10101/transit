@@ -8,7 +8,7 @@ The laptop is optional; everything below runs in the cloud.
 
 | Piece | Where | Identity |
 |---|---|---|
-| Pollers (nyc/boston/toronto/helsinki, 30s each, one container per city) + Dagster + postgres | EC2 t4g.medium, docker compose via systemd `transit.service` | instance `i-0f0d6e32cb15ce471` |
+| Pollers (nyc/boston/toronto/helsinki/dc/zurich at 30s, sf at 200s — 511's 60 req/hr cap; one container per city) + Dagster + postgres | EC2 t4g.medium, docker compose via systemd `transit.service` | instance `i-0f0d6e32cb15ce471` |
 | Kafka (KRaft single broker) | EC2 t4g.small, docker `apache/kafka:3.8.0` | private `10.20.0.34:9092` |
 | Bronze/silver Spark drains | EMR Serverless app `00g86oj9urdank0d`; EventBridge schedule `transit-pulse-emr-drain` (15 min) -> Lambda `transit-pulse-emr-drain` -> StartJobRun (`availableNow` trigger, exits when caught up); failures land in SQS DLQ `transit-pulse-emr-drain-dlq` | exec role `transit-pulse-emr-exec` |
 | Lake (Iceberg, Hadoop catalog) | `s3://transit-pulse-622221238588-lakehouse/iceberg/{bronze,silver}` | version-hint.text per table |
@@ -27,12 +27,17 @@ The laptop is optional; everything below runs in the cloud.
 - Snowflake (P5): service user `DAGSTER_SVC` (TYPE=SERVICE, role `TRANSIT_PIPELINE`,
   `TIMEZONE='UTC'`, warehouse `TRANSFORM_XS`) — used only by Dagster on the services box;
   private key lives in SSM, never on the laptop (see "Dagster (P5)" below)
+- Poller API keys (P3 batch 2): laptop `.env` holds `WMATA_API_KEY`, `BAY511_API_TOKEN`,
+  `SWISS_OTD_TOKEN`, `SWISS_OTD_SA_TOKEN` (+ `CTA_API_KEY`, beta activation pending); the box
+  reads them from SSM SecureStrings `/transit-pulse/keys/{wmata,bay511,swiss_rt,swiss_sa}`
+  (see "Poller API keys" below). **The two Swiss tokens cannot be re-issued if revoked** —
+  their only homes are `.env` (local) and SSM (cloud). Never print/echo/commit a key value.
 
 ## Health checks
 
 ```sh
 # poller alive + polling (per city: transit-poller-1 is nyc; the P3 cities are
-# transit-poller-boston-1 / transit-poller-toronto-1 / transit-poller-helsinki-1)
+# transit-poller-{boston,toronto,helsinki,dc,sf,zurich}-1)
 aws ssm send-command --instance-ids i-0f0d6e32cb15ce471 --document-name AWS-RunShellScript \
   --parameters 'commands=["docker logs transit-poller-1 2>&1 | tail -3"]' ...  # then get-command-invocation
 
@@ -74,9 +79,9 @@ cadence (drains are idempotent `availableNow` catch-ups).
 | Schedule (UTC) | What runs |
 |---|---|
 | Every 2h at :05 | `emr_drain` → `snowflake_iceberg_refresh` (re-pin metadata) → dbt build (gold) → warehouse asset checks (gold row growth during service hours; silver `max(fetched_at)` < 3h) |
-| Every 15 min (:10 :25 :40 :55) | `raw_feed_freshness` — boto3-only S3 listing of every live city's endpoint prefixes (config-driven from the `feed_groups` keys in `ingestion/config/cities/*.yaml`: nyc 8, boston 3, toronto 3, helsinki 2 = 16); fails if any endpoint's newest object is older than 40 min (worst-case detection ~55 min after a kill). **This is the killed-feed tripwire**; it never wakes the warehouse |
-| Weekly Sun 09:00 (off the 2h :05 grid) | `gtfs_static` — EMR parse of each live city's static zip (sequential, one at a time on the 4 vCPU app; a failing city is skipped and reported, the rest still refresh) → refresh `gtfs_static_*` iceberg tables → dbt build --select "stg_gtfs__*+". Typically done well before the 10:05 chain; worst case (per-city 25-min timeouts) spills past it — that chain run fails on capacity and self-heals at its next 2h tick |
-| Hourly at :20 | `weather_hourly` — Open-Meteo forecast MERGE into `TRANSIT.SILVER.WEATHER_HOURLY` (all live cities: nyc, boston, toronto, helsinki) |
+| Every 15 min (:10 :25 :40 :55) | `raw_feed_freshness` — boto3-only S3 listing of every live city's endpoint prefixes (config-driven from the `feed_groups` keys in `ingestion/config/cities/*.yaml`: nyc 8, boston 3, toronto 3, helsinki 2, dc 6, sf 3, zurich 2 = 27); fails if any endpoint's newest object is older than 40 min (worst-case detection ~55 min after a kill; sf's 200s cadence still clears the 40-min bar by 12×). **This is the killed-feed tripwire**; it never wakes the warehouse |
+| Weekly Sun 09:00 (off the 2h :05 grid) | `gtfs_static` — EMR parse of each live city's static zip (7 cities since batch 2; sequential, one at a time on the 4 vCPU app; a failing city is skipped and reported, the rest still refresh) → refresh `gtfs_static_*` iceberg tables → dbt build --select "stg_gtfs__*+". Typically done well before the 10:05 chain; worst case (per-city 25-min timeouts) spills past it — that chain run fails on capacity and self-heals at its next 2h tick. Zurich's zip is the Swiss NATIONAL static (235 MB, largest of the set) — watch its first weekly run against the 25-min per-city EMR timeout. **Known-red until integrator work lands**: dc (WMATA static needs GET + `api_key` header — downloader has no auth support) and sf (no verified static URL yet) fail per-run as skipped-and-reported; docs/01 §D "OPEN" items |
+| Hourly at :20 | `weather_hourly` — Open-Meteo forecast MERGE into `TRANSIT.SILVER.WEATHER_HOURLY` (all live cities: nyc, boston, toronto, helsinki, dc, sf, zurich) |
 | Manual only | `weather_backfill_2yr` (`make p5-backfill-weather`) — Open-Meteo archive API, chunked by year |
 
 - **UI**: not internet-exposed; port-forward via SSM (row above), then http://localhost:3070.
@@ -132,6 +137,77 @@ in this order:
 The Dagster asset `gtfs_static_nyc` was renamed `gtfs_static` (multi-city); its
 materialization history starts fresh under the new key.
 
+## Poller API keys (P3 batch 2)
+
+How a key reaches a poller container — no key value ever touches git, terraform
+state, images, or logs:
+
+1. Laptop `.env` (gitignored) holds the values. At apply time the operator exports
+   them as `TF_VAR_*`; terraform writes them to SSM SecureStrings
+   `/transit-pulse/keys/{wmata,bay511,swiss_rt,swiss_sa}` through **write-only args**
+   (`value_wo`, same pattern as the dagster Snowflake key) so they never enter state.
+   Without the `TF_VAR`s a plan/apply still converges — the parameter is seeded
+   `PLACEHOLDER` and the value is set out-of-band (step below).
+2. On the box, `transit.service` runs `/opt/transit/fetch_secrets.sh` as its first
+   `ExecStartPre`: SSM `get-parameter --with-decryption` →
+   `/opt/transit/secrets.env` (root, chmod 600). A missing/PLACEHOLDER parameter is
+   skipped with a WARN naming the parameter only — keyless cities never stall on it.
+3. The keyed pollers (`poller-dc`/`poller-sf`/`poller-zurich`) load the file via
+   compose `env_file`; env names: `WMATA_API_KEY`, `BAY511_API_TOKEN`,
+   `SWISS_OTD_TOKEN`, `SWISS_OTD_SA_TOKEN` (Swiss = one token per API product:
+   gtfs-rt vs gtfs-sa).
+
+**Rotate (or set) a key** — reference values only via `$VAR` expansion, NEVER echo:
+
+```sh
+set -a; source .env; set +a          # loads values into the shell, prints nothing
+aws ssm put-parameter --name /transit-pulse/keys/wmata --type SecureString \
+  --value "$WMATA_API_KEY" --overwrite       # bay511 / swiss_rt / swiss_sa likewise
+aws ssm send-command --instance-ids i-0f0d6e32cb15ce471 --document-name AWS-RunShellScript \
+  --parameters 'commands=["systemctl restart transit.service"]'   # re-fetch + restart
+```
+
+`value_wo` never reverts an out-of-band value (the provider doesn't read it back);
+a terraform-side push requires bumping `value_wo_version` in
+`infra/modules/services/main.tf` — the put-parameter path above is the normal one.
+**The two Swiss tokens are irreplaceable** (opentransportdata.swiss does not re-issue):
+"rotation" for them means only re-putting the same value if the parameter is lost.
+
+## P3 batch 2 rollout (dc / sf / zurich — built 2026-08-23)
+
+Keyed cities. Same shape as batch 1, plus the secrets step. Nothing is live until
+the operator runs, in this order:
+
+1. `make deploy-images` — ingestion image picks up the dc/sf/zurich yamls + keyed-auth
+   adapter support; dagster image bakes `ingestion/config` (27-endpoint tripwire) and
+   the 7-city fan-out. Push BEFORE applying or the new pollers crash-loop on the old image.
+2. Export the key `TF_VAR`s from `.env` (values stay out of scrollback):
+   ```sh
+   set -a; source .env; set +a
+   export TF_VAR_wmata_api_key="$WMATA_API_KEY" TF_VAR_bay511_api_token="$BAY511_API_TOKEN" \
+          TF_VAR_swiss_otd_token="$SWISS_OTD_TOKEN" TF_VAR_swiss_otd_sa_token="$SWISS_OTD_SA_TOKEN"
+   ```
+   then `make infra-plan` → review → `make infra-apply`. This creates the 4 SSM
+   SecureStrings (real values, write-only), grants the instance role read on them,
+   extends `TP_CITY_TZS` to 7 cities in the drain Lambda's `SPARK_PARAMS`/services env,
+   and adds `poller-dc`/`poller-sf`/`poller-zurich` (+ `fetch_secrets.sh`) to the
+   services compose. `unset TF_VAR_wmata_api_key TF_VAR_bay511_api_token \
+   TF_VAR_swiss_otd_token TF_VAR_swiss_otd_sa_token` afterwards.
+3. Re-land user_data on the services box (compose + unit + fetch script changed):
+   SSM shell → `cloud-init clean --logs && reboot` (procedure in "Dagster (P5)").
+4. `make emr-drain` once — re-stages `spark_jobs.zip` so EMR sees the new city yamls.
+5. Verify: `/opt/transit/secrets.env` exists on the box with mode 600 (`stat -c '%a'`,
+   never `cat` it); per-city raw prefixes advancing — sf writes every ~200s by design
+   (511's 60 req/hr cap), dc/zurich every 30s; `raw_feed_freshness` green on 27
+   endpoints; weekly `gtfs_static` refreshes nyc/boston/toronto/helsinki/zurich (watch
+   zurich's 235 MB national-zip parse vs the 25-min EMR timeout; dc + sf stay
+   skipped-and-reported until the static-auth/URL gaps close — docs/01 §D OPEN items);
+   dbt marts show the new cities. Completeness ≥85% after 48h is the docs/04
+   acceptance gate.
+
+Chicago joins as batch 2b when the CTA beta key activates: yaml + fixtures + append
+to `LIVE_CITIES`/`TP_CITY_TZS`/compose, same checklist.
+
 ## Known quirks (cost real debugging time — do not rediscover)
 
 1. **Snowflake session timezone defaults to America/Los_Angeles.** NTZ-vs-TZ comparisons
@@ -169,7 +245,7 @@ Ceiling: budget alarm $90.
 
 P5 landed: Dagster chain + checks, supplemented GTFS, headways/EWT + P5 marts, weather.
 To enable in prod: generate the DAGSTER_SVC key pair (procedure above), apply, deploy the
-dagster image. P3 batch 1 (boston/toronto/helsinki, keyless) is built — rollout checklist
-above; pending the 48h completeness gate. Next: P3 batch 2 (chicago/dc/sf/zurich — needs
-`CTA_API_KEY`/`WMATA_API_KEY`/`BAY511_API_TOKEN`/`SWISS_OTD_TOKEN` in `.env` and on the
-box), P4 Tokyo, P6 scorecard/dashboard + SCD2 dims.
+dagster image. P3 batch 1 (boston/toronto/helsinki, keyless) and batch 2 (dc/sf/zurich,
+keyed) are built — rollout checklists above; each pending its 48h completeness gate.
+Next: chicago (batch 2b, once the CTA GTFS-RT beta key activates), P4 Tokyo,
+P6 scorecard/dashboard + SCD2 dims.

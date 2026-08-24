@@ -23,6 +23,10 @@ COPY scripts/snowflake_register_iceberg.py /opt/dagster/app/scripts/snowflake_re
 # city yamls: the raw-feed freshness tripwire reads feed_groups per live city
 # (transit_dagster.lib.city_feed_endpoints)
 COPY ingestion/config /opt/dagster/app/ingestion/config
+# the city yamls plus the two pure modules that read them (the static staging
+# asset normalizes static_gtfs / auth through ingestion.city_static) — never the
+# adapters, which need requests + confluent_kafka
+COPY ingestion/__init__.py ingestion/city_static.py /opt/dagster/app/ingestion/
 COPY dbt/transit /opt/dagster/app/dbt/transit
 COPY orchestration/transit_dagster /opt/dagster/app/transit_dagster
 
