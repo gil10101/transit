@@ -37,16 +37,23 @@ class EmrResource(ConfigurableResource):
         )
 
     def _in_flight_run(self, client, request: dict) -> str | None:
-        """Id of an already-active run with the same job name, if any. One
-        running job holds the whole 4 vCPU app, and EMR Serverless REJECTS
-        (not queues) a submit that would exceed maximumCapacity — so when the
-        EventBridge 15-min drain is mid-flight, adopt it instead of submitting."""
+        """Id of an already-active run that does this request's work, if any.
+
+        Matching is by NAME PREFIX, not equality: the scheduled Lambda drain
+        ("transit-drain") and this chain's drain ("transit-drain-dagster") write
+        the SAME Spark checkpoint, and Structured Streaming permits one writer
+        per checkpoint location. Exact-name matching let the pair run together
+        on 2026-08-24 and Spark killed the loser with CONCURRENT_STREAM_LOG_UPDATE
+        after it had done 58 minutes of work. Adopting also avoids the capacity
+        pile-up, since one job holds half the app.
+        """
+        prefix = request["name"].split("-dagster")[0]
         runs = client.list_job_runs(
             applicationId=request["applicationId"],
             states=["SUBMITTED", "PENDING", "SCHEDULED", "RUNNING"],
         )["jobRuns"]
         for run in runs:
-            if run.get("name") == request["name"]:
+            if str(run.get("name", "")).startswith(prefix):
                 return run["id"]
         return None
 
