@@ -29,7 +29,7 @@ Helsinki KEPT (polled GTFS-RT, no key; MQTT is stretch-only) · Tokyo rail via *
 
 ## Verified facts you must respect (from live testing — don't "fix" these)
 1. **NYC**: no API key; 8 feeds; `arrival.delay` is ABSENT (exception: the L feed sets delay + stop_sequence; other 7 set neither — fixtures 2026-08-22) → delay computed vs static schedule, COALESCE picks up L's feed delay; trip_ids are origin-time-encoded (`070950_A..S58R`) → `int_trip_matching_nyc` on (route, direction, service_date, origin-time). Subway VP has no lat/lon. NYCT protobuf extension present. Supplemented static (`gtfs_supplemented.zip`, verified 200 on 2026-08-22) in use since P5 — includes service-change trips.
-2. **HSL**: no key; `trip_id` is EMPTY → trips resolve via (route_id, direction_id, start_date, start_time); `arrival.delay` IS populated.
+2. **HSL**: no key; `trip_id` is EMPTY → trips resolve via (route_id, direction_id, start_date, start_time). `arrival.delay` is **NOT** set — the 2026-08-22 note claimed it was; amended in the dictionary 2026-08-23 and re-confirmed against live bytes 2026-08-24 (0 of 8,021 arrivals). `arrival.time` is always present → delay computed vs static via the canonical COALESCE, same path as NYC/BOS/TOR. Its OTP therefore rests entirely on the static join: per-route RT-vs-static stop overlap measured 99.6% on 2026-08-24, so the join is sound.
 3. **TTC**: no key, attribution required; ~3% of trips are ADDED (negative ids) → count in service volume, exclude from OTP.
 4. **CTA**: keyless request returns HTML, not protobuf → key required (`?key=`).
 5. **Zurich**: correct endpoint is `api.opentransportdata.swiss/la/gtfs-rt`; `gtfsrt2020` is dead. National feed → filter to Zurich allow-list in silver.
