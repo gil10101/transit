@@ -38,6 +38,7 @@ seeds:
         peak_pm_end: time
         crowding_usable: boolean
         metrics_from: date
+        schedule_matchable: boolean
 
 models:
   transit:

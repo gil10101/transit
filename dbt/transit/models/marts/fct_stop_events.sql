@@ -29,6 +29,7 @@ localized as (
     select
         f.*,
         c.iana_tz,
+        c.schedule_matchable,
         c.peak_am_start, c.peak_am_end, c.peak_pm_start, c.peak_pm_end,
         r.mode,
         {{ to_local('f.actual_arr_ts_utc', 'c.iana_tz') }} as actual_arr_ts_local
@@ -97,6 +98,13 @@ select
                 > {{ var('max_prediction_lead_min') }} * 60,
             false
         ) then null
+        -- A city whose realtime stop ids do not share a namespace with its own
+        -- static feed cannot be scored against schedule at all. Toronto's
+        -- bustime feed and CKAN GTFS agree on 0-6 of ~200 stops per route
+        -- (verified 2026-08-24), so the handful that do join are numeric
+        -- collisions between unrelated stops and their delays are fiction.
+        -- Volume, actual headways and wait time still count for these cities.
+        when not coalesce(schedule_matchable, true) then null
         else {{ otp_band('delay_arr_sec') }}
     end as otp_band,
     schedule_relationship,
