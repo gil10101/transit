@@ -155,13 +155,16 @@ locals {
     "--conf spark.driver.cores=2",
     "--conf spark.driver.memory=6g",
     "--conf spark.executor.cores=2",
-    # 12g and two executors, up from 6g and one. The dedup state store keeps
-    # 2 hours of keys in executor memory, and it roughly tripled when DC and
-    # SF came online (SF alone carries ~78k stop updates per poll). The old
-    # sizing OOM-killed the executor mid-shuffle (exit 137), which lost the
-    # shuffle output, failed the stage its 4 allowed times and killed the
-    # whole drain — with the backlog growing each time it died.
-    "--conf spark.executor.memory=12g",
+    # 10g x2, up from 6g x1. The dedup state store keeps 2 hours of keys in
+    # executor memory and it roughly tripled when DC and SF came online (SF
+    # alone carries ~78k stop updates per poll); the old sizing OOM-killed the
+    # executor mid-shuffle (exit 137), lost the shuffle output, failed the stage
+    # its 4 allowed times and killed the drain — with the backlog growing on
+    # each death. 10g not 12g because Spark adds ~10% memory overhead per
+    # worker: 6g driver + 2x12g asks ~33 GB against the app's 32 GB ceiling, so
+    # the second executor is refused ("Worker could not be allocated") and the
+    # job silently runs on one. 6.6 + 2x11 = 28.6 GB fits.
+    "--conf spark.executor.memory=10g",
     "--conf spark.executor.instances=2",
     "--conf spark.dynamicAllocation.initialExecutors=1",
     "--conf spark.dynamicAllocation.maxExecutors=2",
