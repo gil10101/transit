@@ -155,10 +155,16 @@ locals {
     "--conf spark.driver.cores=2",
     "--conf spark.driver.memory=6g",
     "--conf spark.executor.cores=2",
-    "--conf spark.executor.memory=6g",
-    "--conf spark.executor.instances=1",
+    # 12g and two executors, up from 6g and one. The dedup state store keeps
+    # 2 hours of keys in executor memory, and it roughly tripled when DC and
+    # SF came online (SF alone carries ~78k stop updates per poll). The old
+    # sizing OOM-killed the executor mid-shuffle (exit 137), which lost the
+    # shuffle output, failed the stage its 4 allowed times and killed the
+    # whole drain — with the backlog growing each time it died.
+    "--conf spark.executor.memory=12g",
+    "--conf spark.executor.instances=2",
     "--conf spark.dynamicAllocation.initialExecutors=1",
-    "--conf spark.dynamicAllocation.maxExecutors=1",
+    "--conf spark.dynamicAllocation.maxExecutors=2",
     "--conf spark.sql.catalog.lake=org.apache.iceberg.spark.SparkCatalog",
     "--conf spark.sql.catalog.lake.type=hadoop",
     "--conf spark.sql.catalog.lake.warehouse=s3://${var.lakehouse_bucket}/iceberg",

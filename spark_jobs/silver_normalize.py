@@ -132,7 +132,9 @@ def read_topic(spark: SparkSession, topic: str, record: T.StructType) -> DataFra
         .option("subscribe", topic)
         .option("startingOffsets", "earliest")
         .option("failOnDataLoss", "false")
-        .option("maxOffsetsPerTrigger", "5000")
+        .option("maxOffsetsPerTrigger", "1000")  # messages, not bytes: one SF
+        # trip-update chunk is ~900 KB while an NYC one is ~50 KB, so 5000
+        # could pull GBs into a single batch and OOM the executor
         .load()
     )
     env = F.from_json(F.col("value").cast("string"), envelope_schema(record)).alias("env")
