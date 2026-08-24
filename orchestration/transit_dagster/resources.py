@@ -29,7 +29,11 @@ class EmrResource(ConfigurableResource):
     """Submits EMR Serverless job runs and polls to a terminal state."""
 
     poll_seconds: int = 30
-    timeout_minutes: int = 25
+    # a drain replaying a backlog runs far longer than a steady-state one: on
+    # 2026-08-24 a single batch took >50 min on one executor, and the old 25-min
+    # deadline cancelled it every chain run, so the backlog could never clear.
+    # 50 still leaves the 2h chain time for the dbt build behind it.
+    timeout_minutes: int = 50
     # statics wait for a drain gap first, then parse; both fit in 40 but not 25
     static_timeout_minutes: int = 40
 
@@ -109,6 +113,7 @@ class EmrResource(ConfigurableResource):
         )
         deadline = time.monotonic() + (timeout_minutes or self.timeout_minutes) * 60
         run_id = self._in_flight_run(client, request) if adopt_in_flight else None
+        adopted = run_id is not None
         if run_id is not None:
             log.info(f"EMR {request['name']}: adopting in-flight run {run_id}")
         else:
@@ -123,6 +128,7 @@ class EmrResource(ConfigurableResource):
                     if run_id is None:
                         raise
                     log.info(f"EMR {request['name']}: capacity race, adopting run {run_id}")
+                    adopted = True
                 else:
                     run_id = self._resubmit_when_idle(client, request, deadline, log)
             else:
@@ -146,22 +152,33 @@ class EmrResource(ConfigurableResource):
                         if other is not None and other != run_id:
                             log.info(f"EMR run {run_id} lost capacity race; adopting {other}")
                             run_id = other
+                            adopted = True
                             continue
                     # different job (e.g. static parse vs a scheduled drain):
                     # wait for an idle gap and resubmit, bounded by the deadline
                     if time.monotonic() < deadline:
                         log.info(f"EMR run {run_id} hit capacity; waiting for an idle gap")
                         run_id = self._resubmit_when_idle(client, request, deadline, log)
+                        adopted = False  # this one we submitted
                         continue
                 raise RuntimeError(f"EMR run {run_id} ended {state}: {details}")
             if time.monotonic() > deadline:
-                # a hung run holds the whole 4 vCPU app and queues every later
-                # drain — free the capacity before giving up
-                try:
-                    client.cancel_job_run(applicationId=request["applicationId"], jobRunId=run_id)
-                    log.warning(f"EMR run {run_id} cancelled after timeout")
-                except Exception as e:  # noqa: BLE001 — cancel is best-effort
-                    log.warning(f"cancel of EMR run {run_id} failed: {e!r}")
+                # Only kill a run WE started. An adopted run belongs to the
+                # hourly Lambda drain and is doing real work; cancelling it threw
+                # away ~50 min of a backlog replay on 2026-08-24 and, because the
+                # next chain adopted and cancelled the next attempt too, the
+                # backlog could never drain. Timing out without cancelling lets
+                # it finish; the Lambda's own in-flight guard stops a pile-up.
+                if not adopted:
+                    try:
+                        client.cancel_job_run(
+                            applicationId=request["applicationId"], jobRunId=run_id
+                        )
+                        log.warning(f"EMR run {run_id} cancelled after timeout")
+                    except Exception as e:  # noqa: BLE001 — cancel is best-effort
+                        log.warning(f"cancel of EMR run {run_id} failed: {e!r}")
+                else:
+                    log.warning(f"EMR run {run_id} adopted, not ours to cancel; leaving it running")
                 raise TimeoutError(f"EMR run {run_id} still {state} after the deadline")
             log.debug(f"EMR run {run_id} {state}; polling again in {self.poll_seconds}s")
             time.sleep(self.poll_seconds)
