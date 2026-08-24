@@ -2,6 +2,7 @@ SHELL := /bin/bash
 export JAVA_HOME ?= /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 
 .PHONY: up down record-fixtures poll-nyc poll-boston poll-toronto poll-helsinki \
+	poll-dc poll-sf poll-zurich \
 	spark-local gtfs-static dbt-build test lint dagster-deploy p5-backfill-weather
 
 up:
@@ -10,6 +11,8 @@ up:
 down:
 	docker compose down
 
+# Bare target re-records EVERY configured city, incl. sf (3 requests against the
+# 60/hr-limited 511 key). Prefer per-city: uv run python -m ingestion.record_fixtures <city>
 record-fixtures:
 	uv run python -m ingestion.record_fixtures
 
@@ -24,6 +27,17 @@ poll-toronto:
 
 poll-helsinki:
 	uv run python -m ingestion.poller helsinki
+
+poll-dc:
+	uv run python -m ingestion.poller dc
+
+# 511 hard limit 60 req/hr per key: sf polls 3 endpoints at 200s (54 req/hr).
+# Never run this alongside another consumer of BAY511_API_TOKEN.
+poll-sf:
+	uv run python -m ingestion.poller sf
+
+poll-zurich:
+	uv run python -m ingestion.poller zurich
 
 spark-local:
 	uv run python -m spark_jobs.run_local

@@ -134,8 +134,10 @@ services:
   # Live polling stays opt-in per CLAUDE.md: these sit behind the "pollers" profile so
   # plain `make up` never hits agency endpoints. Start explicitly with
   #   docker compose up -d poller-boston   (or --profile pollers up for all)
-  # Local-dev safe with an empty .env: every value below has a default and none of
-  # these cities needs an API key.
+  # Local-dev safe with an empty .env: every value below has a default. The batch-2
+  # cities (dc/sf/zurich) need keys passed through from .env — their pollers fail fast
+  # with the env var NAME (never a value) if the key is absent. CAUTION: sf polls a
+  # 60 req/hr-limited key; never run poller-sf alongside another consumer of that key.
   poller:
     build: &poller-build
       context: .
@@ -177,6 +179,37 @@ services:
     profiles: ["pollers"]
     restart: unless-stopped
     environment: *poller-env
+    depends_on: *poller-deps
+
+  poller-dc:
+    build: *poller-build
+    command: ["dc"]
+    profiles: ["pollers"]
+    restart: unless-stopped
+    environment:
+      <<: *poller-env
+      WMATA_API_KEY: ${WMATA_API_KEY:-}
+    depends_on: *poller-deps
+
+  poller-sf:
+    build: *poller-build
+    command: ["sf"]
+    profiles: ["pollers"]
+    restart: unless-stopped
+    environment:
+      <<: *poller-env
+      BAY511_API_TOKEN: ${BAY511_API_TOKEN:-}
+    depends_on: *poller-deps
+
+  poller-zurich:
+    build: *poller-build
+    command: ["zurich"]
+    profiles: ["pollers"]
+    restart: unless-stopped
+    environment:
+      <<: *poller-env
+      SWISS_OTD_TOKEN: ${SWISS_OTD_TOKEN:-}
+      SWISS_OTD_SA_TOKEN: ${SWISS_OTD_SA_TOKEN:-}
     depends_on: *poller-deps
 
 volumes:

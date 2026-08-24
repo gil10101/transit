@@ -18,8 +18,10 @@ from orchestration.transit_dagster.lib import (
 )
 
 
-def test_live_cities_is_p3_batch1():
-    assert LIVE_CITIES == ("nyc", "boston", "toronto", "helsinki")
+def test_live_cities_is_p3_batch2():
+    # batch 1 keyless trio + batch 2 keyed dc/sf/zurich; chicago appends on
+    # CTA key activation (order: existing + dc, sf, zurich — locked)
+    assert LIVE_CITIES == ("nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich")
 
 
 def test_city_weather_covers_every_live_city_with_real_tz():
@@ -27,21 +29,38 @@ def test_city_weather_covers_every_live_city_with_real_tz():
     for spec in CITY_WEATHER.values():
         ZoneInfo(spec["tz"])  # raises on a bad IANA name
         assert -90 <= spec["lat"] <= 90 and -180 <= spec["lon"] <= 180
-    # dictionary tzs (do not re-litigate): boston shares NYC's, the others differ
+    # dictionary tzs (do not re-litigate): boston + dc share NYC's, the rest differ
     assert CITY_WEATHER["boston"]["tz"] == "America/New_York"
     assert CITY_WEATHER["toronto"]["tz"] == "America/Toronto"
     assert CITY_WEATHER["helsinki"]["tz"] == "Europe/Helsinki"
+    assert CITY_WEATHER["dc"]["tz"] == "America/New_York"
+    assert CITY_WEATHER["sf"]["tz"] == "America/Los_Angeles"
+    assert CITY_WEATHER["zurich"]["tz"] == "Europe/Zurich"
 
 
 def test_repo_configs_discovered_only_live_cities():
-    # against the real ingestion/config/cities: nyc always present with its 8
-    # feeds; other live cities appear as their yamls land (W1) — never a city
-    # outside LIVE_CITIES, never an empty endpoint tuple.
+    # against the real ingestion/config/cities: endpoint names are the
+    # feed_groups keys (they drive the freshness tripwire's raw prefixes) —
+    # never a city outside LIVE_CITIES, never an empty endpoint tuple.
     endpoints = city_feed_endpoints()
     assert len(endpoints["nyc"]) == 8
     assert endpoints["boston"] == ("trip_updates", "vehicle_positions", "alerts")
     assert endpoints["toronto"] == ("trip_updates", "vehicle_positions", "alerts")
     assert endpoints["helsinki"] == ("trip_updates", "alerts")  # HSL has no VP feed
+    # P3 batch 2 (27 endpoints total): dc = {rail,bus} x {TU,VP,alerts};
+    # sf = 511 regional aggregation, 3 feeds (at poll_seconds 200 — rate cap);
+    # zurich = TU + service alerts only (no VP product on Swiss OTD LA API).
+    assert endpoints["dc"] == (
+        "rail_trip_updates",
+        "rail_vehicle_positions",
+        "rail_alerts",
+        "bus_trip_updates",
+        "bus_vehicle_positions",
+        "bus_alerts",
+    )
+    assert endpoints["sf"] == ("trip_updates", "vehicle_positions", "alerts")
+    assert endpoints["zurich"] == ("trip_updates", "alerts")
+    assert sum(len(v) for v in endpoints.values()) == 27
     assert set(endpoints) == set(LIVE_CITIES)  # tripwire covers every live city
 
 
@@ -50,9 +69,10 @@ def test_endpoints_are_feed_group_keys_and_non_live_skipped(tmp_path: Path):
         "city: boston\nfeed_groups:\n"
         "  trip_updates: https://x/tu\n  vehicle_positions: https://x/vp\n  alerts: https://x/al\n"
     )
-    (tmp_path / "zurich.yaml").write_text("city: zurich\nfeed_groups:\n  all: https://x\n")
+    (tmp_path / "chicago.yaml").write_text("city: chicago\nfeed_groups:\n  all: https://x\n")
     out = city_feed_endpoints(config_dir=tmp_path)
-    # zurich yaml present but not live -> excluded until batch 2 flips LIVE_CITIES
+    # chicago yaml present but not live -> excluded until its CTA beta key
+    # activates and batch 2b flips LIVE_CITIES
     assert out == {"boston": ("trip_updates", "vehicle_positions", "alerts")}
 
 

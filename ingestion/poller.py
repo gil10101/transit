@@ -26,7 +26,7 @@ from ingestion.adapters.base import (
 
 def poll_endpoint(session, cfg: CityConfig, archiver: RawArchiver, name: str, url: str):
     fetched_at = utcnow()
-    raw = fetch_feed(session, cfg, url)
+    raw = fetch_feed(session, cfg, url, endpoint=name)
     archiver.archive(cfg.city, name, fetched_at, raw)
     envelopes = gtfs_rt.envelopes_for_feed(
         city=cfg.city, agency=cfg.agency, endpoint=name, raw=raw, fetched_at=fetched_at

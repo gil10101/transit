@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from google.protobuf.message import DecodeError
 from google.transit import gtfs_realtime_pb2
 
 from ingestion.adapters.base import build_envelope
@@ -18,8 +19,100 @@ SOURCE_FORMAT = "gtfs_rt"
 
 def parse_feed(raw: bytes) -> gtfs_realtime_pb2.FeedMessage:
     msg = gtfs_realtime_pb2.FeedMessage()
-    msg.ParseFromString(raw)
+    try:
+        msg.ParseFromString(raw)
+    except DecodeError as err:
+        # Swiss OTD gtfs-sa quirk (fixture 2026-08-23): TripDescriptor field 7 carries a
+        # raw STRING journey id ("ch:1:sjyid:...") where the current spec defines the
+        # ModifiedTripSelector MESSAGE -> strict decode fails for ~19% of alert entities.
+        # Remap those tags to an unknown field (byte-length preserving) and retry; the
+        # entities' real fields (effect/severity/active_period/informed routes) survive.
+        try:
+            remapped = _remap_nonspec_trip_field7(raw)
+        except Exception:
+            raise err from None  # remap walk failed -> the original error is the truth
+        msg = gtfs_realtime_pb2.FeedMessage()
+        msg.ParseFromString(remapped)
     return msg
+
+
+# --- non-spec TripDescriptor.7 remap (Swiss OTD service alerts) ----------------------
+# Wire-format constants: tag = (field_number << 3) | wire_type; wire type 2 = bytes.
+_TRIP_FIELD7_TAG = (7 << 3) | 2  # 0x3A — spec: ModifiedTripSelector; Swiss: raw string
+_UNKNOWN_FIELD15_TAG = (15 << 3) | 2  # 0x7A — last single-byte tag, unallocated in spec
+
+
+def _read_varint(buf, i: int) -> tuple[int, int]:
+    shift = value = 0
+    while True:
+        byte = buf[i]
+        i += 1
+        value |= (byte & 0x7F) << shift
+        if not byte & 0x80:
+            return value, i
+        shift += 7
+
+
+def _iter_fields(buf, start: int, end: int):
+    """Yield (field_number, wire_type, tag_offset, payload_start, payload_end) over one
+    embedded message's span; payload offsets are None for non-length-delimited fields."""
+    i = start
+    while i < end:
+        tag_offset = i
+        tag, i = _read_varint(buf, i)
+        field_number, wire_type = tag >> 3, tag & 7
+        if wire_type == 2:
+            length, i = _read_varint(buf, i)
+            yield field_number, wire_type, tag_offset, i, i + length
+            i += length
+        elif wire_type == 0:
+            _, i = _read_varint(buf, i)
+            yield field_number, wire_type, tag_offset, None, None
+        elif wire_type == 5:
+            yield field_number, wire_type, tag_offset, None, None
+            i += 4
+        elif wire_type == 1:
+            yield field_number, wire_type, tag_offset, None, None
+            i += 8
+        else:
+            raise ValueError(f"unsupported wire type {wire_type} at offset {tag_offset}")
+
+
+def _remap_trip_descriptor(buf: bytearray, start: int, end: int) -> int:
+    remapped = 0
+    for field_number, wire_type, tag_offset, _, _ in _iter_fields(buf, start, end):
+        if field_number == 7 and wire_type == 2 and buf[tag_offset] == _TRIP_FIELD7_TAG:
+            buf[tag_offset] = _UNKNOWN_FIELD15_TAG
+            remapped += 1
+    return remapped
+
+
+def _remap_trips_in(buf: bytearray, start: int, end: int, trip_field: int) -> int:
+    remapped = 0
+    for field_number, wire_type, _, ps, pe in _iter_fields(buf, start, end):
+        if field_number == trip_field and wire_type == 2:
+            remapped += _remap_trip_descriptor(buf, ps, pe)
+    return remapped
+
+
+def _remap_nonspec_trip_field7(raw: bytes) -> bytes:
+    """Rewrite TripDescriptor field-7 tags to field 15 everywhere a TripDescriptor sits:
+    entity.trip_update.trip / entity.vehicle.trip / entity.alert.informed_entity.trip.
+    Tag bytes are swapped in place (same byte length) so no offsets shift."""
+    buf = bytearray(raw)
+    for field_number, wire_type, _, ps, pe in _iter_fields(buf, 0, len(buf)):
+        if field_number != 2 or wire_type != 2:  # FeedMessage.entity
+            continue
+        for efn, ewt, _, es, ee in _iter_fields(buf, ps, pe):
+            if ewt != 2:
+                continue
+            if efn in (3, 4):  # trip_update / vehicle -> .trip = 1
+                _remap_trips_in(buf, es, ee, trip_field=1)
+            elif efn == 5:  # alert -> informed_entity = 5 -> .trip = 4
+                for afn, awt, _, as_, ae in _iter_fields(buf, es, ee):
+                    if afn == 5 and awt == 2:
+                        _remap_trips_in(buf, as_, ae, trip_field=4)
+    return bytes(buf)
 
 
 def _trip_fields(trip) -> dict:

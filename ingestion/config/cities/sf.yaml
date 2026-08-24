@@ -1,0 +1,28 @@
+# SF Bay 511.org. Regional GTFS-RT aggregation (`agency=RG`, ~30 operators in one
+# response; every record carries an agency prefix). Auth: free token as query param
+# `api_key` (env BAY511_API_TOKEN — yaml carries the env var NAME only; fetch_feed
+# merges the param with the agency=RG already in the URL).
+# HARD RATE LIMIT: 60 requests/hour TOTAL per key until an increase is granted ->
+# poll_seconds 200 (3 endpoints x 18/hr = 54 req/hr, ~10% headroom). Do NOT lower
+# without a granted limit increase. URLs verified in docs/01-data-dictionary.md §B
+# (live 200 with key, 2026-08-23). Attribution: "Data provided by 511.org".
+city: sf
+agency: 511-RG
+timezone: America/Los_Angeles
+adapter: gtfs_rt
+poll_seconds: 200
+auth: {type: query, name: api_key, env: BAY511_API_TOKEN}
+# Static GTFS verified 2026-08-24 (integrator, fresh rate window): DataFeeds API with
+# operator_id=RG -> 200, 68.2 MB, 25 members. Same key and the same 60 req/hr budget as
+# the RT feeds, so the weekly refresh costs 1 of the hour's 60. Every RT trip_id in the
+# fixture joins this zip exactly (2494/2494), which is why sf takes the exact matcher
+# branch. NOTE: request it with Accept-Encoding gzip (curl --compressed) — an
+# uncompressed request 500s.
+static_gtfs:
+  regional:
+    url: https://api.511.org/transit/datafeeds?operator_id=RG
+    auth: {type: query, name: api_key, env: BAY511_API_TOKEN}
+feed_groups:
+  trip_updates: https://api.511.org/transit/tripupdates?agency=RG
+  vehicle_positions: https://api.511.org/transit/vehiclepositions?agency=RG
+  alerts: https://api.511.org/transit/servicealerts?agency=RG

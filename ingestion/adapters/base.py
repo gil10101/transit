@@ -19,6 +19,8 @@ import yaml
 from confluent_kafka import Producer
 from confluent_kafka.admin import AdminClient, NewTopic
 
+from ingestion.city_static import StaticSource, auth_secret, resolve_auth, static_sources
+
 UTC = timezone.utc  # noqa: UP017 — EMR Serverless runs py3.9; datetime.UTC needs 3.11
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config" / "cities"
@@ -41,45 +43,91 @@ class CityConfig:
     # endpoint name -> URL. For combined feeds (NYC) names are line groups and each URL
     # yields all three entity types; for per-type feeds names are the feed types.
     endpoints: dict[str, str]
-    static_gtfs: str | None = None
+    # raw `static_gtfs` value: a URL string, or {name: {url, auth}} for agencies
+    # that split the schedule across zips / gate it behind a key. Read it through
+    # `static_sources` — never directly.
+    static_gtfs: str | dict | None = None
+    # City-level auth: {type: header|query, name: <header/param name>, env: <ENV VAR>}.
+    # The secret NEVER appears in yaml or code — only the env var NAME does, resolved
+    # per request in fetch_feed (P3 batch 2: WMATA header, 511 query param).
     auth: dict = field(default_factory=dict)
+    # Per-endpoint override, same shape, for cities issuing one token per API product
+    # (Zurich: gtfs-rt vs gtfs-sa tokens differ). Falls back to city-level `auth`.
+    endpoint_auth: dict[str, dict] = field(default_factory=dict)
 
     @property
     def effective_poll_seconds(self) -> int:
         return max(POLL_FLOOR_SECONDS, self.poll_seconds)
 
+    def auth_for(self, endpoint: str | None) -> dict:
+        return self.endpoint_auth.get(endpoint) or self.auth
+
+    @property
+    def static_sources(self) -> list[StaticSource]:
+        return static_sources(self.static_gtfs)
+
 
 def load_city_config(city: str) -> CityConfig:
     raw = yaml.safe_load((CONFIG_DIR / f"{city}.yaml").read_text())
-    endpoints = raw.get("feed_groups") or raw.get("feeds")
-    if not endpoints:
+    groups = raw.get("feed_groups") or raw.get("feeds")
+    if not groups:
         raise ValueError(f"{city}.yaml must define feed_groups or feeds")
+    # feed_groups values are either a bare URL string or {url: ..., auth: {...}}
+    endpoints: dict[str, str] = {}
+    endpoint_auth: dict[str, dict] = {}
+    for name, value in dict(groups).items():
+        if isinstance(value, dict):
+            endpoints[name] = value["url"]
+            if value.get("auth"):
+                endpoint_auth[name] = dict(value["auth"])
+        else:
+            endpoints[name] = value
     return CityConfig(
         city=raw["city"],
         agency=raw["agency"],
         timezone=raw["timezone"],
         adapter=raw["adapter"],
         poll_seconds=int(raw.get("poll_seconds", POLL_FLOOR_SECONDS)),
-        endpoints=dict(endpoints),
+        endpoints=endpoints,
         static_gtfs=raw.get("static_gtfs"),
         auth=raw.get("auth") or {},
+        endpoint_auth=endpoint_auth,
     )
 
 
 def build_session(cfg: CityConfig) -> requests.Session:
+    """UA-tagged session. Auth is applied per request in fetch_feed (never baked into
+    session headers) so per-endpoint tokens can differ within one city."""
     session = requests.Session()
     session.headers["User-Agent"] = "transit-pulse/0.1"
-    auth = cfg.auth
-    if auth.get("type") == "header":
-        session.headers[auth["name"]] = os.environ[auth["env"]]
     return session
 
 
-def fetch_feed(session: requests.Session, cfg: CityConfig, url: str, timeout: int = 15) -> bytes:
-    params = {}
-    if cfg.auth.get("type") == "query":
-        params[cfg.auth["name"]] = os.environ[cfg.auth["env"]]
-    resp = session.get(url, params=params or None, timeout=timeout)
+def _auth_secret(auth: dict) -> str:
+    """Kept as the module's historical name; the implementation is shared with
+    the Dagster static stager in ingestion/city_static.py."""
+    return auth_secret(auth)
+
+
+def fetch_feed(
+    session: requests.Session,
+    cfg: CityConfig,
+    url: str,
+    timeout: int = 15,
+    endpoint: str | None = None,
+) -> bytes:
+    """GET one feed URL with the endpoint's auth applied.
+
+    - header auth (WMATA `api_key`; Swiss OTD raw `Authorization`, no Bearer prefix)
+      goes on the request, not the session. Swiss endpoints 302 cross-host to a
+      pre-signed largeapi.opentransportdata.swiss URL: requests strips Authorization
+      on the cross-host hop (its documented behavior) and the signed target needs no
+      auth — verified live 2026-08-23, so default redirect handling is correct.
+    - query auth (511 `api_key`) is merged by requests with params already in the
+      URL (511 keeps `agency=RG` in the URL itself).
+    """
+    headers, params = resolve_auth(cfg.auth_for(endpoint))
+    resp = session.get(url, params=params or None, headers=headers or None, timeout=timeout)
     resp.raise_for_status()
     return resp.content
 

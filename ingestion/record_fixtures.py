@@ -23,7 +23,7 @@ def record_city(city: str) -> None:
     cfg = load_city_config(city)
     session = build_session(cfg)
     for name, url in cfg.endpoints.items():
-        raw = fetch_feed(session, cfg, url)
+        raw = fetch_feed(session, cfg, url, endpoint=name)
         path = FIXTURE_DIR / f"{city}_{name}.pb"
         path.write_bytes(raw)
         split = gtfs_rt.split_feed(gtfs_rt.parse_feed(raw))

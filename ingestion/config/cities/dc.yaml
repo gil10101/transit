@@ -1,0 +1,29 @@
+# DC WMATA. Six per-type GTFS-RT feeds: {rail,bus} x {TripUpdates,VehiclePositions,Alerts}.
+# Auth: free key in request header `api_key` (env WMATA_API_KEY — the yaml carries the
+# env var NAME only; fetch_feed resolves it at request time). Default quota 50k calls/day;
+# 6 endpoints x 30s = 17,280/day fits. URLs verified in docs/01-data-dictionary.md §B
+# (live 200 with key, 2026-08-23).
+city: dc
+agency: WMATA
+timezone: America/New_York
+adapter: gtfs_rt
+poll_seconds: 30
+auth: {type: header, name: api_key, env: WMATA_API_KEY}
+# Static GTFS verified 2026-08-23 (GET with api_key header; HEAD 404s — WMATA's gateway
+# matches GET only): rail 2.5 MB, bus 49.8 MB. WMATA splits the schedule across two
+# zips; both are listed here so they load under ONE gtfs_version_id (the staging models
+# keep max(gtfs_version_id) per city, so separate versions would hide one mode).
+static_gtfs:
+  rail:
+    url: https://api.wmata.com/gtfs/rail-gtfs-static.zip
+    auth: {type: header, name: api_key, env: WMATA_API_KEY}
+  bus:
+    url: https://api.wmata.com/gtfs/bus-gtfs-static.zip
+    auth: {type: header, name: api_key, env: WMATA_API_KEY}
+feed_groups:
+  rail_trip_updates: https://api.wmata.com/gtfs/rail-gtfsrt-tripupdates.pb
+  rail_vehicle_positions: https://api.wmata.com/gtfs/rail-gtfsrt-vehiclepositions.pb
+  rail_alerts: https://api.wmata.com/gtfs/rail-gtfsrt-alerts.pb
+  bus_trip_updates: https://api.wmata.com/gtfs/bus-gtfsrt-tripupdates.pb
+  bus_vehicle_positions: https://api.wmata.com/gtfs/bus-gtfsrt-vehiclepositions.pb
+  bus_alerts: https://api.wmata.com/gtfs/bus-gtfsrt-alerts.pb

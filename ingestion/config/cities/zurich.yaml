@@ -1,0 +1,28 @@
+# Zurich via opentransportdata.swiss. NATIONAL feed (all CH operators) -> filtered to
+# the Zurich allow-list in silver (docs/01 §B Zurich row). Two API products, ONE TOKEN
+# EACH (Swiss OTD issues per-product tokens; both irreplaceable if revoked — never
+# anywhere but .env / SSM): trip updates use SWISS_OTD_TOKEN, service alerts use
+# SWISS_OTD_SA_TOKEN -> per-endpoint auth below (yaml carries env var NAMES only).
+# Auth is the RAW token in the `Authorization` header (NO "Bearer " prefix). Both
+# endpoints 302 cross-host to a pre-signed largeapi.opentransportdata.swiss URL;
+# requests strips Authorization on that hop and the signed target needs no auth —
+# verified live 2026-08-23 (see fetch_feed). Old `gtfsrt2020` endpoint is dead (404).
+# URLs verified in docs/01-data-dictionary.md §B. Attribution: opentransportdata.swiss.
+city: zurich
+agency: OTD-CH
+timezone: Europe/Zurich
+adapter: gtfs_rt
+poll_seconds: 30
+# Static GTFS (national, ~235 MB — Spark parses as-is per docs; silver stays
+# partition-pruned) verified 2026-08-23: permalink 302 -> gtfs_fp2026_20260819.zip
+# 302 -> signed R2 URL, final 200, 235.1 MB, Last-Modified 2026-08-20, NO auth.
+# Permalink is timetable-YEAR-scoped: expect an annual rollover to .../timetable-2027-...
+# each December (docs/01 §D amendment via W3).
+static_gtfs: https://data.opentransportdata.swiss/en/dataset/timetable-2026-gtfs2020/permalink
+feed_groups:
+  trip_updates:
+    url: https://api.opentransportdata.swiss/la/gtfs-rt
+    auth: {type: header, name: Authorization, env: SWISS_OTD_TOKEN}
+  alerts:
+    url: https://api.opentransportdata.swiss/la/gtfs-sa
+    auth: {type: header, name: Authorization, env: SWISS_OTD_SA_TOKEN}
