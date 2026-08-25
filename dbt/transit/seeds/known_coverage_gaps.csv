@@ -1,4 +1,12 @@
 city_key,route_id,reason,confirmed_on
-helsinki,1017,HSL publishes no ferry realtime in GTFS-RT; Suomenlinna ferry positions come from ship AIS piped into their separate HFP/MQTT stream (HSLdevcom/suomenlinna-ferry-hfp). No change on our side yields data from the feed we poll.,2026-08-25
-helsinki,1019,HSL publishes no ferry realtime in GTFS-RT; see route 1017.,2026-08-25
-helsinki,1019E,HSL publishes no ferry realtime in GTFS-RT; see route 1017.,2026-08-25
+helsinki,1017,"Ferry. HSL publishes no ferry realtime in GTFS-RT at all; Suomenlinna positions come from ship AIS piped into their separate HFP/MQTT stream (HSLdevcom/suomenlinna-ferry-hfp). 39 trips scheduled 2026-08-24, 0 realtime rows ever observed.",2026-08-25
+helsinki,1019,"Ferry, same as 1017. 94 trips scheduled 2026-08-24, 0 realtime rows ever observed.",2026-08-25
+helsinki,1019E,"Ferry, same as 1017. 16 trips scheduled 2026-08-24, 0 realtime rows ever observed.",2026-08-25
+helsinki,100H,"Tram. 187 trips scheduled 2026-08-24 and 0 realtime rows observed since polling began, while sibling variants 1007H/1001H/1004H report normally. Cause not established with HSL; the gap is upstream (nothing to match) rather than a matching failure.",2026-08-25
+helsinki,1839,"Bus. 10 trips scheduled 2026-08-24, 0 realtime rows ever observed.",2026-08-25
+helsinki,1839K,"Bus. 13 trips scheduled 2026-08-24, 0 realtime rows ever observed.",2026-08-25
+helsinki,4713,"Bus. 12 trips scheduled 2026-08-24, 0 realtime rows ever observed.",2026-08-25
+helsinki,9967,"Bus. 12 trips scheduled 2026-08-24, 0 realtime rows ever observed.",2026-08-25
+helsinki,2158,"Bus, PARTIAL publication. 131 trips scheduled 2026-08-24; HSL published realtime for 42 of them and all 42 matched and scored (100%). The shortfall is trips never published, not trips we failed to match.",2026-08-25
+helsinki,2159,"Bus, PARTIAL publication. 127 trips scheduled 2026-08-24; HSL published realtime for 31 and all 31 matched (100%). Observed only between 12:00 and 20:00 local, so publication is time-bounded upstream.",2026-08-25
+helsinki,2533,"Bus, PARTIAL publication. 129 trips scheduled 2026-08-24; HSL published realtime for 71 and all 71 matched (100%). Observed across the full 00:00-23:00 span, so this is not a truncated window - roughly half the day's trips are simply never published.",2026-08-25

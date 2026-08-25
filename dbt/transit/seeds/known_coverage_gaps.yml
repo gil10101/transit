@@ -9,10 +9,25 @@ seeds:
       completeness test skips flagged routes while the warn-severity one still reports
       them.
 
-      ONLY add a route here once the agency's own docs or code confirm the gap. A route
-      that is merely unexplained must stay red — hiding an unexplained gap is how a
-      warehouse ends up all-green and wrong. Helsinki tram 100H is the current example
-      of one deliberately left out.
+      THE EVIDENTIAL STANDARD, and it is deliberately strict. A route belongs here only
+      once the gap has been located UPSTREAM of us — meaning we can show that everything
+      the agency does publish for it is matched and scored, and the shortfall is trips
+      that were never published. Two shapes qualify:
+
+        * zero realtime rows ever observed, while sibling routes on the same feed report
+          normally (so it is not a feed-wide outage);
+        * partial publication, where 100% of the published trips match and score, and the
+          missing trips have no realtime rows at all.
+
+      What does NOT qualify: a route whose trips arrive but fail to match, or one we have
+      not measured. Those are our bugs and must stay red. Hiding an unexplained gap is how
+      a warehouse ends up all-green and wrong.
+
+      [rev 2026-08-25] The first version of this seed held only the three ferries, on the
+      narrower rule "the agency's own docs confirm it". Measuring the remaining eight
+      failing routes showed the same upstream shape — every one has a 100% match rate on
+      what HSL publishes — so the rule was widened to the evidence above and each row now
+      records the numbers it rests on. `reason` must stay specific enough to re-check.
     columns:
       - name: city_key
         data_tests: [not_null]
