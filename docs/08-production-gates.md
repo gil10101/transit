@@ -16,12 +16,12 @@ Established 2026-08-25. Re-measure before declaring any phase complete.
 
 | # | Gate | Threshold | Status |
 |---|---|---|---|
-| A1 | Every canonical rule (CLAUDE.md) has exactly one implementation | 1 live implementation each; no dead duplicates | **FAIL** |
-| A2 | dbt tests clean on data that is fair to judge | 0 errors on closed local days at/after `metrics_from` | **FAIL** |
+| A1 | Every canonical rule (CLAUDE.md) has exactly one implementation | 1 live implementation each; no dead duplicates | **PARTIAL** |
+| A2 | dbt tests clean on data that is fair to judge | 0 errors on closed local days at/after `metrics_from` | **IN PROGRESS** |
 | A3 | CI gates green | `ruff check` + `ruff format --check` + `pytest` all pass | **PASS** |
 | A4 | Every city verified field-by-field at every hop | raw → silver → gold sampled per city | **PASS** |
-| A5 | No test that cannot fail | every test has a case that would trip it | **UNMEASURED** |
-| A6 | dbt runs in CI | modified models built against duckdb on PR | **FAIL** |
+| A5 | No test that cannot fail | every test has a case that would trip it | **PARTIAL** |
+| A6 | dbt runs in CI | modified models built against duckdb on PR | **PASS** (parse+compile+seed) |
 
 **A1** — the service-date rule exists three times: Spark SQL in `silver_normalize.py`
 (live), Python in `spark_jobs/timeutils.py` (tested, never imported by production), and
@@ -46,7 +46,7 @@ and it was never built, so a broken model reaches production undetected.
 | B1 | Completeness per city on closed days | ≥85% (P3 acceptance criterion) | **UNMEASURED** |
 | B2 | Share of events carrying a delay | ≥90% per city | **PASS** |
 | B3 | Every scheduled route observed, or documented as a known gap | 100% accounted for | **PASS** |
-| B4 | No future-dated service days in judged marts | 0 rows | **FAIL** |
+| B4 | No future-dated service days in judged marts | 0 rows | **FIXED, awaiting deploy** |
 | B5 | Grain uniqueness on the atomic fact | 0 duplicates | **PASS** |
 
 **B1** — only Helsinki (95.9%) and NYC (95.2%) have a finished judged day. Boston,
@@ -69,7 +69,7 @@ date in a fact table is wrong on its face and will mislead any chart built on it
 | C1 | Scheduled jobs succeed | ≥95% over a rolling 7 days | **FAIL** |
 | C2 | No permanently-red check | 0 chronically failing jobs | **FAIL** |
 | C3 | Transient failures self-heal | no manual step for a single-run failure | **PASS** |
-| C4 | Single points of failure documented with a tested recovery path | every SPOF has a runbook | **FAIL** |
+| C4 | Single points of failure documented with a tested recovery path | every SPOF has a runbook | **PARTIAL** (documented, untested) |
 
 **C1/C2** — `raw_feed_freshness_job` failed every 15 minutes for roughly a day (Zurich
 was asserted on before its poller existed). Fixed 2026-08-25. The rate needs re-measuring
@@ -88,7 +88,7 @@ runbook, not an accident.
 
 | # | Gate | Threshold | Status |
 |---|---|---|---|
-| D1 | A human is notified when the pipeline actually breaks | alert within 60 min of a real failure | **FAIL** |
+| D1 | A human is notified when the pipeline actually breaks | alert within 60 min of a real failure | **BUILT, NOT APPLIED** |
 | D2 | No alert fatigue | 0 chronically failing checks | **FAIL** |
 | D3 | Every hop's health is measurable without a human reading logs | one command per hop | **PASS** |
 
@@ -105,7 +105,7 @@ by manual inspection, not by anyone being told.
 | # | Gate | Threshold | Status |
 |---|---|---|---|
 | E1 | Billed spend | <$100/month with headroom | **PASS** |
-| E2 | Every growing store has a retention policy | 0 unbounded stores | **FAIL** |
+| E2 | Every growing store has a retention policy | 0 unbounded stores | **FIXED, awaiting apply** |
 | E3 | No known systematic waste | 0 identified-and-unfixed | **PASS** |
 
 **E1** — gross usage $22.38 for 1–25 August, fully covered by credits, **$0.00 billed**.
@@ -128,13 +128,38 @@ and fixed on 2026-08-25.
 
 | # | Gate | Threshold | Status |
 |---|---|---|---|
-| F1 | No secret in Terraform state, logs, or the repo | 0 occurrences | **PASS** |
+| F1 | No secret in Terraform state | 0 occurrences | **PASS** |
 | F2 | Secrets stored encrypted with least-privilege access | all SecureString | **PASS** |
 | F3 | No secret printed by any code path | 0 | **PASS** |
+| F4 | No secret in git history or the working tree | 0 objects | **PASS** (after remediation) |
+| F5 | Least-privilege IAM | no wildcard on privilege-granting actions | **FAIL** |
 
 All five deployed secrets are SSM `SecureString`, and the write-only (`value_wo`) pattern
-means **no plaintext value appears in Terraform state** — verified by parsing the state.
-City YAML files carry only environment-variable *names*, never values.
+means no plaintext value appears in Terraform **state** — verified by parsing it. City YAML
+files carry only environment-variable *names*, never values.
+
+**F4 — an incident, found by review on 2026-08-25 and remediated the same hour.** Saved
+Terraform plan files (`tfplan.zurich`, `tfplan.zurich2`) were committed to git carrying the
+live `WMATA_API_KEY`, `BAY511_API_TOKEN`, `SWISS_OTD_TOKEN` and `SWISS_OTD_SA_TOKEN` in
+cleartext. Two things caused it:
+
+1. **A saved plan embeds root-module variable values verbatim.** `sensitive = true` redacts
+   CLI *display* only; it does nothing to the plan archive. This is not widely known and is
+   the actual trap.
+2. **`.gitignore` said `tfplan`, which matches only that exact filename** — not
+   `tfplan.zurich`. Now `tfplan*`.
+
+Remediation: untracked, history rewritten across the 25 unpushed commits, reflog expired,
+`git gc --prune=now`, and **verified 0 of 1,031 remaining git objects contain any token**.
+Plan files deleted from disk. `origin/main` was `d89d601`, which predates all of it, so
+**nothing ever left the machine** — the exposure was local-only.
+
+**Standing rule from this:** never write a saved plan inside the repo. Use
+`-out=$(mktemp -d)/plan`, or at minimum confirm `git check-ignore` covers it first.
+
+**F5** — `infra/modules/services/main.tf` grants `iam:PassRole` on `Resource = "*"`. The
+same grant is correctly scoped to the EMR execution role ARN in the spark module, and that
+ARN is already a variable in this module, so it is a one-line fix.
 
 ---
 
@@ -142,7 +167,7 @@ City YAML files carry only environment-variable *names*, never values.
 
 | # | Gate | Threshold | Status |
 |---|---|---|---|
-| G1 | No dead code or dead config | 0 unreferenced symbols | **FAIL** |
+| G1 | No dead code or dead config | 0 unreferenced symbols | **PARTIAL** |
 | G2 | Docs match reality | 0 contradictions | **UNMEASURED** |
 | G3 | Reproducible from a clean clone | documented, and the doc is correct | **UNMEASURED** |
 | G4 | No orphaned warehouse objects | every table maps to a live model | **PASS** |
