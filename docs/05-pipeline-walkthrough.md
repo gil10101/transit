@@ -443,6 +443,22 @@ It is not an id mismatch: only 2 of Helsinki's 428 realtime route ids are orphan
 sibling variants (1007H, 1001H, 1004H) all report normally. Something on HSL's side is not
 publishing it. This one needs an email to HSL, not a code change.
 
+**[rev 2026-08-25] Ferries are the systematic hole, not just Helsinki's.** Measured across
+every city: Boston has 9 ferry routes scheduled and 0 ever observed; SF has 14 scheduled and
+only 6 observed. Same shape as Helsinki — agencies publish ferry realtime outside GTFS-RT.
+Helsinki's is confirmed agency-side; Boston's and SF's have not been separately confirmed.
+
+**[rev 2026-08-25] SF's 109 unobserved bus routes are six operators, not one bug.** The 511
+feed aggregates ~30 operators under one `city_key`, and they do not all publish realtime: CM
+(20 routes), PE (11), UC (6), GF (5), MB (4) and SS (3) file schedules and nothing else. The
+large operators run 84–100% coverage (AC Transit 112/123, SamTrans 69/75, Muni 58/68, VTA
+55/67). Any SF number therefore averages a well-instrumented core with a handful of blind
+operators — say so wherever one is quoted. Full breakdown in `docs/06-business-answers.md`.
+
+**[rev 2026-08-25] Toronto's subway and NYC's buses are scope decisions, not gaps.** TTC
+publishes alerts only for the subway, so Toronto is a surface-mode score by design. NYC buses
+are deliberately out of scope. Both are stated in the plan; neither is a defect to chase.
+
 ### Things that are collected but not used
 
 **Weather.** `silver.weather_hourly` fills every hour and no dbt model reads it. The

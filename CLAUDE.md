@@ -16,6 +16,8 @@ protobuf-decoded). Your job is execution, not re-planning.
 | `docs/02-warehouse-schema.md` | Gold star schema (dims/facts, grains, unique keys), silver tables, capacity math |
 | `docs/03-dbt-spec.md` | Models, materializations, incremental configs, tests, macros, vars, slim CI |
 | `docs/04-deliverables-todo.md` | Phase checklists with acceptance criteria, keys to obtain, open decisions |
+| `docs/05-pipeline-walkthrough.md` | End-to-end onboarding: every stage + table fields, all filters and why, what's running |
+| `docs/06-business-answers.md` | The 8 sub-questions with their CURRENT measured answers, mode coverage per source, and what each feed does not give us. Numbers come from `analysis/business_questions.sql` — re-run it, never hand-edit them |
 
 Docs are the source of truth. When reality diverges (a feed changes, a field is missing),
 **amend the doc in the same PR** — never silently code around it.
