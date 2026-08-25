@@ -9,7 +9,7 @@ feed quirks), `02-warehouse-schema.md` (table grains and keys), `03-dbt-spec.md`
 (models and tests), `04-deliverables-todo.md` (phase checklists). Where this doc and a
 spec disagree, the spec wins — and the disagreement is a bug in one of them.
 
-Status snapshot in this doc is dated **2026-08-24 21:00Z**. Numbers move; the shape doesn't.
+Status snapshot in this doc is dated **2026-08-25 01:30Z**. Numbers move; the shape doesn't.
 
 ---
 
@@ -396,48 +396,97 @@ guess, and never a quietly loosened threshold.
 | Dagster static refresh | services box | `0 9 * * 0` (Sun) | running |
 | Snowflake `TRANSFORM_XS` | Snowflake `WQTEQYY-IB47757` | only while dbt runs | ~2.8 credits / 30 days |
 
-**Current data state:**
+**Current data state (2026-08-25 01:30Z):**
 
-| | Cities | Detail |
+| Layer | Cities | Detail |
 |---|---|---|
-| Raw archive | 6 | 73,038 objects, 16.9 GB — all six deployed cities fresh |
-| Silver realtime | 4 | nyc, boston, toronto, helsinki (37.3M prediction rows). DC + SF have **zero** silver rows — blocked on the drain |
-| Silver schedule | 7 | all cities incl. Zurich (2.08M trips) and DC (195,576 trips across both zips) |
-| GOLD | 4 | 1,313,428 stop events |
-| Scored on punctuality | 3 | boston 176,312 events / 90.6% scored / 62.4% OTP · helsinki 370,587 / 100% / 81.8% · nyc 210,455 / 95.9% / 73.5% |
-| Volume only | 1 | toronto 556,074 events, no punctuality (filter #8) |
+| Raw archive | 6 | every poll kept verbatim; the replay layer |
+| Silver realtime | 6 | all deployed cities; backlog cleared, drains steady |
+| Silver schedule | 7 | incl. Zurich (2.08M trips) and DC (rail + bus under one version) |
+| GOLD | 6 | 3,446,955 stop events |
+| **Scored on punctuality** | **6** | every deployed city |
 
-**Storage:** S3 raw 16.9 GB · lakehouse 11.4 GB (of which checkpoints 7.25 GB) ·
-artifacts 2.9 GB · Snowflake GOLD ~225 MB. **Cost** ≈ $150/mo at list price, EMR the
-largest line — it tracks the *number* of drains, not the volume, because most of a run is
-Spark start-up.
+| City | Events | Scored | OTP | Median delay |
+|---|---|---|---|---|
+| toronto | 1,250,592 | 96.8% | 49.7% | −23s |
+| helsinki | 675,875 | 99.9% | 81.3% | +31s |
+| boston | 468,435 | 94.2% | 59.0% | +112s |
+| sf | 430,709 | 96.3% | 58.9% | +52s |
+| nyc | 362,241 | 94.2% | 69.9% | +14s |
+| dc | 259,103 | 100% | 53.8% | +81s |
 
----
+dbt: 118 pass, 4 warn, 1 error (the completeness floor, §9).
 
-## 9. Known-broken right now
+**Storage:** S3 raw ~17 GB · lakehouse ~11 GB (checkpoints 7.3 GB of it) · artifacts ~3 GB ·
+Snowflake GOLD ~150 MB. **Cost** ≈ $150/mo at list price, EMR the largest line — it tracks the
+*number* of drains, not the volume, because most of a run is Spark start-up.
 
-**The hourly drain is not draining.** Last committed Kafka batch: 15:55Z. Chain of causes,
-all verified from logs and the AWS API:
+## 9. What's missing, in plain language
 
-1. Commit `d89d601` lowered the executor ask from 12 GB to 10 GB but **has not been
-   applied** — the Lambda still submits `spark.executor.memory=12g`.
-2. Spark adds ~10% per-worker overhead, so `6g driver + 2 × 12g` asks ~33 GB against the
-   app's 32 GB ceiling. The driver log shows the second executor requested and refused in
-   a retry loop: `Encountered exception when requesting SPARK_EXECUTOR containers`.
-3. One executor then carries all four streaming queries plus a 6.4 GB dedup state store
-   and gets OOM-killed: `exited unexpectedly with exit code 137`.
-4. Dagster's chain adopted the run and cancelled it at its 25-minute deadline — a run it
-   did not start. Fixed in `6d31abf`: an adopted run is never cancelled, and the drain
-   deadline is now 50 minutes.
+Nothing is broken as of 2026-08-25 01:30Z. All six deployed cities ingest, drain, and score.
+What follows is what the warehouse still cannot tell you, and why. Read this before quoting
+any number to anyone.
 
-**Unblocking sequence:** `terraform apply` (2 in-place changes, nothing destroyed) →
-redeploy the Dagster image → drain clears the backlog → DC and SF reach silver → rerun
-`dbt build` → six cities in GOLD.
+### Data we will never get from the feed we poll
 
-Other open items: Zurich needs its allow-list generated from the now-parsed national
-schedule before its poller starts; Toronto needs a schedule feed that numbers stops the
-way its realtime feed does, or it stays volume-only; Chicago is waiting on a CTA beta key;
-Tokyo on ODPT approval.
+**Helsinki ferries — 3 routes, 149 trips a day, zero coverage.**
+HSL does not put ferries in its GTFS-RT feed at all. Suomenlinna ferry positions come from
+AIS ship tracking, piped into HSL's separate HFP (MQTT) stream — they maintain a dedicated
+`suomenlinna-ferry-hfp` service just for it. No change on our side produces ferry data from
+the feed we poll. Getting it means subscribing to their MQTT stream, which this project
+currently treats as stretch-only. Until then Helsinki's completeness is measured against a
+denominator that includes 149 trips we cannot observe.
+
+**Helsinki tram line H — 187 trips a day, 69 stops, zero coverage.**
+A full passenger line running 04:00–02:00 that has never produced a single realtime row.
+It is not an id mismatch: only 2 of Helsinki's 428 realtime route ids are orphans, and its
+sibling variants (1007H, 1001H, 1004H) all report normally. Something on HSL's side is not
+publishing it. This one needs an email to HSL, not a code change.
+
+### Things that are collected but not used
+
+**Weather.** `silver.weather_hourly` fills every hour and no dbt model reads it. The
+resilience question — does Zurich handle snow better than New York — needs about two years
+of accrual before it can be answered, so the data is banking against that day.
+
+**`stg_gtfs__stops`.** Built, populated, no downstream consumer.
+
+**`completeness_exclusion_threshold` (0.70).** Declared in `dbt_project.yml` for the P6
+scorecard. No model reads it. Do not cite it as an active guard.
+
+### A test that measures the wrong thing
+
+The completeness floor fails any route-day below 50%. On a route with four scheduled trips,
+missing two is a 50% failure — which is noise, not a finding. 15 route-days currently fail
+and most are this. The two that matter are the real gaps above. Fixing this means requiring
+a minimum denominator before a route is judged, which changes what the number means, so it
+needs a decision rather than a quiet edit.
+
+### Cities not yet contributing
+
+**Zurich.** Schedule is parsed (2.08M trips) but the poller is deliberately off. Its feed is
+the entire Swiss network; without the route allow-list every Swiss operator would be filed
+under `city='zurich'`, and archiving the unfiltered feed at 30s runs ~0.5–1 TB/month.
+Sequence: generate the allow-list from the parsed static, then start the poller.
+
+**Chicago.** CTA's GTFS-RT beta key is not active. Retested 2026-08-24: still `errCd 101`.
+
+**Tokyo.** ODPT account awaiting admin approval. The adapter is specified but unbuilt.
+
+### Not built yet
+
+SCD2 dimensions, the composite city scorecard with versioned weights, and the Streamlit
+dashboard are all P6. A credible ranking also needs roughly 30 days of multi-city accrual —
+right now the warehouse holds two to three days.
+
+### One lesson worth internalising
+
+Toronto spent a day recorded as "cannot be ranked on punctuality — its realtime and static
+feeds disagree on stop numbering". That was true, and the conclusion was wrong: TTC publishes
+**two** GTFS files, and we were reading the one that does not pair with the realtime feed.
+Against the right file (`SurfaceGTFS.zip`) trip ids match 100% and stops 99.6% per route, and
+Toronto now scores 96.8% of 1.25M events. Treat every coverage gap as our bug until the
+agency's own documentation proves otherwise.
 
 ---
 
