@@ -13,6 +13,7 @@ import os
 from dagster import Definitions
 from dagster_dbt import DbtCliResource
 
+from .alerting import pipeline_failure_alert
 from .assets_pipeline import (
     emr_drain,
     pipeline_schedule,
@@ -50,6 +51,10 @@ defs = Definitions(
     asset_checks=[gold_rows_growing, silver_predictions_fresh],
     jobs=[warehouse_chain_job, static_job, weather_job, freshness_job],
     schedules=[pipeline_schedule, static_schedule, weather_schedule, freshness_schedule],
+    # Alerting is the half of observability this pipeline lacked: it detected breakage
+    # and told nobody. Default status RUNNING so a deploy cannot silently leave it off
+    # (dagster sensors default to STOPPED — the same trap the schedules hit in P5).
+    sensors=[pipeline_failure_alert],
     resources={
         "emr": EmrResource(),
         "snowflake": SnowflakeResource(),

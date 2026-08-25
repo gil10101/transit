@@ -352,3 +352,23 @@ def iceberg_refresh_statements(table: str, metadata_path: str) -> list[str]:
         f"metadata_file_path = '{metadata_path}'",
         f"alter iceberg table {name} refresh '{metadata_path}'",
     ]
+
+
+# --- run-failure alerting -----------------------------------------------------
+# [rev 2026-08-25] The pipeline detected breakage and told nobody: the raw-feed tripwire
+# failed every 15 min for a day and was found by hand. The dagster wiring lives in
+# alerting.py; the message shape lives here so it is unit-testable without dagster.
+
+# SNS caps a message at 256 KB and a dagster stack trace can exceed it. A truncated
+# alert that arrives beats a rejected one.
+ALERT_MAX_ERROR_CHARS = 4000
+
+
+def alert_body(run_id: str, job_name: str, error: str | None) -> str:
+    """The message a human reads at 3am: job and run id first, then the error."""
+    # strip FIRST, then fall back: dagster can hand us a whitespace-only message, and
+    # `(error or default).strip()` would render that as an alert with no detail at all
+    detail = (error or "").strip() or "no error detail recorded"
+    if len(detail) > ALERT_MAX_ERROR_CHARS:
+        detail = detail[:ALERT_MAX_ERROR_CHARS] + "\n... (truncated)"
+    return f"job: {job_name}\nrun: {run_id}\n\n{detail}"

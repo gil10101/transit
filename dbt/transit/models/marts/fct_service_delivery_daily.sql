@@ -9,6 +9,13 @@
 --   completeness_pct observed non-ADDED / scheduled — the killed-feed tripwire
 --                    reads this dropping toward 0.
 
+-- [rev 2026-08-25] Bounded to service days that have actually STARTED in the city's
+-- own local time. int_service_dates expands the whole published calendar, which runs
+-- weeks ahead, so without this the mart carried future-dated rows (helsinki out to
+-- 2026-08-26 while it was still the 25th) showing 100% of trips "not delivered".
+-- The completeness tests never saw them — service_day_closed already excluded them —
+-- but a fact table that asserts tomorrow's service was missed is wrong on its face and
+-- silently poisons any chart or average built on the raw mart.
 with scheduled as (
 
     select
@@ -20,6 +27,9 @@ with scheduled as (
     join {{ ref('int_service_dates') }} d
       on d.city_key = t.city_key
      and d.service_id = t.service_id
+    join {{ ref('dim_city') }} dc
+      on dc.city_key = t.city_key
+    where d.service_date <= cast({{ to_local('current_timestamp', 'dc.iana_tz') }} as date)
     group by t.city_key, t.route_id, d.service_date
 
 ),

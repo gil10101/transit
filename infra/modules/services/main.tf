@@ -22,6 +22,9 @@ variable "emr_entry_point" { type = string }
 variable "emr_static_entry_point" { type = string }
 variable "emr_spark_params" { type = string }
 variable "emr_log_uri" { type = string }
+# SNS topic Dagster publishes run failures to (modules/monitoring). Without this the
+# pipeline detects breakage and tells nobody.
+variable "pipeline_alerts_topic_arn" { type = string }
 
 # --- P5: Snowflake identity for Dagster (key-pair auth; private key via SSM, below).
 variable "snowflake_account" {
@@ -188,6 +191,13 @@ resource "aws_iam_role_policy" "services" {
         Action    = ["kms:Decrypt"]
         Resource  = data.aws_kms_alias.ssm.target_key_arn
         Condition = { StringEquals = { "kms:ViaService" = "ssm.${var.region}.amazonaws.com" } }
+      },
+      {
+        # [rev 2026-08-25] Dagster's run-failure sensor publishes here. Scoped to the
+        # one topic, not sns:* — this role is shared by every container on the box.
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
+        Resource = var.pipeline_alerts_topic_arn
       }
     ]
   })
@@ -289,6 +299,7 @@ locals {
           STATIC_ENTRY_POINT: ${var.emr_static_entry_point}
           SPARK_PARAMS: '${var.emr_spark_params}'
           LOG_URI: ${var.emr_log_uri}
+          PIPELINE_ALERTS_TOPIC_ARN: ${var.pipeline_alerts_topic_arn}
           SNOWFLAKE_ACCOUNT: ${var.snowflake_account}
           SNOWFLAKE_USER: ${var.snowflake_user}
           SNOWFLAKE_ROLE: ${var.snowflake_role}
