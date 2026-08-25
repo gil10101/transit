@@ -142,7 +142,7 @@ ours cannot.
 |---|---|---|
 | NYC | 8 separate feeds; `arrival.delay` absent except the L feed; VP has no lat/lon; trip_ids encode origin time (`070950_A..S58R`) | delay computed against static schedule; dedicated origin-time matcher |
 | Helsinki | `trip_id` is **empty string** | trip identity = (route, direction, start_date, start_time) |
-| Toronto | ~3% ADDED trips (negative ids); RT stop ids don't share a namespace with the published GTFS | ADDED counts for volume, not OTP; city gated out of punctuality entirely |
+| Toronto | ~3% ADDED trips (negative ids); subway publishes alerts only | ADDED counts for volume, not OTP; scored on surface modes (streetcar + bus) |
 | DC | ships **two** static zips (rail + bus); ~30% of stop updates are SKIPPED | multi-source static under one version; SKIPPED scores no band |
 | SF Bay | 511 regional feed, ~78k stop updates per poll; must request gzip; 60 req/hr cap | 200s cadence, `agency=RG`, size-aware chunking |
 | Zurich | endpoint serves the **whole Swiss network** | silver filters to a Zurich route allow-list; poller stays off until the list exists |
@@ -387,9 +387,9 @@ guess, and never a quietly loosened threshold.
 | Component | Where | Cadence | State (2026-08-24 21:00Z) |
 |---|---|---|---|
 | Pollers: nyc, boston, toronto, helsinki, dc, sf | services EC2 `i-0f0d6e32cb15ce471`, one container each | 30s (SF 200s) | running |
-| Poller: zurich | — | — | **deliberately off** until the allow-list ships |
+| Poller: zurich | services box | 60s trip updates / 600s alerts | **live since 2026-08-25 03:08Z** — allow-list shipped (615 routes) |
 | Kafka broker | EC2 `10.20.0.34:9092` | always | running |
-| EMR drain (`transit-drain`) | Lambda `transit-pulse-emr-drain` on EventBridge | hourly | **stalled** — see §9 |
+| EMR drain (`transit-drain`) | Lambda `transit-pulse-emr-drain` on EventBridge | hourly | healthy — SUCCESS on every run since 2026-08-25 01:45Z |
 | Dagster 2h chain: drain → Iceberg refresh → dbt build → checks | services box | `5 */2 * * *` | running |
 | Dagster freshness tripwire | services box | `10,25,40,55 * * * *` | running — detects a killed feed within ~55 min |
 | Dagster weather asset | services box | `20 * * * *` | running |
@@ -480,7 +480,7 @@ needs a decision rather than a quiet edit.
 
 ### Cities not yet contributing
 
-**Zurich.** Schedule is parsed (2.08M trips) but the poller is deliberately off. Its feed is
+**Zurich.** Live since 2026-08-25. Its schedule is parsed (2.08M national trips, filtered to 615 Zurich routes on BOTH the realtime and schedule sides) and the poller is running. Its feed is
 the entire Swiss network; without the route allow-list every Swiss operator would be filed
 under `city='zurich'`, and archiving the unfiltered feed at 30s runs ~0.5–1 TB/month.
 Sequence: generate the allow-list from the parsed static, then start the poller.
