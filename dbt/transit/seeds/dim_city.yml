@@ -72,3 +72,35 @@ seeds:
           Display attribution (full notices in ATTRIBUTION.md). Toronto's is
           legally required (Open Government Licence – Toronto).
         data_tests: [not_null]
+      # [rev 2026-08-25] These two columns were untested, and between them they decide
+      # whether a whole city's sched_arr_ts_utc, sched_dep_ts_utc, delay_arr_sec,
+      # delay_dep_sec, otp_band, sched_headway_sec, gap_ratio, bunched_flag,
+      # big_gap_flag and completeness scoring are nulled. The most consequential switches
+      # in the warehouse had less test coverage than attribution_text.
+      #
+      # This is not hypothetical: the Toronto gate was silently absent from production
+      # for a day because a new seed column needs `dbt seed --full-refresh`, and nothing
+      # asserted on it. A not_null here would have caught it on the first build.
+      - name: metrics_from
+        description: >
+          First FULL local service day to score this city on. Blank = not scored yet,
+          which is a valid state for a city whose poller just landed — so this is
+          deliberately NOT not_null. It must never be a future date, though: that would
+          silently exclude every closed day and the city would score nothing forever.
+        data_tests:
+          - value_within_range:
+              name: metrics_from_not_in_the_future
+              arguments:
+                max_value: "current_date"
+              config: {severity: error}
+      - name: schedule_matchable
+        description: >
+          Whether this city's RT ids join its static schedule well enough to trust
+          schedule-derived columns. false nulls every one of them city-wide, so a
+          wrong value here silently deletes or fabricates a city's headline numbers.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+              config: {severity: error}

@@ -19,3 +19,7 @@ select
     {{ re_extract('t.trip_id', '([0-9]{6}_.+)$', 1) }} as origin_time_token
 from {{ source('silver', 'gtfs_static_trips') }} t
 join latest on t.city = latest.city and t.gtfs_version_id = latest.gtfs_version_id
+-- national-feed cities: keep only routes that serve the city we score. Trips are the
+-- choke point for the whole schedule side (stop_times, service dates and frequency all
+-- reach the schedule through a trip), so filtering here bounds every downstream model.
+where {{ national_allowlist_filter('t.city', 't.route_id') }}

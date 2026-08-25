@@ -10,9 +10,14 @@
 -- (route, direction, stop): each observed arrival takes the gap owned by the
 -- nearest preceding scheduled arrival.
 
+-- [rev 2026-08-25] on_schema_change matches fct_stop_events. dbt's default is
+-- 'ignore', which silently computes a new column in the SELECT and never adds it to
+-- the existing relation — exactly how stale_observation_flag once failed its own
+-- test. Three sibling incrementals carried the guard; this one did not.
 {{ config(
     materialized='incremental',
     incremental_strategy='delete+insert',
+    on_schema_change='append_new_columns',
     unique_key=['city_key', 'service_date', 'trip_uid', 'stop_sequence']
 ) }}
 
