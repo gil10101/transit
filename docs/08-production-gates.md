@@ -88,7 +88,7 @@ runbook, not an accident.
 
 | # | Gate | Threshold | Status |
 |---|---|---|---|
-| D1 | A human is notified when the pipeline actually breaks | alert within 60 min of a real failure | **BUILT, NOT APPLIED** |
+| D1 | A human is notified when the pipeline actually breaks | alert within 60 min of a real failure | **BLOCKED on email confirmation** |
 | D2 | No alert fatigue | 0 chronically failing checks | **FAIL** |
 | D3 | Every hop's health is measurable without a human reading logs | one command per hop | **PASS** |
 
@@ -105,7 +105,7 @@ by manual inspection, not by anyone being told.
 | # | Gate | Threshold | Status |
 |---|---|---|---|
 | E1 | Billed spend | <$100/month with headroom | **PASS** |
-| E2 | Every growing store has a retention policy | 0 unbounded stores | **FIXED, awaiting apply** (terraform) |
+| E2 | Every growing store has a retention policy | 0 unbounded stores | **PASS** (applied 2026-08-25 12:04Z) |
 | E3 | No known systematic waste | 0 identified-and-unfixed | **PASS** |
 
 **E1** — gross usage $22.38 for 1–25 August, fully covered by credits, **$0.00 billed**.
@@ -132,7 +132,7 @@ and fixed on 2026-08-25.
 | F2 | Secrets stored encrypted with least-privilege access | all SecureString | **PASS** |
 | F3 | No secret printed by any code path | 0 | **PASS** |
 | F4 | No secret in git history or the working tree | 0 objects | **PASS** (after remediation) |
-| F5 | Least-privilege IAM | no wildcard on privilege-granting actions | **FIXED, awaiting apply** |
+| F5 | Least-privilege IAM | no wildcard on privilege-granting actions | **PASS** (applied 2026-08-25 12:04Z) |
 
 All five deployed secrets are SSM `SecureString`, and the write-only (`value_wo`) pattern
 means no plaintext value appears in Terraform **state** — verified by parsing it. City YAML
@@ -256,3 +256,44 @@ severity it would block every chain for a defect already fixed at source.
 3. **Replay from the raw archive.** The only lossless option, and the most work.
 
 Until one is chosen, the rows stay, excluded from scoring and flagged by the new test.
+
+---
+
+## Deploy-completeness: two traps that both produced silent staleness
+
+Both of these were found by *checking*, never by anything going red. They share a shape —
+the code is correct and committed, and production is running something else.
+
+**1. The dbt project is baked into the dagster image.** A dbt change committed after
+`make deploy-images` does not reach production; the chain keeps running the previous
+tests. On 2026-08-25 a test fixed at 04:44 was pushed at 04:33, so the 06:05 and 08:05
+chains both failed at the dbt step *while every EMR drain reported SUCCESS* and gold
+silently stopped updating for four hours. Nothing alerted, because nothing was watching
+the right thing.
+
+  **Check after any dbt change:** `max(last_altered)` on `TRANSIT.GOLD.FCT_STOP_EVENTS`
+  should advance within one chain tick. A green drain says nothing about gold.
+
+**2. `terraform apply` with `-target` silently skips everything else.** Terraform warns
+"Applied changes may be incomplete" and it means it. The 12:04Z apply landed SNS, the
+lifecycle rule and the IAM scope — and skipped `module.spark.aws_lambda_function.drain`
+entirely, leaving the running Lambda on the OLD `ACTIVE_STATES` (missing `QUEUED` and
+`CANCELLING`) and the old non-idempotent `clientToken`. That is the guard against two
+drains sharing one Spark checkpoint, which previously destroyed 58 minutes of data.
+
+  `-target` is unavoidable here only because the Snowflake provider fails to configure
+  (`260000: account is empty`) even though it is unused. **Always finish with an
+  untargeted `terraform plan` and confirm it reports no changes.** That is the only way
+  to know what targeting skipped.
+
+## D1 is built but not yet passing
+
+Every piece is correct and verified: topic created, IAM scoped to `sns:Publish` on that
+one ARN, `PIPELINE_ALERTS_TOPIC_ARN` confirmed live inside the dagster container, sensor
+registered with `default_status=RUNNING`.
+
+The subscription is still `PendingConfirmation`. SNS accepts every publish and delivers
+none of it until a human clicks the link. **A fully correct alerting path that ends in
+silence is indistinguishable from no alerting at all**, which is the failure this gate
+exists to close — so D1 stays FAIL until `list-subscriptions-by-topic` shows a real
+subscription ARN.
