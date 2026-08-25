@@ -85,13 +85,20 @@ seeds:
         description: >
           First FULL local service day to score this city on. Blank = not scored yet,
           which is a valid state for a city whose poller just landed — so this is
-          deliberately NOT not_null. It must never be a future date, though: that would
-          silently exclude every closed day and the city would score nothing forever.
+          deliberately NOT not_null.
+
+          [rev 2026-08-25] This was first written as "must not be in the future" and it
+          failed immediately on zurich (2026-08-26), which is CORRECT: zurich went live at
+          05:08 local on the 25th, so its first full service day really is the 26th. DC
+          was set the same way the day it onboarded. A metrics_from one day ahead is the
+          normal state for a city that just went live, and the test was wrong, not the
+          seed. What is worth catching is a typo — a pasted wrong year, or a date so far
+          out the city would never be scored — so the bound is a week, not today.
         data_tests:
           - value_within_range:
-              name: metrics_from_not_in_the_future
+              name: metrics_from_within_a_week
               arguments:
-                max_value: "current_date"
+                max_value: "dateadd(day, 7, current_date)"
               config: {severity: error}
       - name: schedule_matchable
         description: >

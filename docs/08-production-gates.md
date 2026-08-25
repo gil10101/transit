@@ -16,8 +16,8 @@ Established 2026-08-25. Re-measure before declaring any phase complete.
 
 | # | Gate | Threshold | Status |
 |---|---|---|---|
-| A1 | Every canonical rule (CLAUDE.md) has exactly one implementation | 1 live implementation each; no dead duplicates | **PARTIAL** |
-| A2 | dbt tests clean on data that is fair to judge | 0 errors on closed local days at/after `metrics_from` | **IN PROGRESS** |
+| A1 | Every canonical rule (CLAUDE.md) has exactly one implementation | 1 live implementation each; no dead duplicates | **PASS** |
+| A2 | dbt tests clean on data that is fair to judge | 0 errors on closed local days at/after `metrics_from` | **PASS** (145 pass / 5 warn / 0 error) |
 | A3 | CI gates green | `ruff check` + `ruff format --check` + `pytest` all pass | **PASS** |
 | A4 | Every city verified field-by-field at every hop | raw → silver → gold sampled per city | **PASS** |
 | A5 | No test that cannot fail | every test has a case that would trip it | **PARTIAL** |
@@ -46,7 +46,7 @@ and it was never built, so a broken model reaches production undetected.
 | B1 | Completeness per city on closed days | ≥85% (P3 acceptance criterion) | **UNMEASURED** |
 | B2 | Share of events carrying a delay | ≥90% per city | **PASS** |
 | B3 | Every scheduled route observed, or documented as a known gap | 100% accounted for | **PASS** |
-| B4 | No future-dated service days in judged marts | 0 rows | **FIXED, awaiting deploy** |
+| B4 | No future-dated service days in judged marts | 0 rows | **PASS** (measured 0) |
 | B5 | Grain uniqueness on the atomic fact | 0 duplicates | **PASS** |
 
 **B1** — only Helsinki (95.9%) and NYC (95.2%) have a finished judged day. Boston,
@@ -67,7 +67,7 @@ date in a fact table is wrong on its face and will mislead any chart built on it
 | # | Gate | Threshold | Status |
 |---|---|---|---|
 | C1 | Scheduled jobs succeed | ≥95% over a rolling 7 days | **FAIL** |
-| C2 | No permanently-red check | 0 chronically failing jobs | **FAIL** |
+| C2 | No permanently-red check | 0 chronically failing jobs | **PASS** |
 | C3 | Transient failures self-heal | no manual step for a single-run failure | **PASS** |
 | C4 | Single points of failure documented with a tested recovery path | every SPOF has a runbook | **PARTIAL** (documented, untested) |
 
@@ -105,7 +105,7 @@ by manual inspection, not by anyone being told.
 | # | Gate | Threshold | Status |
 |---|---|---|---|
 | E1 | Billed spend | <$100/month with headroom | **PASS** |
-| E2 | Every growing store has a retention policy | 0 unbounded stores | **FIXED, awaiting apply** |
+| E2 | Every growing store has a retention policy | 0 unbounded stores | **FIXED, awaiting apply** (terraform) |
 | E3 | No known systematic waste | 0 identified-and-unfixed | **PASS** |
 
 **E1** — gross usage $22.38 for 1–25 August, fully covered by credits, **$0.00 billed**.
@@ -132,7 +132,7 @@ and fixed on 2026-08-25.
 | F2 | Secrets stored encrypted with least-privilege access | all SecureString | **PASS** |
 | F3 | No secret printed by any code path | 0 | **PASS** |
 | F4 | No secret in git history or the working tree | 0 objects | **PASS** (after remediation) |
-| F5 | Least-privilege IAM | no wildcard on privilege-granting actions | **FAIL** |
+| F5 | Least-privilege IAM | no wildcard on privilege-granting actions | **FIXED, awaiting apply** |
 
 All five deployed secrets are SSM `SecureString`, and the write-only (`value_wo`) pattern
 means no plaintext value appears in Terraform **state** — verified by parsing it. City YAML
@@ -204,3 +204,55 @@ the distinction between "dead" and "not wired up yet" is explicit.
    accepted on (B1).
 4. **The canonical service-date rule has three implementations** and the tests cover the
    dead one (A1).
+
+---
+
+## Verification log — 2026-08-25
+
+What was actually measured, not asserted. Every figure came from a live query or a real
+build after the fixes shipped.
+
+### Fixed and verified in production
+
+| What was wrong | Evidence it is fixed |
+|---|---|
+| Zurich's allow-list applied to realtime only; the schedule side carried the whole Swiss network | `stg_gtfs__routes` for zurich: **5,122 → 615 routes** |
+| `fct_service_delivery_daily` carried future-dated rows | rows with `service_date > current_date`: **0** |
+| Completeness error blocked every chain run | prod `dbt build`: **145 pass / 5 warn / 0 error / 0 skip** |
+| Freshness tripwire failed every 15 min | SUCCESS at 03:25, 03:40, 03:55, 04:10, 04:25 |
+| Service-date rule had three Spark implementations, two wrong for Toronto | one helper, constants in `spark_jobs/timeutils.py`, pinned by test |
+| `field_audit.py` under-reported OTP by up to 4.3 points | corrected formula now tracks the canonical mart; it had shown healthy Zurich as **18.5% instead of 95.8%** |
+| Live API tokens committed in Terraform plan files | **0 of 1,031** git objects contain a token; nothing was ever pushed |
+
+### Zurich, verified end to end
+124 gold events looked alarming against 165k silver predictions. It is **124 of 124
+eligible — 100% conversion**. Zurich's feed publishes ~2 hours ahead and it started at
+03:08Z, so nearly everything is still ahead of the 20-minute finalize horizon. Trip
+matching is 4,672 trips, and **0 rows outside the allow-list** reached silver.
+
+### Known and bounded: the SF phantom service day
+
+**8,214 events remain in `fct_stop_events` under `sf` / `2026-08-23`, a day on which SF
+produced no data at all.** Caused by the −12h cutover default; fixed at source, but the
+fix corrects new silver writes only and the historical rows persist.
+
+Contained, and worth being precise about why:
+- `sf.metrics_from` is **2026-08-25**, so the phantom day is excluded from every scored
+  metric and every completeness assertion.
+- It is *not* excluded from all-time aggregates, so any SF figure quoted without a
+  `metrics_from` filter — including those in `docs/06` — is contaminated by it.
+
+A new guard, `assert_prev_day_events_are_overnight`, catches this class permanently. The
+signal is unambiguous: SF has **7,119 previous-day rows, every one arriving between 09:00
+and 20:00 local**, where Helsinki (34,282), NYC (4,980) and Boston (14,128) all cluster in
+hours 0–4 and Toronto has 2 daytime rows in 97,445. It ships at **warn**, because at error
+severity it would block every chain for a defect already fixed at source.
+
+**Open decision — needs a human.** Three ways to clear the backlog, each with a real cost:
+1. **Delete** the misdated silver rows. Simple, but loses ~375 trips of genuine morning
+   observations that exist nowhere else in silver.
+2. **Re-date** them in place. Correct in principle, but 321 trip_ids already carry both
+   service dates, so a merge could collide on the atomic fact's unique key.
+3. **Replay from the raw archive.** The only lossless option, and the most work.
+
+Until one is chosen, the rows stay, excluded from scoring and flagged by the new test.
