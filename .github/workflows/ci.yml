@@ -18,3 +18,33 @@ jobs:
       - run: uv run ruff format --check .
       # unit tests decode checked-in fixtures only; no live feed calls in CI
       - run: uv run pytest
+
+  # [rev 2026-08-25] dbt was not validated by CI at all, so a model that failed to
+  # compile, a test with a typo'd column, or a broken macro reached production and was
+  # only caught by the 2h chain failing in prod. This does NOT need warehouse
+  # credentials: `dbt parse` + `dbt compile` against the duckdb target renders every
+  # model and every generic test's SQL, which is where these mistakes actually live.
+  # docs/03-dbt-spec.md specifies a fuller slim CI (state:modified+ against duckdb);
+  # that needs a stored manifest artifact and is the next step, not a reason to ship
+  # nothing in the meantime.
+  dbt:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dbt/transit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+      - run: uv sync
+        working-directory: .
+      # no packages.yml — dbt_utils/dbt_expectations are deliberately not installed
+      # (docs/03 §7: the range checks use the in-repo value_within_range generic), so
+      # there is no `dbt deps` step to run.
+      # fails on unparseable YAML, unknown refs, undefined macros, bad test config
+      - run: uv run dbt parse
+      # renders every model + generic test to SQL; catches jinja and column mistakes
+      - run: uv run dbt compile --target dev
+      # seeds are checked-in data: a malformed CSV should fail here, not in prod
+      - run: uv run dbt seed --target dev --full-refresh
