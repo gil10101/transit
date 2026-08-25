@@ -110,10 +110,14 @@ by manual inspection, not by anyone being told.
 
 **E1** — gross usage $22.38 for 1–25 August, fully covered by credits, **$0.00 billed**.
 
-**E2** — two unbounded stores: the raw archive (~27 GB and growing for every city) and
-EMR debug logs (3.4 GB in three days, read by nobody after the week they are produced).
-Raw retention is a genuine tradeoff — it is the replay layer — and needs a decision.
-EMR logs are close to free money.
+**E2** — **corrected 2026-08-25.** An earlier draft of this gate claimed the raw archive
+had no policy. It does: `infra/modules/lake/main.tf` transitions it to STANDARD_IA at 30
+days with an explicit "history is the asset, never expire" decision. That is a deliberate
+choice, correctly recorded, and it stands.
+
+The one genuine oversight was EMR debug logs — 3.4 GB in three days, read by nobody after
+the week they were produced. Now expiring at 14 days, plus an abort rule for incomplete
+multipart uploads, which otherwise linger invisibly and are billed forever.
 
 **E3** — Zurich's duplicate-alerts waste (29 GB/day of a byte-identical file) was found
 and fixed on 2026-08-25.

@@ -35,6 +35,27 @@ resource "aws_s3_bucket_lifecycle_configuration" "raw" {
   }
 }
 
+# [rev 2026-08-25] EMR debug logs: 3.4 GB accumulated in three days and nothing reads
+# them after the week they were produced. This is the one unbounded store that was an
+# oversight rather than a decision — the raw archive above is deliberately kept forever
+# (history is the asset) and lakehouse holds live Iceberg data.
+resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
+  bucket = aws_s3_bucket.this["artifacts"].id
+  rule {
+    id     = "expire-emr-debug-logs"
+    status = "Enabled"
+    filter { prefix = "emr-logs/" }
+    expiration { days = 14 }
+  }
+  # a failed multipart upload otherwise lingers invisibly and is billed forever
+  rule {
+    id     = "abort-incomplete-uploads"
+    status = "Enabled"
+    filter {}
+    abort_incomplete_multipart_upload { days_after_initiation = 7 }
+  }
+}
+
 output "raw_bucket" { value = aws_s3_bucket.this["raw"].bucket }
 output "lakehouse_bucket" { value = aws_s3_bucket.this["lakehouse"].bucket }
 output "artifacts_bucket" { value = aws_s3_bucket.this["artifacts"].bucket }
