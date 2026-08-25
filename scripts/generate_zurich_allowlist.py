@@ -46,31 +46,43 @@ with latest as (
     select max(gtfs_version_id) as vid
     from silver.gtfs_static_trips where city = '{CITY}'
 ),
+-- every CTE joins `latest` explicitly: mixing a comma-join with an ANSI JOIN
+-- binds the JOIN to `latest` instead of the comma'd table, so `st.trip_id`
+-- falls out of scope ("invalid identifier ST.TRIP_ID").
 stops as (
-    select stop_id,
-           case when stop_lat between {BBOX["lat_min"]} and {BBOX["lat_max"]}
-                 and stop_lon between {BBOX["lon_min"]} and {BBOX["lon_max"]}
-                then 1 else 0 end as in_zone
-    from silver.gtfs_static_stops, latest
-    where city = '{CITY}' and gtfs_version_id = latest.vid
+    select s.stop_id,
+           max(case when s.stop_lat between {BBOX["lat_min"]} and {BBOX["lat_max"]}
+                     and s.stop_lon between {BBOX["lon_min"]} and {BBOX["lon_max"]}
+                    then 1 else 0 end) as in_zone
+    from silver.gtfs_static_stops s
+    join latest l on s.gtfs_version_id = l.vid
+    where s.city = '{CITY}'
+    group by 1
+),
+trips as (
+    select t.trip_id, t.route_id
+    from silver.gtfs_static_trips t
+    join latest l on t.gtfs_version_id = l.vid
+    where t.city = '{CITY}'
 ),
 route_stops as (
-    select t.route_id,
-           s.stop_id,
-           max(s.in_zone) as in_zone
-    from silver.gtfs_static_stop_times st, latest
-    join silver.gtfs_static_trips t
-      on t.city = '{CITY}' and t.gtfs_version_id = latest.vid and t.trip_id = st.trip_id
-    join stops s on s.stop_id = st.stop_id
-    where st.city = '{CITY}' and st.gtfs_version_id = latest.vid
-    group by 1, 2
+    select distinct t.route_id, st.stop_id
+    from silver.gtfs_static_stop_times st
+    join latest l on st.gtfs_version_id = l.vid
+    join trips t on t.trip_id = st.trip_id
+    where st.city = '{CITY}'
+),
+scored_stops as (
+    select rs.route_id, rs.stop_id, s.in_zone
+    from route_stops rs
+    join stops s on s.stop_id = rs.stop_id
 ),
 scored as (
     select route_id,
            count(*) as stops_total,
            sum(in_zone) as stops_in_zone,
            cast(sum(in_zone) as double) / nullif(count(*), 0) as zone_share
-    from route_stops group by 1
+    from scored_stops group by 1
 )
 select s.route_id,
        coalesce(r.route_short_name, '') as route_short_name,
