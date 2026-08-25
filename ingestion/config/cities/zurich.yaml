@@ -19,10 +19,21 @@ poll_seconds: 30
 # Permalink is timetable-YEAR-scoped: expect an annual rollover to .../timetable-2027-...
 # each December (docs/01 §D amendment via W3).
 static_gtfs: https://data.opentransportdata.swiss/en/dataset/timetable-2026-gtfs2020/permalink
+# [rev 2026-08-25] Per-endpoint cadence. Measured on the first live day: the
+# national feed writes ~38 GB/day of raw at 30s — more than the entire raw bucket
+# (all six other cities plus statics) accumulates, every day, against a <$100/mo
+# budget. 29 GB of that was the alerts product, whose 10 MB payload came back
+# BYTE-IDENTICAL on every poll (same MD5 across every fetch, al=1609 unchanged):
+# 2,880 copies a day of one file. Trip updates keep a fast cadence because delay
+# resolution depends on them; alerts do not change on that timescale, and
+# fct_alerts_daily derives alert_minutes from the alert's own start/end stamps,
+# not from how often we polled. Together: ~38 -> ~6 GB/day.
 feed_groups:
   trip_updates:
     url: https://api.opentransportdata.swiss/la/gtfs-rt
     auth: {type: header, name: Authorization, env: SWISS_OTD_TOKEN}
+    poll_seconds: 60
   alerts:
     url: https://api.opentransportdata.swiss/la/gtfs-sa
     auth: {type: header, name: Authorization, env: SWISS_OTD_SA_TOKEN}
+    poll_seconds: 600

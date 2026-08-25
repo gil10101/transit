@@ -34,10 +34,12 @@ def poll_endpoint(session, cfg: CityConfig, archiver: RawArchiver, name: str, ur
     return name, len(raw), envelopes
 
 
-def run_cycle(session, cfg, emitter, archiver, pool) -> None:
+def run_cycle(session, cfg, emitter, archiver, pool, due=None) -> None:
+    """Poll the endpoints in `due` (default: all of them) once, concurrently."""
+    names = list(cfg.endpoints) if due is None else list(due)
     futures = {
-        pool.submit(poll_endpoint, session, cfg, archiver, name, url): name
-        for name, url in cfg.endpoints.items()
+        pool.submit(poll_endpoint, session, cfg, archiver, name, cfg.endpoints[name]): name
+        for name in names
     }
     counts = {"trip_updates": 0, "vehicle_positions": 0, "alerts": 0}
     total_bytes, failures = 0, []
@@ -55,6 +57,8 @@ def run_cycle(session, cfg, emitter, archiver, pool) -> None:
         f"tu={counts['trip_updates']} vp={counts['vehicle_positions']} "
         f"al={counts['alerts']} bytes={total_bytes}"
     )
+    if len(names) < len(cfg.endpoints):
+        status += f" polled={','.join(sorted(names))}"
     if failures:
         status += f" FAILURES={failures}"
     print(f"{utcnow():%H:%M:%S} {cfg.city} {status}", flush=True)
@@ -70,13 +74,24 @@ def main() -> None:
     emitter = KafkaEmitter()
     emitter.ensure_topics()
     archiver = RawArchiver()
-    interval = cfg.effective_poll_seconds
-    print(f"polling {city}: {len(cfg.endpoints)} endpoints every {interval}s", flush=True)
+    # Each endpoint keeps its own cadence (feed_groups.<name>.poll_seconds), so a
+    # feed whose payload barely changes is not re-fetched at the city's rate. The
+    # loop ticks at the fastest of them and polls only what is due; when every
+    # endpoint shares one interval this is exactly the old behaviour.
+    intervals = {name: cfg.poll_seconds_for(name) for name in cfg.endpoints}
+    tick = min(intervals.values())
+    plan = ", ".join(f"{n} every {s}s" for n, s in sorted(intervals.items()))
+    print(f"polling {city}: {plan}", flush=True)
+    next_due = dict.fromkeys(cfg.endpoints, 0.0)
     with ThreadPoolExecutor(max_workers=len(cfg.endpoints)) as pool:
         while True:
             started = time.monotonic()
-            run_cycle(session, cfg, emitter, archiver, pool)
-            time.sleep(max(0.0, interval - (time.monotonic() - started)))
+            due = [name for name, at in next_due.items() if started >= at]
+            if due:
+                run_cycle(session, cfg, emitter, archiver, pool, due)
+                for name in due:
+                    next_due[name] = started + intervals[name]
+            time.sleep(max(0.0, tick - (time.monotonic() - started)))
 
 
 if __name__ == "__main__":

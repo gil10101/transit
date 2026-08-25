@@ -57,10 +57,25 @@ class CityConfig:
     # Per-endpoint override, same shape, for cities issuing one token per API product
     # (Zurich: gtfs-rt vs gtfs-sa tokens differ). Falls back to city-level `auth`.
     endpoint_auth: dict[str, dict] = field(default_factory=dict)
+    # Per-endpoint cadence override, falling back to city-level `poll_seconds`.
+    # Added 2026-08-25 for Zurich: its national service-alerts product returns a
+    # 10 MB payload that is BYTE-IDENTICAL between polls (same MD5 across every
+    # fetch, measured live), so polling it at the city's 30s wrote ~29 GB/day of
+    # duplicate objects — more than the entire raw bucket, daily, against a
+    # <$100/mo budget. Trip updates still need a fast cadence; alerts do not.
+    endpoint_poll_seconds: dict[str, int] = field(default_factory=dict)
 
     @property
     def effective_poll_seconds(self) -> int:
         return max(POLL_FLOOR_SECONDS, self.poll_seconds)
+
+    def poll_seconds_for(self, endpoint: str | None) -> int:
+        """Cadence for one endpoint. The 30s floor applies per endpoint, so a
+        per-feed override can only ever slow a feed down, never hammer it."""
+        return max(
+            POLL_FLOOR_SECONDS,
+            self.endpoint_poll_seconds.get(endpoint, self.poll_seconds),
+        )
 
     def auth_for(self, endpoint: str | None) -> dict:
         return self.endpoint_auth.get(endpoint) or self.auth
@@ -78,11 +93,14 @@ def load_city_config(city: str) -> CityConfig:
     # feed_groups values are either a bare URL string or {url: ..., auth: {...}}
     endpoints: dict[str, str] = {}
     endpoint_auth: dict[str, dict] = {}
+    endpoint_poll_seconds: dict[str, int] = {}
     for name, value in dict(groups).items():
         if isinstance(value, dict):
             endpoints[name] = value["url"]
             if value.get("auth"):
                 endpoint_auth[name] = dict(value["auth"])
+            if value.get("poll_seconds") is not None:
+                endpoint_poll_seconds[name] = int(value["poll_seconds"])
         else:
             endpoints[name] = value
     return CityConfig(
@@ -95,6 +113,7 @@ def load_city_config(city: str) -> CityConfig:
         static_gtfs=raw.get("static_gtfs"),
         auth=raw.get("auth") or {},
         endpoint_auth=endpoint_auth,
+        endpoint_poll_seconds=endpoint_poll_seconds,
     )
 
 
