@@ -297,3 +297,62 @@ none of it until a human clicks the link. **A fully correct alerting path that e
 silence is indistinguishable from no alerting at all**, which is the failure this gate
 exists to close — so D1 stays FAIL until `list-subscriptions-by-topic` shows a real
 subscription ARN.
+
+---
+
+## Handoff: the two steps still outstanding
+
+Both need a human. Neither can be done by an agent — `terraform apply` is blocked by the
+permission classifier, and the SNS confirmation is a link in someone's inbox.
+
+### 1. Deploy the drain Lambda fix
+
+The `-target` apply on 2026-08-25 landed SNS, the lifecycle rule and the IAM scope but
+**skipped `module.spark.aws_lambda_function.drain`**. Production is still running the old
+`ACTIVE_STATES` (missing the non-terminal `QUEUED` and `CANCELLING`) and the old
+non-idempotent `clientToken`. That is the guard against two drains writing one Spark
+checkpoint — the overlap that destroyed 58 minutes of drained data on 2026-08-24.
+
+Do NOT write the plan inside the repo: a saved plan embeds root-module variable values in
+cleartext, which is how four live API tokens reached git on 2026-08-25.
+
+```sh
+cd /Users/gil/Stuff/Transit
+set -a; . ./.env; set +a
+export TF_VAR_wmata_api_key="$WMATA_API_KEY" TF_VAR_bay511_api_token="$BAY511_API_TOKEN" \
+       TF_VAR_swiss_otd_token="$SWISS_OTD_TOKEN" TF_VAR_swiss_otd_sa_token="$SWISS_OTD_SA_TOKEN" \
+       TF_VAR_cta_api_key="$CTA_API_KEY"
+PD=$(mktemp -d)
+terraform -chdir=infra/envs/dev plan -target=module.spark.aws_lambda_function.drain -out="$PD/plan"
+terraform -chdir=infra/envs/dev apply "$PD/plan"
+```
+
+`-target` is needed only because the unused Snowflake provider fails to configure
+(`260000: account is empty`). **Finish with an untargeted `terraform plan` and confirm it
+reports no changes** — that is the only way to see what targeting skipped. It is how this
+Lambda gap was found in the first place.
+
+Verify (the hash should stop being `Jvt6sbDQGIzzPr2AK2KednIB0o1gfmm43joFUm1VLqA=`):
+
+```sh
+aws lambda get-function-configuration --region us-east-2 \
+  --function-name transit-pulse-emr-drain --query '[LastModified,CodeSha256]' --output text
+```
+
+No reboot needed — Lambda picks up new code immediately and this does not touch the
+services box.
+
+### 2. Confirm the alerting email
+
+`lichorish@gmail.com` has an "AWS Notification - Subscription Confirmation" message. Until
+the link is clicked, SNS accepts every publish and delivers none of it.
+
+```sh
+aws sns list-subscriptions-by-topic --region us-east-2 \
+  --topic-arn arn:aws:sns:us-east-2:622221238588:transit-pulse-pipeline-alerts
+```
+
+`PendingConfirmation` means the alerting is decorative. A real subscription ARN means D1
+finally passes. Everything else on that path is built and verified: topic created, IAM
+scoped to `sns:Publish` on that one ARN, `PIPELINE_ALERTS_TOPIC_ARN` confirmed live inside
+the dagster container, sensor registered with `default_status=RUNNING`.
