@@ -22,7 +22,14 @@
 --     runtime 'ojp:…' trips miss). The feed NEVER sets direction_id, so the
 --     matched static trip supplies direction downstream (national trips.txt
 --     carries the column).
---   * toronto: RT trip_ids share NO namespace with the static zip (2/1,478
+--   * toronto: [rev 2026-08-25] MOVED TO THE EXACT BRANCH. The namespace
+--     problem was never TTC's — we were reading the wrong one of the two GTFS
+--     files TTC publishes. Against SurfaceGTFS.zip (the static that pairs with
+--     the bustime realtime feed) RT trip_ids join the static at 100.0%
+--     (27,942/27,953 non-ADDED on one live day) and stops at 99.6% per route,
+--     so the fuzzy origin-time proxy below is no longer needed for it. The
+--     fuzzy branch is kept for any future city with the same shape.
+--   * toronto (HISTORICAL, wrong static): RT trip_ids shared NO namespace (2/1,478
 --     joinable, review-verified 2026-08-23 — bustime ids vs CKAN schedule ids),
 --     and the feed omits direction_id/start_time/start_date. Matched like a
 --     no-trip-id city: (route_id, service_date, origin time) where the RT
@@ -41,6 +48,13 @@
 -- Grain: at most one row per (city_key, service_date, trip_uid) — every branch
 -- rank-and-keeps-one; int_trip_matching enforces it again.
 
+-- [rev 2026-08-25] No city needs the origin-time proxy any more: toronto, the
+-- last one, moved to the exact branch when its static was corrected. The branch
+-- stays wired for the next city whose RT and static share no trip namespace —
+-- add it here and it works without touching the SQL below.
+{% set fuzzy_cities = [] %}
+{% set fuzzy_filter = "('" ~ fuzzy_cities | join("','") ~ "')" if fuzzy_cities else "('__no_fuzzy_city__')" %}
+
 with rt_exact as (
 
     select distinct
@@ -50,7 +64,7 @@ with rt_exact as (
         trip_uid,
         route_id
     from {{ ref('stg_gtfsrt__trip_updates') }}
-    where city_key in ('boston', 'dc', 'zurich', 'sf')
+    where city_key in ('boston', 'dc', 'zurich', 'sf', 'toronto')
       and trip_id is not null
 
 ),
@@ -68,7 +82,7 @@ static_by_id as (
             order by route_id
         ) as rn
     from {{ ref('stg_gtfs__trips') }}
-    where city_key in ('boston', 'dc', 'zurich', 'sf')
+    where city_key in ('boston', 'dc', 'zurich', 'sf', 'toronto')
 
 ),
 
@@ -107,7 +121,7 @@ rt_fuzzy_first_stu as (
             order by stop_sequence, arr_pred_ts_utc
         ) as rn
     from {{ ref('stg_gtfsrt__trip_updates') }}
-    where city_key = 'toronto'
+    where city_key in {{ fuzzy_filter }}
       and arr_pred_ts_utc is not null
       and stop_sequence is not null
 
@@ -143,7 +157,7 @@ fuzzy_origins as (
             order by stop_sequence
         ) as stop_rn
     from {{ ref('stg_gtfs__stop_times') }}
-    where city_key = 'toronto'
+    where city_key in {{ fuzzy_filter }}
 
 ),
 
@@ -164,7 +178,7 @@ fuzzy_static as (
       on o.city_key = t.city_key
      and o.trip_id = t.trip_id
      and o.stop_rn = 1
-    where t.city_key = 'toronto'
+    where t.city_key in {{ fuzzy_filter }}
 
 ),
 
