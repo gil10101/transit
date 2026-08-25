@@ -87,7 +87,7 @@ def gtfs_static(
 
     1. Download + stage each LIVE_CITIES zip (stage_static_zip), then EMR runs
        spark_jobs/gtfs_static_parse.py <city> <version_id> per city,
-       sequentially — one job holds the whole 4 vCPU app and EMR Serverless
+       sequentially — one job holds most of the 8 vCPU app and EMR Serverless
        rejects (not queues) over-capacity submits (quirk 3). static_gtfs URLs
        come from ingestion/config/cities/<city>.yaml — never hardcoded here.
        A failing city is recorded and the remaining cities still run; the
@@ -164,6 +164,6 @@ static_schedule = ScheduleDefinition(
     default_status=DefaultScheduleStatus.RUNNING,
     job=static_job,
     cron_schedule="0 9 * * 0",  # Sun 09:00 UTC — off the 2h chain grid (:05) so the
-    # static parses never queue behind a chain drain on the 4 vCPU app
+    # static parses never queue behind a chain drain on the 8 vCPU app
     execution_timezone="UTC",
 )

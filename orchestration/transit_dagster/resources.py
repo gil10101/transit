@@ -16,6 +16,7 @@ from dagster import ConfigurableResource, get_dagster_logger
 
 from .lib import (
     CATALOG_INTEGRATION,
+    EMR_ACTIVE_STATES,
     EXTERNAL_VOLUME,
     drain_job_request,
     require_env,
@@ -60,7 +61,7 @@ class EmrResource(ConfigurableResource):
         prefix = request["name"].split("-dagster")[0]
         runs = client.list_job_runs(
             applicationId=request["applicationId"],
-            states=["SUBMITTED", "PENDING", "SCHEDULED", "RUNNING"],
+            states=list(EMR_ACTIVE_STATES),
         )["jobRuns"]
         for run in runs:
             if str(run.get("name", "")).startswith(prefix):
@@ -70,7 +71,7 @@ class EmrResource(ConfigurableResource):
     def _any_active_run(self, client, request: dict) -> str | None:
         runs = client.list_job_runs(
             applicationId=request["applicationId"],
-            states=["SUBMITTED", "PENDING", "SCHEDULED", "RUNNING"],
+            states=list(EMR_ACTIVE_STATES),
         )["jobRuns"]
         return runs[0]["id"] if runs else None
 
@@ -81,7 +82,7 @@ class EmrResource(ConfigurableResource):
         - reusing the original clientToken makes EMR return the same
           already-FAILED run id forever (idempotency), so the old fixed-90s
           resubmit could never succeed;
-        - back-to-back 15-min drains can hold the 4 vCPU app nearly
+        - back-to-back hourly drains can hold the 8 vCPU app nearly
           continuously, so blind resubmission mostly lands on a busy app.
         Polling for the idle gap (~20s) catches the minutes between drains.
         """
@@ -144,7 +145,7 @@ class EmrResource(ConfigurableResource):
             if state in EMR_TERMINAL_STATES:  # FAILED / CANCELLED
                 details = job.get("stateDetails", "")
                 # a capacity rejection surfaces as an instantly-FAILED run (one
-                # running job holds the whole 4 vCPU app)
+                # running job holds most of the 8 vCPU app)
                 if "maximumCapacity" in details:
                     # same-name run holds the capacity -> it does our work: adopt
                     if adopt_in_flight:

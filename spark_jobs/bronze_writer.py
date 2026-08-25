@@ -17,6 +17,10 @@ from spark_jobs.session import (
     kafka_bootstrap,
     trigger_kwargs,
 )
+from spark_jobs.timeutils import (
+    CITY_FALLBACK_CUTOVER_HOURS,
+    DEFAULT_FALLBACK_CUTOVER_HOURS,
+)
 
 TABLE = "lake.bronze.envelopes"
 
@@ -33,6 +37,28 @@ def tz_map_expr():
     for city, tz in city_timezones().items():
         pairs.extend([F.lit(city), F.lit(tz)])
     return F.create_map(*pairs)
+
+
+def cutover_expr():
+    """city -> service-date cutover hours, as a Spark map literal."""
+    pairs: list = []
+    for city, hours in CITY_FALLBACK_CUTOVER_HOURS.items():
+        pairs += [F.lit(city), F.lit(hours)]
+    return F.create_map(*pairs) if pairs else F.create_map()
+
+
+def service_date_expr(fetched_at, tz, city_col=None):
+    """The canonical service-date fallback, in ONE place.
+
+    [rev 2026-08-25] This rule had three Spark implementations — here, in
+    silver_normalize.with_common, and in silver_normalize.alerts — and two of them
+    hardcoded -12h, so Toronto (which rolls at 04:00 and sets start_date on no trips)
+    came out a day early in both. 73 of 297 live toronto alert rows were misdated.
+    Constants live in spark_jobs.timeutils; every caller goes through here.
+    """
+    city_col = F.col("city") if city_col is None else city_col
+    cutover = F.coalesce(cutover_expr()[city_col], F.lit(DEFAULT_FALLBACK_CUTOVER_HOURS))
+    return F.to_date(F.from_utc_timestamp(fetched_at, tz) - F.make_dt_interval(hours=cutover))
 
 
 def build_stream(spark: SparkSession) -> DataFrame:
@@ -65,9 +91,7 @@ def build_stream(spark: SparkSession) -> DataFrame:
         F.get_json_object(value, "$.feed_ts").cast("bigint").alias("feed_ts"),
         fetched_at.alias("fetched_at"),
         value.alias("envelope_json"),
-        F.to_date(F.from_utc_timestamp(fetched_at, tz) - F.expr("INTERVAL 12 HOURS")).alias(
-            "service_date"
-        ),
+        service_date_expr(fetched_at, tz, city).alias("service_date"),
     )
 
 

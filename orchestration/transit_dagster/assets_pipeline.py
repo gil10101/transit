@@ -24,7 +24,6 @@ from dagster import (
 from dagster_dbt import DbtCliResource, dbt_assets
 
 from .lib import (
-    iceberg_refresh_statements,
     latest_metadata_path,
     require_env,
     silver_tables,
@@ -37,11 +36,18 @@ SILVER_TABLES = silver_tables()
 
 @asset(group_name="pipeline")
 def emr_drain(emr: EmrResource) -> MaterializeResult:
-    """One availableNow drain (Kafka -> bronze -> silver Iceberg), identical to
-    what the 15-min EventBridge Lambda submits. EventBridge stays; this run
-    guarantees silver is freshly committed when the chain refreshes Snowflake
-    (the app's 4 vCPU cap queues, not corrupts, any overlap with a scheduled
-    drain)."""
+    """One availableNow drain (Kafka -> bronze -> silver Iceberg), identical to what the
+    hourly EventBridge Lambda submits. EventBridge stays; this run guarantees silver is
+    freshly committed when the chain refreshes Snowflake.
+
+    [rev 2026-08-25] This used to claim "the app's 4 vCPU cap queues, not corrupts, any
+    overlap with a scheduled drain". Both halves were wrong. The app is provisioned at
+    **8 vCPU / 32 GB** (spark module, deliberately — its comment opens "8, not 4"), and
+    one drain uses 6, so a second job's driver fits and EMR admits it rather than queuing
+    it. And an admitted overlap does not queue harmlessly: two writers on one Spark
+    checkpoint killed a query with CONCURRENT_STREAM_LOG_UPDATE and destroyed 58 minutes
+    of drained data on 2026-08-24. Overlap is prevented by the in-flight guard in
+    EmrResource (and the drain Lambda), never by capacity."""
     run_id = emr.run_drain()
     return MaterializeResult(metadata={"emr_job_run_id": run_id})
 
@@ -68,19 +74,33 @@ def snowflake_iceberg_refresh(snowflake: SnowflakeResource):
 
     s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-2"))
     bucket = require_env(os.environ, "LAKE_BUCKET")
-    statements: list[str] = []
     refreshed: list[tuple[str, str]] = []
     for table in SILVER_TABLES:
         meta = latest_metadata_path(s3, bucket, table)
         if meta is None:
             continue
-        statements += iceberg_refresh_statements(table, meta)
         refreshed.append((table, meta))
-    if statements:
-        snowflake.execute(statements)
+
+    # [rev 2026-08-25] Was `snowflake.execute(<all 10 tables' statements>)`, a bare loop
+    # with no error handling, and every yield below sits AFTER it. When one table failed
+    # the whole call aborted: the remaining tables never refreshed, zero materializations
+    # were recorded, and dbt was skipped as a downstream of a failed step — so gold went
+    # quietly stale while the job just looked broken. That is not hypothetical; Snowflake
+    # query history shows it firing twice on 2026-08-24 (91391 UUID mismatch on
+    # GTFS_STATIC_ROUTES at 18:08 and 18:32, no statement after it in either session).
+    #
+    # refresh_iceberg already handles exactly this — it rebinds a table whose Iceberg
+    # UUID changed under a reparse, and isolates per-table failures. It was written for
+    # this bug in commit 0e65311 and wired into assets_static only; this second call site
+    # was missed. Same fix, one call.
+    results = snowflake.refresh_iceberg(refreshed) if refreshed else {}
     for table, meta in refreshed:
         yield MaterializeResult(
-            asset_key=AssetKey(["silver", table]), metadata={"metadata_file_path": meta}
+            asset_key=AssetKey(["silver", table]),
+            metadata={
+                "metadata_file_path": meta,
+                "refresh": results.get(table, "skipped"),
+            },
         )
 
 

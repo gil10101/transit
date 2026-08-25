@@ -17,9 +17,8 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
-from spark_jobs.bronze_writer import tz_map_expr
+from spark_jobs.bronze_writer import service_date_expr, tz_map_expr
 from spark_jobs.session import checkpoint_root, ensure_table, kafka_bootstrap, trigger_kwargs
-from spark_jobs.timeutils import CITY_FALLBACK_CUTOVER_HOURS, DEFAULT_FALLBACK_CUTOVER_HOURS
 
 STOP_TIME_EVENT = T.StructType(
     [
@@ -198,24 +197,14 @@ def national_filter(df: DataFrame, route_col) -> DataFrame:
     return df
 
 
-def cutover_expr():
-    pairs: list = []
-    for city, hours in CITY_FALLBACK_CUTOVER_HOURS.items():
-        pairs += [F.lit(city), F.lit(hours)]
-    return F.create_map(*pairs) if pairs else F.create_map()
-
-
 def with_common(df: DataFrame) -> DataFrame:
     """fetched_at typing, city tz, service_date (start_date else cutover rule)."""
     tz = F.coalesce(tz_map_expr()[F.col("city")], F.lit("UTC"))
-    cutover = F.coalesce(cutover_expr()[F.col("city")], F.lit(DEFAULT_FALLBACK_CUTOVER_HOURS))
     df = df.withColumn("fetched_at", F.to_timestamp("fetched_at")).withColumn(
         "service_date",
         F.coalesce(
             F.to_date(F.col("rec.start_date"), "yyyyMMdd"),
-            F.to_date(
-                F.from_utc_timestamp(F.col("fetched_at"), tz) - F.make_dt_interval(hours=cutover)
-            ),
+            service_date_expr(F.col("fetched_at"), tz),
         ),
     )
     return df.withColumn(
@@ -225,13 +214,29 @@ def with_common(df: DataFrame) -> DataFrame:
                 "|",
                 F.col("city"),
                 F.date_format("service_date", "yyyy-MM-dd"),
+                # [rev 2026-08-25] nullif(..., '') is load-bearing. Spark's concat_ws
+                # SKIPS nulls and returns '' — never NULL — when every input is null, so
+                # the COALESCE never fired and every record with no trip descriptor
+                # hashed to the same sha256('<city>|<date>|'). Measured live: toronto
+                # 1,374,084 VP rows / 2,189 vehicles, sf 84,925 / 1,513, dc 194,495 /
+                # 1,363 all collapsed onto one trip_uid per city-day. GTFS-RT makes
+                # VehiclePosition.trip optional (deadheading, unassigned vehicles), so
+                # this is normal data, not corruption upstream. Trip updates are
+                # unaffected — 0 descriptor-less rows across all seven cities.
+                # NULL is the correct value for "no trip identity"; a hash of the empty
+                # string is a fake identity that silently joins unrelated vehicles.
+                # F.nullif needs Spark >= 3.5; EMR 7.5 runs 3.5.4 (see SPARK_VER in
+                # scripts/submit_emr_drain.sh) and the repo venv pins pyspark 3.5.9.
                 F.coalesce(
                     F.col("rec.trip_id"),
-                    F.concat_ws(
-                        "-",
-                        F.col("rec.route_id"),
-                        F.col("rec.direction_id"),
-                        F.col("rec.start_time"),
+                    F.nullif(
+                        F.concat_ws(
+                            "-",
+                            F.col("rec.route_id"),
+                            F.col("rec.direction_id"),
+                            F.col("rec.start_time"),
+                        ),
+                        F.lit(""),
                     ),
                 ),
             ),
@@ -327,13 +332,54 @@ def vehicle_positions(spark: SparkSession) -> DataFrame:
     )
 
 
+def national_alert_filter(df: DataFrame) -> DataFrame:
+    """Keep a national-feed city's alerts only when they name an allow-listed route.
+
+    [rev 2026-08-25] `alerts()` was the ONE path that never applied the allow-list —
+    stop_time_predictions and vehicle_positions both did. Measured on live silver for
+    2026-08-24: of 1,609 rows filed under city='zurich', 20 named an allow-listed route,
+    796 named only non-Zurich Swiss routes (La Chaux-de-Fonds, Fribourg, Burgdorf...)
+    and 793 named no route at all. That is ~90% national noise, and it explodes:
+    1,609 alerts fan out to 97,383 rows in stg_gtfsrt__alerts.
+
+    An alert's routes live inside informed_entities[], so `national_filter`'s single
+    -column isin() is not reusable here — that is why this exists separately rather than
+    being a copy-paste.
+
+    KNOWN COST, stated rather than hidden: alerts naming no route are dropped for these
+    cities, and ~136 of the 793 do mention a Zurich-area place in their header text. We
+    lose those (~8% of the city's alerts) to remove ~657 national ones. Closing that gap
+    properly needs a Zurich STOP allow-list, since those alerts are stop- or agency-scoped;
+    the generator only emits routes today. Tracked in docs/01 §B.
+    """
+    allow = load_route_allowlist("zurich")
+    for city in NATIONAL_FEED_CITIES:
+        if not allow:
+            print(f"{city}: NO allow-list — dropping its alerts (national feed unfiltered)")
+            df = df.filter(F.col("city") != city)
+            continue
+        print(f"{city}: alert allow-list active, {len(allow)} routes")
+        names_allowed = F.exists(
+            F.col("rec.informed_entities"),
+            lambda e: e["route_id"].isin(allow),
+        )
+        df = df.filter((F.col("city") != city) | F.coalesce(names_allowed, F.lit(False)))
+    return df
+
+
 def alerts(spark: SparkSession) -> DataFrame:
     df = read_topic(spark, "transit.alerts", ALERT_RECORD)
     df = df.select("*", F.explode_outer("payload").alias("rec")).drop("payload")
+    df = national_alert_filter(df)
     tz = F.coalesce(tz_map_expr()[F.col("city")], F.lit("UTC"))
+    # [rev 2026-08-25] service_date now uses the SAME per-city cutover as with_common.
+    # It hardcoded INTERVAL 12 HOURS, so Toronto (-4h) was misdated: 73 of 297 live
+    # toronto alert rows (24.6%) carried a service_date a day early, all of them in local
+    # hours 5-11 exactly as the rule predicts. ALERT_RECORD has no start_date, so 100% of
+    # alert rows take this fallback — there is no start_date branch to mask the error.
+    # This was the third implementation of one canonical rule; two of the three were wrong.
     df = df.withColumn("fetched_at", F.to_timestamp("fetched_at")).withColumn(
-        "service_date",
-        F.to_date(F.from_utc_timestamp(F.col("fetched_at"), tz) - F.expr("INTERVAL 12 HOURS")),
+        "service_date", service_date_expr(F.col("fetched_at"), tz)
     )
     out = df.select(
         F.col("city"),

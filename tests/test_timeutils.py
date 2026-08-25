@@ -95,11 +95,30 @@ def test_toronto_uses_its_own_cutover_not_the_noon_rule():
     assert cutover_hours_for("nyc") == 12
 
 
-def test_silver_normalize_shares_the_cutover_constants():
-    """The whole point of moving them: one source, not two that can drift."""
-    from spark_jobs import silver_normalize, timeutils
+def test_the_spark_jobs_share_one_service_date_implementation():
+    """One rule, one implementation.
 
-    assert silver_normalize.CITY_FALLBACK_CUTOVER_HOURS is timeutils.CITY_FALLBACK_CUTOVER_HOURS
-    assert (
-        silver_normalize.DEFAULT_FALLBACK_CUTOVER_HOURS is timeutils.DEFAULT_FALLBACK_CUTOVER_HOURS
-    )
+    [rev 2026-08-25] There were THREE Spark implementations of the service-date fallback
+    — bronze_writer, silver_normalize.with_common and silver_normalize.alerts — and two
+    of them hardcoded -12h, so Toronto (4h cutover, and it sets start_date on no trips)
+    was misdated by both: 73 of 297 live toronto alert rows carried a service_date a day
+    early. All three now go through one helper whose constants live in timeutils.
+    """
+    from pathlib import Path
+
+    from spark_jobs import bronze_writer, silver_normalize, timeutils
+
+    assert bronze_writer.CITY_FALLBACK_CUTOVER_HOURS is timeutils.CITY_FALLBACK_CUTOVER_HOURS
+    assert bronze_writer.DEFAULT_FALLBACK_CUTOVER_HOURS is timeutils.DEFAULT_FALLBACK_CUTOVER_HOURS
+    # silver reaches the same helper rather than rolling its own
+    assert silver_normalize.service_date_expr is bronze_writer.service_date_expr
+
+    # check CODE, not prose — the comments above deliberately quote the old expression
+    code = [
+        line
+        for path in (silver_normalize.__file__, bronze_writer.__file__)
+        for line in Path(path).read_text().splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+    offenders = [line.strip() for line in code if "INTERVAL 12 HOURS" in line]
+    assert not offenders, f"a hardcoded cutover reappeared: {offenders}"

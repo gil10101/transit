@@ -123,6 +123,20 @@ def city_feed_endpoints(
 # ---------------------------------------------------------------------------
 
 
+# Every NON-TERMINAL EMR Serverless job-run state, verified 2026-08-25 against the API's
+# own enum (an invalid value echoes back: SUCCESS, SCHEDULED, CANCELLING, CANCELLED,
+# QUEUED, PENDING, SUBMITTED, FAILED, RUNNING). Terminal = SUCCESS, FAILED, CANCELLED.
+#
+# [rev 2026-08-25] QUEUED and CANCELLING were missing from all three call sites (this
+# module's two consumers in resources.py plus the drain Lambda). A run that is mid-cancel
+# or queued still owns the Spark checkpoint, and Structured Streaming permits exactly one
+# writer per checkpoint — missing a state means the in-flight guard reads empty and a
+# second drain starts. That overlap killed a query with CONCURRENT_STREAM_LOG_UPDATE and
+# destroyed 58 minutes of drained data on 2026-08-24. Mirrored in
+# infra/modules/spark/lambda/drain.py:ACTIVE_STATES — keep the two in step.
+EMR_ACTIVE_STATES = ("SUBMITTED", "PENDING", "QUEUED", "SCHEDULED", "RUNNING", "CANCELLING")
+
+
 def require_env(env: Mapping[str, str], name: str) -> str:
     value = env.get(name, "")
     if not value:

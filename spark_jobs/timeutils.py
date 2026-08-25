@@ -31,7 +31,20 @@ UTC = timezone.utc  # noqa: UP017 — EMR Serverless runs py3.9; datetime.UTC ne
 # every record fetched between local midnight and noon would be misdated to the previous
 # service day. TTC service day rolls ~04:00 local -> -4h. Amendment recorded in docs/01 §F
 # and CLAUDE.md canonical rules. IMPORTED BY spark_jobs.silver_normalize — one source.
-CITY_FALLBACK_CUTOVER_HOURS = {"toronto": 4}
+#
+# [rev 2026-08-25] sf added. Its 511 aggregation carries a subset of operators (EM, MC,
+# BA, ST, MV, VC, WC, CT, 3D — 3.22% of rows, 132,725 of 4,126,631 on 2026-08-24) that
+# omit start_date, so those rows took the -12h default and were stamped a day early:
+# everything fetched before local noon landed on the previous service date while its
+# predicted arrivals were all on the current one. That produced a PHANTOM service day —
+# sf/2026-08-23 held 7,260 events of which exactly 1 genuinely belonged to Aug 23, and
+# fct_route_reliability_daily published an OTP for it computed from trips that ran on
+# Aug 24. Measured 2026-08-25. boston/dc/helsinki/nyc have zero null-start_date rows and
+# are unaffected; toronto is 100% null and already had its exception.
+#
+# The cutover only ever applies when the feed omits start_date, so adding a city here
+# cannot move the 96.8% of sf rows that do set it.
+CITY_FALLBACK_CUTOVER_HOURS = {"toronto": 4, "sf": 4}
 DEFAULT_FALLBACK_CUTOVER_HOURS = 12
 
 
