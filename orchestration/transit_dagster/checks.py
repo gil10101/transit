@@ -26,11 +26,12 @@ from .resources import SnowflakeResource
 @asset(group_name="checks")
 def raw_feed_freshness() -> MaterializeResult:
     """The killed-feed tripwire (DoD: trips within the hour): the newest raw
-    object under every live city's endpoint prefixes must be younger than
+    object under every POLLED city's endpoint prefixes must be younger than
     40 min. Endpoints are the feed_groups keys in ingestion/config/cities/*.yaml
-    (P3 batch 2: nyc 8, boston 3, toronto 3, helsinki 2, dc 6, sf 3, zurich 2
-    = 27 — config-driven, so a new city yaml joins the tripwire without
-    touching this code). boto3 listing only — never wakes the warehouse."""
+    (nyc 8, boston 3, toronto 3, helsinki 2, dc 6, sf 3 = 25 — config-driven,
+    so a new city yaml joins the tripwire without touching this code). Zurich
+    is excluded until its poller deploys; see POLLED_CITIES in lib.py.
+    boto3 listing only — never wakes the warehouse."""
     import boto3
 
     s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-2"))

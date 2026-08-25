@@ -14,6 +14,7 @@ import pytest
 from orchestration.transit_dagster.lib import (
     CITY_WEATHER,
     LIVE_CITIES,
+    POLLED_CITIES,
     city_feed_endpoints,
 )
 
@@ -59,9 +60,11 @@ def test_repo_configs_discovered_only_live_cities():
         "bus_alerts",
     )
     assert endpoints["sf"] == ("trip_updates", "vehicle_positions", "alerts")
-    assert endpoints["zurich"] == ("trip_updates", "alerts")
-    assert sum(len(v) for v in endpoints.values()) == 27
-    assert set(endpoints) == set(LIVE_CITIES)  # tripwire covers every live city
+    # zurich's yaml declares (trip_updates, alerts) but its poller is withheld
+    # until the route allow-list ships, so the tripwire must not probe it
+    assert "zurich" not in endpoints
+    assert sum(len(v) for v in endpoints.values()) == 25
+    assert set(endpoints) == set(POLLED_CITIES)  # tripwire covers every polled city
 
 
 def test_endpoints_are_feed_group_keys_and_non_live_skipped(tmp_path: Path):

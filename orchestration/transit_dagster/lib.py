@@ -27,6 +27,13 @@ from zoneinfo import ZoneInfo
 # entry — keep the two lists in step.
 LIVE_CITIES = ("nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich")
 
+# Cities whose POLLER is actually deployed. Zurich is in LIVE_CITIES (we want
+# its static parsed — the route allow-list is generated from it) but its poller
+# is deliberately withheld until that allow-list ships, so the raw-feed tripwire
+# must not assert on prefixes nothing writes to: it failed every 15 min from the
+# moment zurich joined LIVE_CITIES. Move a city here when its poller deploys.
+POLLED_CITIES = tuple(c for c in LIVE_CITIES if c != "zurich")
+
 # Centroid + tz per city, duplicated from the dim_city seed
 # (dbt/transit/seeds/dim_city.csv) on purpose: weather pulls must never wake
 # the warehouse just to read a dim. Keep in sync when cities are added.
@@ -79,7 +86,7 @@ def city_static_sources(city: str, config_dir: Path | None = None):
 
 
 def city_feed_endpoints(
-    config_dir: Path | None = None, live: Sequence[str] = LIVE_CITIES
+    config_dir: Path | None = None, live: Sequence[str] = POLLED_CITIES
 ) -> dict[str, tuple[str, ...]]:
     """Feed endpoint names per live city, read from the feed_groups keys in
     ingestion/config/cities/*.yaml (the keys are the <endpoint> segment of the
@@ -87,7 +94,7 @@ def city_feed_endpoints(
 
     Config-driven on purpose: a new city yaml shows up in the freshness
     tripwire without touching checks code. A yaml for a city not yet in
-    LIVE_CITIES is skipped (its poller may not be deployed). Raises when no
+    POLLED_CITIES is skipped (its poller is not deployed). Raises when no
     live-city config is found — the tripwire must fail loudly, never probe
     nothing and pass. Called at materialize time only, so definitions still
     import without the configs present.
