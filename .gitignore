@@ -33,5 +33,8 @@ data/
 **/.terraform/
 *.tfstate
 *.tfstate.*
-tfplan
+# tfplan* not tfplan: a saved plan embeds ROOT MODULE VARIABLE VALUES in cleartext,
+# so `-out=tfplan.zurich` slipped four live API tokens into git on 2026-08-25.
+# `sensitive = true` only redacts CLI display, never the plan archive.
+tfplan*
 .jars/
