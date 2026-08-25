@@ -60,11 +60,12 @@ def test_repo_configs_discovered_only_live_cities():
         "bus_alerts",
     )
     assert endpoints["sf"] == ("trip_updates", "vehicle_positions", "alerts")
-    # zurich's yaml declares (trip_updates, alerts) but its poller is withheld
-    # until the route allow-list ships, so the tripwire must not probe it
-    assert "zurich" not in endpoints
-    assert sum(len(v) for v in endpoints.values()) == 25
-    assert set(endpoints) == set(POLLED_CITIES)  # tripwire covers every polled city
+    assert endpoints["zurich"] == ("trip_updates", "alerts")
+    assert sum(len(v) for v in endpoints.values()) == 27
+    # POLLED_CITIES, never LIVE_CITIES: a city can be live for static/weather
+    # before its poller ships, and the tripwire must not assert on prefixes
+    # nothing writes to (zurich did exactly that until its allow-list landed)
+    assert set(endpoints) == set(POLLED_CITIES)
 
 
 def test_endpoints_are_feed_group_keys_and_non_live_skipped(tmp_path: Path):

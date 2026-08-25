@@ -17,6 +17,16 @@ vars:
   # first full service day of 24/7 cloud polling; completeness tests only judge
   # closed days from here on (the deployment day is partial by construction)
   completeness_enforced_from: "2026-08-23"
+  # Minimum scheduled trips before a route-day is judged on completeness. The
+  # ratio has no minimum denominator otherwise, so a 4-trip school route missing
+  # 2 runs reads as a 50% service failure. At 10 a single missed trip can move
+  # the ratio by at most 10 points, so the 50% floor still means "half the day's
+  # service went unobserved" rather than "one bus was late to appear".
+  # Measured 2026-08-25 across all closed judged route-days: this exempts 153 of
+  # 460 route-days but only 2.61% of scheduled trips, and 11 of the 15 real
+  # failures survive. 15 would have exempted 5.15% of trips and hidden genuine
+  # zero-coverage routes (helsinki 4713, 12 trips, 0 observed), so 10 it is.
+  completeness_min_trips: 10
   methodology_version: "1.0"
   # v1 finalization knobs (documented in int_stop_events_finalized)
   finalize_horizon_min: 20

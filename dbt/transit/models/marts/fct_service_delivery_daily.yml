@@ -47,16 +47,24 @@ models:
           # a three-hour tail that scored 2.1%. That is arithmetic, not a defect, but
           # at error severity it halted the whole downstream subgraph and
           # fct_route_reliability_daily never rebuilt. Blank metrics_from = not scored.
+          #
+          # [rev 2026-08-25] Both tests also require a minimum denominator
+          # (var completeness_min_trips, sized there): the ratio was judged on
+          # route-days scheduling as little as ONE trip, where a single miss is
+          # a 100% failure. Exempted route-days still get a completeness_pct in
+          # the mart — they are just not asserted on.
           - value_within_range:
               name: completeness_above_warn_85pct
               arguments: {min_value: 0.85}
               config:
                 severity: warn
-                where: "service_day_closed and service_date >= metrics_from"
+                where: "service_day_closed and service_date >= metrics_from
+                  and trips_scheduled >= {{ var('completeness_min_trips') }}"
           - value_within_range:
               name: completeness_above_error_50pct
               arguments: {min_value: 0.50}
               config:
                 severity: error
                 store_failures: true
-                where: "service_day_closed and service_date >= metrics_from"
+                where: "service_day_closed and service_date >= metrics_from
+                  and trips_scheduled >= {{ var('completeness_min_trips') }}"

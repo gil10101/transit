@@ -27,12 +27,14 @@ from zoneinfo import ZoneInfo
 # entry — keep the two lists in step.
 LIVE_CITIES = ("nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich")
 
-# Cities whose POLLER is actually deployed. Zurich is in LIVE_CITIES (we want
-# its static parsed — the route allow-list is generated from it) but its poller
-# is deliberately withheld until that allow-list ships, so the raw-feed tripwire
-# must not assert on prefixes nothing writes to: it failed every 15 min from the
-# moment zurich joined LIVE_CITIES. Move a city here when its poller deploys.
-POLLED_CITIES = tuple(c for c in LIVE_CITIES if c != "zurich")
+# Cities whose POLLER is actually deployed. Kept separate from LIVE_CITIES
+# because a city can be live for static/weather before its poller ships: zurich
+# was in LIVE_CITIES from batch 2 (we needed its national static parsed to build
+# the route allow-list) while its poller was deliberately withheld, and the
+# raw-feed tripwire asserted on prefixes nothing wrote to, failing every 15 min.
+# [rev 2026-08-25] Zurich's allow-list shipped, so its poller deploys and it
+# rejoins. Add a city here only once its poller is actually running.
+POLLED_CITIES = LIVE_CITIES
 
 # Centroid + tz per city, duplicated from the dim_city seed
 # (dbt/transit/seeds/dim_city.csv) on purpose: weather pulls must never wake

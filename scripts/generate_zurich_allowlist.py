@@ -41,6 +41,23 @@ CITY = "zurich"
 BBOX = {"lat_min": 47.16, "lat_max": 47.71, "lon_min": 8.35, "lon_max": 8.99}
 MIN_SHARE = 0.5
 
+# National rail classes, dropped regardless of how the box rule scores them.
+# [rev 2026-08-25] The box rule alone was NOT sufficient, contrary to this
+# script's original assumption that through-running services "sit far below" the
+# threshold. Measured against the live national static: 51 SBB long-distance
+# routes (9,066 trips, 2.2% of the allow-list's trips) passed at zone_share
+# 0.50-1.00, because Swiss route_ids are segment-granular — an ICE route_id
+# covering only Zürich HB -> Zürich Flughafen scores 1.00. Scoring TGV, ICE,
+# EC, RJX, IC, IR, NightJet and Extrazug punctuality as Zurich's would answer
+# the wrong question (all are agency_id 11 = SBB long distance).
+#   101 high-speed · 102 long-distance · 103 inter-regional · 105 sleeper
+#   106 regional express (RE) · 117 additional/extra trains (EXT)
+# 109 (suburban railway) is DELIBERATELY ABSENT: that is the ZVV S-Bahn, the
+# backbone of Zurich rail, and it must stay. So must every non-rail type the
+# rule admits — tram 900, bus 700/702/705/715, boat 1000, aerial 1300,
+# funicular 1400.
+EXCLUDED_ROUTE_TYPES = (101, 102, 103, 105, 106, 117)
+
 QUERY = f"""
 with latest as (
     select max(gtfs_version_id) as vid
@@ -96,6 +113,7 @@ left join silver.gtfs_static_routes r
        on r.city = '{CITY}' and r.route_id = s.route_id
       and r.gtfs_version_id = (select vid from latest)
 where s.zone_share >= {MIN_SHARE}
+  and coalesce(r.route_type, -1) not in ({",".join(str(t) for t in EXCLUDED_ROUTE_TYPES)})
 order by s.route_id
 """
 
