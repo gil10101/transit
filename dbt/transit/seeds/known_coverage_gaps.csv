@@ -1,0 +1,4 @@
+city_key,route_id,reason,confirmed_on
+helsinki,1017,HSL publishes no ferry realtime in GTFS-RT; Suomenlinna ferry positions come from ship AIS piped into their separate HFP/MQTT stream (HSLdevcom/suomenlinna-ferry-hfp). No change on our side yields data from the feed we poll.,2026-08-25
+helsinki,1019,HSL publishes no ferry realtime in GTFS-RT; see route 1017.,2026-08-25
+helsinki,1019E,HSL publishes no ferry realtime in GTFS-RT; see route 1017.,2026-08-25

@@ -1,0 +1,26 @@
+version: 2
+
+seeds:
+  - name: known_coverage_gaps
+    description: >
+      Routes whose operator publishes no GTFS-RT for them at all, so their completeness
+      can never rise no matter what we build. Referenced by fct_service_delivery_daily,
+      which turns membership into the `known_coverage_gap` flag; the error-severity
+      completeness test skips flagged routes while the warn-severity one still reports
+      them.
+
+      ONLY add a route here once the agency's own docs or code confirm the gap. A route
+      that is merely unexplained must stay red — hiding an unexplained gap is how a
+      warehouse ends up all-green and wrong. Helsinki tram 100H is the current example
+      of one deliberately left out.
+    columns:
+      - name: city_key
+        data_tests: [not_null]
+      - name: route_id
+        data_tests: [not_null]
+      - name: reason
+        description: why the agency does not publish it, specific enough to re-check later
+        data_tests: [not_null]
+      - name: confirmed_on
+        description: date the gap was confirmed against the agency, not the date it was noticed
+        data_tests: [not_null]

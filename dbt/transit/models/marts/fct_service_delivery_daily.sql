@@ -112,11 +112,25 @@ rolled as (
 -- never meant to be judged against (157 route-days, 2026-08-25 00:20Z). A GTFS
 -- service day also runs past local midnight, so the day is only closed once
 -- local time is 3h into the next date.
+-- known_coverage_gap marks a route the AGENCY does not publish realtime for at all, so
+-- no work on our side can raise its completeness. It rides along as a column for the
+-- same reason metrics_from does: dbt's generic-test parser refuses ref() in a test's
+-- `where`. The error-severity test excludes these; the warn-severity one does NOT, so
+-- they stay visible rather than disappearing.
+--
+-- [rev 2026-08-25] Only gaps CONFIRMED against the agency's own docs go in the seed.
+-- Helsinki's tram 100H and several of its bus routes also sit below the floor and are
+-- deliberately NOT listed: we do not yet know why they are missing, and hiding an
+-- unexplained gap is how a warehouse ends up all-green and wrong.
 select
     r.*,
     c.metrics_from,
     cast(
         {{ to_local('current_timestamp', 'c.iana_tz') }} - interval '3 hour' as date
-    ) > r.service_date as service_day_closed
+    ) > r.service_date as service_day_closed,
+    g.route_id is not null as known_coverage_gap
 from rolled r
 left join {{ ref('dim_city') }} c on c.city_key = r.city_key
+left join {{ ref('known_coverage_gaps') }} g
+       on g.city_key = r.city_key
+      and g.route_id = r.route_id

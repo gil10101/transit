@@ -60,6 +60,11 @@ models:
                 severity: warn
                 where: "service_day_closed and service_date >= metrics_from
                   and trips_scheduled >= {{ var('completeness_min_trips') }}"
+          # The error test additionally skips routes the agency publishes no realtime
+          # for at all (seed known_coverage_gaps). Those cannot be fixed by us, so at
+          # error severity they would be permanently red — and a check that is always
+          # red trains everyone to ignore every check. The warn test above still covers
+          # them, so they stay visible. Only agency-confirmed gaps are seeded.
           - value_within_range:
               name: completeness_above_error_50pct
               arguments: {min_value: 0.50}
@@ -67,4 +72,5 @@ models:
                 severity: error
                 store_failures: true
                 where: "service_day_closed and service_date >= metrics_from
-                  and trips_scheduled >= {{ var('completeness_min_trips') }}"
+                  and trips_scheduled >= {{ var('completeness_min_trips') }}
+                  and not known_coverage_gap"
