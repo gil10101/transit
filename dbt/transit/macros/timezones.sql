@@ -9,10 +9,12 @@
     {%- endif -%}
 {% endmacro %}
 
--- GTFS noon rule: service_date of an instant = local wall time minus 12h, date part.
-{% macro service_date_of(ts_utc, tz) %}
-    cast({{ to_local(ts_utc, tz) }} - interval '12 hour' as date)
-{% endmacro %}
+-- [rev 2026-08-25] `service_date_of` REMOVED. It was a third implementation of the noon
+-- rule, used by no model, and it hard-coded 12h — so it silently disagreed with
+-- production for Toronto (4h cutover) by 8 hours. service_date is assigned once, in
+-- Spark (spark_jobs/silver_normalize.with_common, constants in spark_jobs/timeutils),
+-- and dbt reads it as a column. Do not reintroduce it here: a rule with two
+-- implementations has two behaviours.
 
 -- Static GTFS time (seconds, may exceed 86400) -> UTC timestamp on a service date.
 -- Anchor is local noon minus 12h, which stays correct across DST transitions.

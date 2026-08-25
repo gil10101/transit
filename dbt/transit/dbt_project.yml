@@ -13,10 +13,11 @@ vars:
   otp_bands: {early_max: -60, on_time_max: 299, late_max: 899}
   early_departure_grace_sec: 60
   score_weights: {wait: 0.35, otp: 0.30, cancel: 0.20, bunch: 0.15}
-  completeness_exclusion_threshold: 0.70
-  # first full service day of 24/7 cloud polling; completeness tests only judge
-  # closed days from here on (the deployment day is partial by construction)
-  completeness_enforced_from: "2026-08-23"
+  # [rev 2026-08-25] `completeness_exclusion_threshold` (0.70) and
+  # `completeness_enforced_from` ("2026-08-23") REMOVED — both were declared here and
+  # referenced by no model, macro or test. The first was never implemented; the second
+  # was superseded by per-city `dim_city.metrics_from`. Declared-but-unused config reads
+  # as an active guard and isn't one, which is worse than no config at all.
   # Minimum scheduled trips before a route-day is judged on completeness. The
   # ratio has no minimum denominator otherwise, so a 4-trip school route missing
   # 2 runs reads as a 50% service failure. At 10 a single missed trip can move

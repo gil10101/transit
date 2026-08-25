@@ -19,6 +19,7 @@ from pyspark.sql import types as T
 
 from spark_jobs.bronze_writer import tz_map_expr
 from spark_jobs.session import checkpoint_root, ensure_table, kafka_bootstrap, trigger_kwargs
+from spark_jobs.timeutils import CITY_FALLBACK_CUTOVER_HOURS, DEFAULT_FALLBACK_CUTOVER_HOURS
 
 STOP_TIME_EVENT = T.StructType(
     [
@@ -141,14 +142,9 @@ def read_topic(spark: SparkSession, topic: str, record: T.StructType) -> DataFra
     return raw.select(env).select("env.*")
 
 
-# Cutover hours for the fetched_at service-date fallback, per city. The GTFS
-# noon rule (-12h) is right for feeds whose records may reference yesterday's
-# overnight trips; Toronto's feed sets start_date on NO trips (fixture-verified
-# 2026-08-23), so with -12h every record fetched between local midnight and noon
-# would be misdated to the previous service day. TTC service day rolls ~04:00
-# local -> -4h. Amendment recorded in docs/01 §F and CLAUDE.md canonical rules.
-CITY_FALLBACK_CUTOVER_HOURS = {"toronto": 4}
-DEFAULT_FALLBACK_CUTOVER_HOURS = 12
+# Per-city service-date cutover lives in spark_jobs.timeutils so the SQL below and the
+# reference implementation cannot drift. [rev 2026-08-25] They already had: timeutils
+# hard-coded 12h and disagreed with this file for Toronto by 8 hours.
 
 # Cities whose upstream feed covers far more than the city we score. Zurich's
 # /la/gtfs-rt is the whole Swiss network (docs/01 §B), so silver keeps only the

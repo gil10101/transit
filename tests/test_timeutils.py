@@ -71,3 +71,35 @@ def test_early_morning_maps_to_previous_date():
     # via this fallback — both sides of the pipeline agree on that precedence.
     ts = scheduled_ts_utc(date(2026, 8, 22), gtfs_time_to_seconds("05:00:00"), NYC)
     assert service_date_of(ts, NYC) == date(2026, 8, 21)
+
+
+def test_toronto_uses_its_own_cutover_not_the_noon_rule():
+    """[rev 2026-08-25] Regression guard. timeutils used to hard-code 12h while
+    production (silver_normalize) used 4h for Toronto, so anything fetched between
+    local midnight and noon came out a day early here. Both now read one map."""
+    from spark_jobs.timeutils import (
+        cutover_hours_for,
+        service_date_of,
+    )
+
+    TOR = "America/Toronto"
+    # 06:00 local on the 22nd: past TTC's ~04:00 roll, so it is the 22nd's service day.
+    ts = datetime(2026, 8, 22, 10, 0, tzinfo=UTC)  # 06:00 EDT
+    assert service_date_of(ts, TOR, "toronto") == date(2026, 8, 22)
+    # the generic noon rule would have called it the 21st — that was the bug
+    assert service_date_of(ts, TOR) == date(2026, 8, 21)
+    # 03:00 local is before the roll, so it still belongs to the 21st
+    ts_early = datetime(2026, 8, 22, 7, 0, tzinfo=UTC)  # 03:00 EDT
+    assert service_date_of(ts_early, TOR, "toronto") == date(2026, 8, 21)
+    assert cutover_hours_for("toronto") == 4
+    assert cutover_hours_for("nyc") == 12
+
+
+def test_silver_normalize_shares_the_cutover_constants():
+    """The whole point of moving them: one source, not two that can drift."""
+    from spark_jobs import silver_normalize, timeutils
+
+    assert silver_normalize.CITY_FALLBACK_CUTOVER_HOURS is timeutils.CITY_FALLBACK_CUTOVER_HOURS
+    assert (
+        silver_normalize.DEFAULT_FALLBACK_CUTOVER_HOURS is timeutils.DEFAULT_FALLBACK_CUTOVER_HOURS
+    )
