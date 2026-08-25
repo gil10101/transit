@@ -94,8 +94,19 @@ rolled as (
 -- metrics_from rides along so the completeness tests can judge each city only
 -- from its own first FULL service day. dbt's generic-test parser refuses ref()
 -- inside a test's `where`, so the floor has to be a column on the fact.
+--
+-- service_day_closed is the ceiling, and it has to be LOCAL. The tests used to
+-- gate on `service_date < current_date`, which is UTC: between 00:00 and ~07:00
+-- UTC that makes the current New York / Toronto service day look closed while
+-- it still has hours to run, so every route fails a completeness floor it was
+-- never meant to be judged against (157 route-days, 2026-08-25 00:20Z). A GTFS
+-- service day also runs past local midnight, so the day is only closed once
+-- local time is 3h into the next date.
 select
     r.*,
-    c.metrics_from
+    c.metrics_from,
+    cast(
+        {{ to_local('current_timestamp', 'c.iana_tz') }} - interval '3 hour' as date
+    ) > r.service_date as service_day_closed
 from rolled r
 left join {{ ref('dim_city') }} c on c.city_key = r.city_key

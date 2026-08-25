@@ -105,7 +105,14 @@ ranked as (
         ) as last_seen_utc
     from enriched e
     cross join watermark w
+    -- A stop visit needs a stop. HSL emits a few updates carrying stop_sequence
+    -- but no stop_id (892 of 7.2M silver rows, 849 of them with a sequence, so
+    -- they clear the sequence filter above): they cannot be placed at a stop,
+    -- joined to the schedule, or paired into a headway, and they arrived in
+    -- fct_headways as 225 null stop_ids breaking its not-null contract. Same
+    -- class of rule as the sequence filter — no identity, no event.
     where e.stop_sequence_eff is not null
+      and e.stop_id is not null
       and e.event_pred_ts <= w.max_fetched - interval '{{ var("finalize_horizon_min") }} minutes'
 )
 

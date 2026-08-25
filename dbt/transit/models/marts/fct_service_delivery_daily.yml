@@ -52,11 +52,11 @@ models:
               arguments: {min_value: 0.85}
               config:
                 severity: warn
-                where: "service_date < current_date and service_date >= metrics_from"
+                where: "service_day_closed and service_date >= metrics_from"
           - value_within_range:
               name: completeness_above_error_50pct
               arguments: {min_value: 0.50}
               config:
                 severity: error
                 store_failures: true
-                where: "service_date < current_date and service_date >= metrics_from"
+                where: "service_day_closed and service_date >= metrics_from"
