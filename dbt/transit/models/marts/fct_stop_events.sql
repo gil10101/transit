@@ -59,12 +59,19 @@ select
         cast(actual_arr_ts_local as time) between peak_am_start and peak_am_end
         or cast(actual_arr_ts_local as time) between peak_pm_start and peak_pm_end
     ) and dayofweek(cast(actual_arr_ts_local as date)) between 1 and 5 as is_peak,
-    sched_arr_ts_utc,
-    sched_dep_ts_utc,
+    -- A city whose realtime and static feeds do not share a stop namespace has
+    -- no trustworthy schedule context at all, so EVERY schedule-derived column
+    -- is nulled, not just otp_band. Toronto's 0.32% of events that did join
+    -- (3,878 of 1,202,069) are numeric collisions between unrelated stops, and
+    -- until 2026-08-25 their fictional delays reached the headline mart as
+    -- mean/median/p90 delay on 150 route-days. Actual arrival and departure
+    -- times are observations, not schedule context — they stay.
+    case when coalesce(schedule_matchable, true) then sched_arr_ts_utc end as sched_arr_ts_utc,
+    case when coalesce(schedule_matchable, true) then sched_dep_ts_utc end as sched_dep_ts_utc,
     actual_arr_ts_utc,
     actual_dep_ts_utc,
-    delay_arr_sec,
-    delay_dep_sec,
+    case when coalesce(schedule_matchable, true) then delay_arr_sec end as delay_arr_sec,
+    case when coalesce(schedule_matchable, true) then delay_dep_sec end as delay_dep_sec,
     -- locked rule: early BUS departure at a scheduled timepoint (> grace) is a
     -- service failure. timepoint is null where the static omits the column
     -- (NYC: rail anyway; TTC: bus-defaults-none per §D -> flag stays false there)

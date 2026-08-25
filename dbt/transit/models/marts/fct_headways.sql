@@ -84,10 +84,18 @@ sched_gaps as (
 
 paired as (
 
+    -- Same gate as fct_stop_events: where realtime and static disagree on stop
+    -- ids, a matched scheduled gap is a collision between unrelated stops, so
+    -- sched_headway_sec is nulled — and gap_ratio, bunched_flag and big_gap_flag
+    -- all divide by it, so they null out with it. actual_gap_sec is pure
+    -- observation and survives, which is why these cities still get real
+    -- headways and wait-time regularity.
     select
         o.*,
-        s.sched_gap_sec as sched_headway_sec
+        case when coalesce(c.schedule_matchable, true) then s.sched_gap_sec end
+            as sched_headway_sec
     from obs o
+    left join {{ ref('dim_city') }} c on c.city_key = o.city_key
     left join sched_gaps s
       on s.city_key = o.city_key
      and s.service_date = o.service_date
