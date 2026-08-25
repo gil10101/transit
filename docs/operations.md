@@ -245,6 +245,30 @@ Everything else is small: EC2 + EBS ~$42/month (two ARM instances 24/7), Snowfla
 (2.8 credits/30d on an XS that only runs during the chain), S3 ~$5 (24 GB stored, but the
 bill is mostly PUT requests), Lambda/ECR/SSM under $1.
 
+## Single points of failure and how to recover (added 2026-08-25)
+
+This is a deliberately cheap single-instance deployment. That is a reasonable choice at
+this budget, but it is only reasonable if the failure modes are written down. They are
+here. Nothing below is automatic — every one of these needs a human.
+
+| Component | What it is | If it dies | Recovery |
+|---|---|---|---|
+| **Services box** (`i-0f0d6e32cb15ce471`) | Runs EVERY poller *and* all of Dagster (webserver, daemon, postgres) | All ingestion and all orchestration stop. Raw archive stops growing; the warehouse goes stale but is not damaged. | `terraform apply` recreates it. Data already in Kafka survives; data not yet polled is **lost forever** — agencies do not backfill GTFS-RT. |
+| **Kafka box** (`10.20.0.34`) | Single broker, no replication | Pollers fail to publish and log errors; raw archive keeps growing (it is written before Kafka). | Recreate, then replay from the raw archive rather than accepting the gap. |
+| **Dagster postgres** | Run history + schedule state, in a docker volume on the services box | Schedules and run history lost | Volume survives a container restart and a reboot. It does NOT survive instance replacement. History is not business data — losing it costs visibility, not numbers. |
+| **EMR Serverless app** | Stateless; state lives in S3 checkpoints | Drains fail | Re-submit. Checkpoints in S3 are the durable state, so nothing is lost. |
+| **Snowflake** | Gold + external tables | Analysis stops | GOLD is fully rebuildable from silver by dbt; silver is rebuildable from the raw archive. |
+
+**The honest summary: the raw S3 archive is the only irreplaceable thing.** Everything
+downstream of it can be rebuilt. It is versioned, lifecycle-managed to IA at 30 days, and
+deliberately never expired.
+
+**The gap that is NOT acceptable long-term:** the services box is a single point of
+failure for both ingestion and orchestration, with no auto-recovery. If it terminates at
+02:00 nobody finds out until someone looks — the freshness tripwire runs *on that same
+box*, so it dies with it. An external heartbeat (a CloudWatch alarm on raw-bucket object
+count, which is outside the box) is the smallest thing that would close this. Not built.
+
 ## Known quirks (cost real debugging time — do not rediscover)
 
 0. **A `transit-drain` stuck in RUNNING for more than ~10 minutes means the EMR app is
