@@ -264,7 +264,17 @@ def hop_gold(cur) -> None:
                100*avg(iff(sched_arr_ts_utc is not null,1,0)),
                listagg(distinct match_confidence, ','),
                median(delay_arr_sec), percentile_cont(0.95) within group (order by delay_arr_sec),
-               100*avg(iff(otp_band = 'on_time',1,0)),
+               -- [rev 2026-08-25] count(otp_band), NOT count(*). This read
+               -- 100*avg(iff(otp_band='on_time',1,0)), and IFF(NULL='on_time',1,0)
+               -- returns 0 — so every unscored row (skipped stop, stale prediction,
+               -- unmatched trip) stayed in the DENOMINATOR. That contradicts docs/05 §7
+               -- ("NULL removes the row from both the numerator AND the denominator")
+               -- and it under-reported OTP against the canonical
+               -- fct_route_reliability_daily by up to 4.3 points: nyc 64.6 vs 68.9,
+               -- boston 55.6 vs 59.0, sf 56.7 vs 58.9, toronto 48.1 vs 49.7.
+               -- This is the tool used to sign off a new city, so it was making the
+               -- pipeline look worse than it is.
+               100.0*count_if(otp_band = 'on_time')/nullif(count(otp_band),0),
                sum(iff(early_departure_flag,1,0))
         from gold.fct_stop_events
         where service_date >= dateadd(day,-2,current_date)

@@ -170,9 +170,15 @@ resource "aws_iam_role_policy" "services" {
         Resource = "*"
       },
       {
+        # [rev 2026-08-25] Scoped from Resource = "*" to the one role this box may pass.
+        # The PassedToService condition below was already a real constraint (only 2 of 23
+        # roles in the account trust emr-serverless), so nothing was exploitable — but the
+        # wildcard grants privilege to any FUTURE emr-serverless-trusting role, and both
+        # sibling grants in the spark module are already scoped this way. Consistency here
+        # is the point: the outlier is the one nobody notices when the account grows.
         Effect    = "Allow"
         Action    = ["iam:PassRole"]
-        Resource  = "*"
+        Resource  = var.emr_execution_role_arn
         Condition = { StringEquals = { "iam:PassedToService" = "emr-serverless.amazonaws.com" } }
       },
       {
