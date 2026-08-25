@@ -7,9 +7,17 @@ agency: TTC
 timezone: America/Toronto
 adapter: gtfs_rt
 poll_seconds: 30
-# Static GTFS verified 2026-08-23: resolved via open.toronto.ca CKAN package API
-# ("TTC Routes and Schedules"), direct zip 200, 35.0 MB (docs/01-data-dictionary.md §D).
-static_gtfs: https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/7795b45e-e65a-4465-81fc-c36b9dfff169/resource/cfb6b2b8-6191-41e3-bda1-b175c51148cb/download/opendata_ttc_schedules.zip
+# [rev 2026-08-25] Switched to SurfaceGTFS.zip, the static feed TTC publishes to pair with
+# the bustime realtime feed. The old "TTC Routes and Schedules" zip (opendata_ttc_schedules)
+# numbers stops on a DIFFERENT scheme: its stop_id lines up with this feed's stop_CODE, which
+# is why realtime and static appeared to overlap 58.7% globally while sharing only 0-6 stops
+# of ~200 on any given route. Measured against this feed instead (2026-08-25, one live day):
+#   trip_id  27,942 / 27,953 non-ADDED trips = 100.0%
+#   stop_id   9,031 / 9,084 distinct stops   =  99.4%
+#   per trip  99.9% of realtime stops appear in that same trip's scheduled stops;
+#             97.5% of trips match with nothing left over
+# Verified 200, 79.8 MB, feed_version S1000536 (valid 20260726-20260905).
+static_gtfs: https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/bd4809dd-e289-4de8-bbde-c5c00dafbf4f/resource/28514055-d011-4ed7-8bb0-97961dfe2b66/download/SurfaceGTFS.zip
 feed_groups:
   trip_updates: https://bustime.ttc.ca/gtfsrt/trips
   vehicle_positions: https://bustime.ttc.ca/gtfsrt/vehicles
