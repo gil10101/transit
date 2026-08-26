@@ -1,15 +1,18 @@
 # 06 — What the warehouse currently answers
 
 Every number on this page came out of `analysis/business_questions.sql` run
-against `TRANSIT.GOLD` on **2026-08-25**, over the data collected since
+against `TRANSIT.GOLD` on **2026-08-26 04:40Z**, over the data collected since
 2026-08-22. Re-run that file rather than editing numbers here by hand.
 
-**Read the caveats before quoting anything.** This is 2–3 days of data, not a
+**Read the caveats before quoting anything.** This is 4–5 days of data, not a
 season. Cities onboarded on different days (`dim_city.metrics_from`), so the
 denominators are not equal, and a "most reliable city" ranking off this window
-would be dishonest. What the numbers *do* establish is that the pipeline
-produces plausible, internally consistent, cross-city-comparable measurements —
-which was the point of P1–P5.
+would be dishonest — which is precisely why `fct_city_scorecard_monthly`
+refuses to emit one until a city has 20 closed judged days. What the numbers
+*do* establish is that the pipeline produces plausible, internally consistent,
+cross-city-comparable measurements. This run is also the first with the 7-line
+regex casualty repaired (NYC gained ~350 northbound trips/day) and with weather
+joined into gold (Q7 is live).
 
 ---
 
@@ -18,9 +21,12 @@ which was the point of P1–P5.
 > Which cities run the most reliable public transit — and what makes them
 > reliable?
 
-Not answerable yet as a single score: `fct_city_scorecard_monthly` is P6 and
-does not exist. What exists is every input to it. Below, each of the eight
-sub-questions from `docs/transit-pulse-plan.md` §1, with its current answer.
+Not answerable yet as a single score — and now that is a *design guarantee*
+rather than a gap: `fct_city_scorecard_monthly` exists, is built by every
+chain run, and deliberately holds ZERO rows until a city accrues 20 closed
+judged days in a month. Every input to it exists and is measured below, each
+of the eight sub-questions from `docs/transit-pulse-plan.md` §1 with its
+current answer.
 
 ---
 
@@ -31,14 +37,18 @@ more than 60s ahead; `very_late` is 15 min or worse.
 
 | City | Scored events | On time | Early | Late | Very late |
 |---|---:|---:|---:|---:|---:|
-| Helsinki | 675,492 | **81.3%** | 13.3% | 5.2% | 0.2% |
-| New York | 341,117 | 69.9% | 19.3% | 9.5% | 1.3% |
-| Boston | 441,056 | 59.0% | 17.5% | 20.4% | 3.0% |
-| SF Bay Area | 414,651 | 58.9% | 23.3% | 14.8% | 3.0% |
-| Washington DC | 259,051 | 53.8% | 24.0% | 18.2% | 4.0% |
-| Toronto | 1,210,201 | 49.7% | **41.0%** | 7.5% | 1.9% |
+| Zurich | 3,377 | **83.9%** | 4.7% | 7.4% | 4.0% |
+| Helsinki | 1,378,897 | **81.0%** | 12.7% | 6.0% | 0.3% |
+| New York | 604,145 | 67.5% | 22.4% | 9.0% | 1.2% |
+| SF Bay Area | 1,394,139 | 58.5% | 21.9% | 16.1% | 3.5% |
+| Boston | 874,422 | 57.9% | 17.3% | 21.8% | 3.1% |
+| Washington DC | 884,318 | 53.9% | 23.0% | 18.9% | 4.3% |
+| Toronto | 2,365,483 | 49.2% | **41.1%** | 7.9% | 1.8% |
 
-**Toronto's 41% early is the finding here, not its 49.7% on-time.** Toronto is
+Zurich's 83.9% leads the table on 3,377 events — treat it as a first reading,
+not a result; its first judged day only just closed.
+
+**Toronto's 41% early is the finding here, not its 49.2% on-time.** Toronto is
 not late — it is *ahead of schedule* four times out of ten. For a bus network
 that is a genuine service defect (a bus that leaves a timepoint early strands
 riders who arrived on time), which is exactly why the early band is tracked
@@ -50,15 +60,16 @@ By local hour, the 8am and 5pm peaks (routes with ≥500 events in the hour):
 
 | City | 8am OTP | 5pm OTP |
 |---|---:|---:|
-| Helsinki | 79.0% | 76.2% |
-| New York | 64.2% | 69.8% |
-| Boston | 61.5% | 54.4% |
-| SF Bay Area | — | 53.6% |
-| Washington DC | — | 48.5% |
-| Toronto | 46.9% | 48.3% |
+| Helsinki | 78.7% | 74.5% |
+| New York | 62.6% | 67.4% |
+| Boston | 59.9% | 53.0% |
+| SF Bay Area | 58.1% | 53.7% |
+| Washington DC | 49.5% | 48.5% |
+| Toronto | 47.1% | 49.0% |
 
-SF and DC have no 8am row yet — they onboarded on 2026-08-24/25 and have not
-accumulated a full morning peak past their `metrics_from`.
+Every US/CA city now has both peaks; Zurich has a single ≥500-event hour so
+far (11:00, 73.0%). The near-universal pattern: the evening peak is worse than
+the morning one everywhere except New York.
 
 ## Q2 — Average delay
 
@@ -66,19 +77,21 @@ Signed seconds, positive = late.
 
 | City | Mean | Median | p90 | p99 |
 |---|---:|---:|---:|---:|
-| Toronto | 11 | **−23** | 283 | 1,237 |
-| New York | **−98** | 14 | 303 | 995 |
-| Helsinki | 53 | 31 | 216 | 554 |
-| SF Bay Area | 149 | 52 | 447 | 2,373 |
-| Washington DC | 156 | 81 | 543 | 1,762 |
-| Boston | 164 | 112 | 516 | 1,431 |
+| Toronto | −293 | **−24** | 293 | 1,214 |
+| Zurich | 47 | 0 | 216 | 1,872 |
+| New York | −320 | 5 | 288 | 938 |
+| Helsinki | 62 | 34 | 232 | 652 |
+| SF Bay Area | **−19,027** | 63 | 487 | 2,340 |
+| Washington DC | 166 | 88 | 559 | 1,752 |
+| Boston | 174 | 121 | 534 | 1,405 |
 
-**Use the median, not the mean.** New York's mean of −98s against a median of
-+14s is not a fast subway; it is a long negative tail. NYC delay is computed
-against the static schedule (the feed does not set `arrival.delay` except on
-the L), so a trip matched to a schedule that ran at a different time produces a
-large negative number. The median is robust to that; the mean is not. Boston's
-mean and median agree, which is what a well-behaved city looks like.
+**Use the median, not the mean — SF just proved it in the extreme.** SF's mean
+of −19,027s against a median of +63s is a handful of predictions filed absurdly
+far ahead of a schedule, not a time-travelling bus; the delay-bounds test warns
+on exactly these rows and stores them for audit. Same story milder in New York
+and Toronto (schedule-computed delay with mismatched trips makes long negative
+tails). The median is robust to all of it; the mean is not. Boston's mean and
+median agree, which is what a well-behaved city looks like.
 
 ## Q3 — Service volume
 
@@ -87,19 +100,19 @@ identify vehicles, so `peak_vehicles` there is a floor.
 
 | City | Mode | Peak vehicles | Peak trips | Peak routes |
 |---|---|---:|---:|---:|
-| SF Bay Area | bus | 1,664 | 2,965 | 450 |
-| Toronto | bus | 1,371 | 3,099 | 183 |
-| Washington DC | bus | 1,027 | 1,790 | 128 |
-| New York | metro | 981 *(id unreliable)* | 981 | 26 |
-| Boston | bus | 698 | 1,435 | 148 |
+| SF Bay Area | bus | 1,664 | 2,965 | 460 |
+| Toronto | bus | 1,400 | 3,147 | 184 |
+| Washington DC | bus | 1,031 | 1,821 | 128 |
+| New York | metro | 1,004 *(id unreliable)* | 1,004 | 26 |
+| Boston | bus | 710 | 1,472 | 148 |
 | Toronto | tram | 204 | 406 | 16 |
-| SF Bay Area | tram | 126 | 206 | 10 |
-| Washington DC | metro | 120 | 225 | 6 |
-| Boston | tram | 72 | 177 | 5 |
+| SF Bay Area | tram | 128 | 206 | 10 |
+| Washington DC | metro | 127 | 226 | 6 |
+| Boston | tram | 79 | 187 | 5 |
 | Boston | rail | 60 | 80 | 13 |
-| Boston | metro | 42 | 137 | 3 |
+| Boston | metro | 42 | 139 | 3 |
 | SF Bay Area | rail | 43 | 46 | 7 |
-| SF Bay Area | ferry | 11 | 21 | 6 |
+| SF Bay Area | ferry | 12 | 25 | 7 |
 | Toronto | ferry | 2 | 2 | 1 |
 
 **Helsinki is absent from this table entirely.** HSL publishes no
@@ -114,12 +127,17 @@ Bunched = actual gap under half the scheduled gap; big gap = over double.
 
 | City | Gaps measured | Mean gap | Median gap | Bunched | Big gap |
 |---|---:|---:|---:|---:|---:|
-| Toronto | 1,137,057 | 815s | 687s | **11.7%** | 4.8% |
-| Boston | 429,831 | 1,528s | 1,130s | 10.7% | 2.3% |
-| Washington DC | 241,362 | 1,188s | 1,069s | 9.4% | 4.6% |
-| SF Bay Area | 377,100 | 1,377s | 1,075s | 7.7% | 4.9% |
-| New York | 348,346 | 642s | 529s | 7.7% | 3.5% |
-| Helsinki | 634,641 | 1,476s | 1,012s | **2.6%** | 1.8% |
+| Toronto | 2,296,324 | 903s | 690s | **11.9%** | 5.0% |
+| New York | 635,065 | 598s | 475s | 11.0% | 3.1% |
+| Boston | 885,090 | 1,528s | 1,146s | 10.8% | 2.4% |
+| Washington DC | 858,085 | 1,284s | 1,162s | 8.8% | 4.9% |
+| SF Bay Area | 1,339,430 | 1,439s | 1,125s | 7.5% | 5.1% |
+| Helsinki | 1,288,827 | 1,466s | 1,007s | **2.8%** | 1.8% |
+
+New York's bunching jumped from 7.7% to 11.0% with the 7-line repair — the
+recovered northbound trips were exactly the dense-headway service where
+bunching lives, a reminder that a silent data loss biases metrics, not just
+volumes. Zurich has one rated gap so far; too young to tabulate.
 
 Helsinki bunches roughly a quarter as often as Toronto. This is the single
 clearest cross-city separation in the data so far, and it is consistent with
@@ -133,16 +151,18 @@ schedule promises.
 
 | City | Route-days | Mean EWT | Median EWT |
 |---|---:|---:|---:|
-| Helsinki | 102 | 94s | **22s** |
-| New York | 103 | 74s | 29s |
-| SF Bay Area | 65 | 105s | 55s |
-| Boston | 73 | 51s | 58s |
-| Washington DC | 44 | 137s | 76s |
-| Toronto | 267 | 289s | **372s** |
+| Helsinki | 203 | 83s | **20s** |
+| New York | 157 | 60s | 25s |
+| Toronto | 427 | 23s | 56s |
+| Boston | 129 | 58s | 62s |
+| SF Bay Area | 145 | 204s | 74s |
+| Washington DC | 96 | 170s | 85s |
 
-Toronto's median EWT of 6 minutes on frequent routes is an order of magnitude
-worse than Helsinki's 22 seconds, and it lines up with Toronto's bunching rate.
-Treat the magnitude as provisional until Toronto has several closed days.
+Toronto's median EWT collapsed from the provisional 372s to 56s once the
+grain-and-evidence rewrite weighted route-days properly and more days closed —
+the earlier magnitude was exactly the partial-day artifact the docs warned
+about. The Helsinki-vs-everyone gap (20s median) survives and still lines up
+with its bunching rate. Zurich: one frequent route-day so far (900s — noise).
 
 ## Q6 — Cancellations and disruptions
 
@@ -151,20 +171,23 @@ inflates the cancel rate.
 
 | City | Mean cancel % | Scheduled trips |
 |---|---:|---:|
-| Boston | 2.264% | 52,397 |
-| SF Bay Area | 1.298% | 50,784 |
-| Helsinki | 0.100% | 60,324 |
-| Washington DC | 0.011% | 33,563 |
-| Toronto | 0.000% | 153,343 |
-| New York | 0.000% | 39,150 |
+| Boston | 2.615% | 84,466 |
+| Zurich | 2.263% | 25,905 |
+| SF Bay Area | 1.324% | 101,690 |
+| Helsinki | 0.092% | 149,479 |
+| Washington DC | 0.049% | 67,335 |
+| Toronto | 0.000% | 246,463 |
+| New York | 0.000% | 58,394 |
 
 | City | Alerts | Alert-hours | Routes alerted |
 |---|---:|---:|---:|
-| New York | 1,441 | 17,911 | 10 |
-| Boston | 493 | 7,094 | 116 |
-| SF Bay Area | 419 | 7,372 | 103 |
-| Toronto | 262 | 1,768 | 99 |
-| Helsinki | 112 | 921 | 42 |
+| New York | 4,440 | 80,307 | 9 |
+| Zurich | 1,060 | 23,771 | 605 |
+| Boston | 828 | 11,842 | 135 |
+| SF Bay Area | 734 | 13,672 | 112 |
+| Toronto | 530 | 4,126 | 128 |
+| Washington DC | 183 | 820 | 76 |
+| Helsinki | 182 | 1,581 | 51 |
 | Washington DC | 96 | 461 | 63 |
 
 A zero cancel rate for Toronto and NYC means *their feeds never emit
@@ -176,13 +199,28 @@ MBTA and 511 raise many short route-level ones.
 
 ## Q7 — Weather sensitivity
 
-**Not answerable today.** Weather has been landing hourly in
-`TRANSIT.SILVER.WEATHER_HOURLY` (1,776 rows: city, local_date, local_hour,
-temp_c, precip_mm, snowfall_cm, wind_kph, weather_code) since P5, but **no dbt
-model reads it** — there is no `stg_weather__hourly`, so nothing joins it to
-`fct_stop_events`. The query is written out and commented in
-`analysis/business_questions.sql` so the gap is visible rather than silently
-absent. The 2-year backfill (`make p5-backfill-weather`) has also not been run.
+**LIVE as of 2026-08-26.** `dim_weather` (WMO code → condition bucket) +
+`stg_weather__hourly` + `fct_weather_hourly` join `fct_stop_events` on exactly
+(city_key, local_date, local_hour); the 2-year backfill ran the same night
+(124,738 hourly rows, 2024-08-19 → today, all seven cities), so the moment a
+snowy day happens, the comparison exists.
+
+First reading — OTP by condition (cells under 200 scored events suppressed):
+
+| City | Condition | Scored | OTP | vs its dry OTP |
+|---|---|---:|---:|---:|
+| New York | rain | 6,584 | **75.5%** | +8.0pp |
+| New York | heavy_rain | 4,399 | 74.0% | +6.5pp |
+| Zurich | rain | 1,258 | **91.5%** | +9.3pp |
+| Helsinki | cloudy | 791,457 | 81.2% | +0.5pp |
+| SF Bay Area | fog | 526,309 | 57.5% | +0.3pp |
+| Boston | cloudy | 81,596 | 55.6% | −2.5pp |
+
+The counterintuitive early signal — NYC and Zurich run *better* in rain — is
+exactly why `n_scored` rides on every cell: a few thousand events from one
+rainy evening is an anecdote with a denominator, not a finding. The question
+this table is really waiting for (Helsinki-in-snow vs Boston-in-snow) needs
+winter; the machinery for it is now fully wired and tested.
 
 ## Q8 — Data completeness
 
@@ -190,13 +228,15 @@ Only closed local days at or after each city's `metrics_from` are judged.
 
 | City | Route-days judged | Mean completeness | Scheduled | Observed | Cancelled |
 |---|---:|---:|---:|---:|---:|
-| Helsinki | 437 | 95.9% | 23,752 | 22,777 | 43 |
-| New York | 23 | 95.2% | 5,660 | 5,350 | 0 |
+| Toronto | 216 | 102.0% | 35,759 | 36,194 | 0 |
+| New York | 52 | 99.0% | 14,351 | 14,657 | 0 |
+| Helsinki | 874 | 96.0% | 47,544 | 45,707 | 81 |
+| Boston | 181 | 93.6% | 17,370 | 16,708 | 824 |
 
-**Only two cities appear.** Boston, Toronto, DC and SF have no closed day at or
-after their `metrics_from` yet, so P3's "completeness ≥85% after 48h"
-acceptance criterion is still unverified for four of six cities. First real
-reads land 2026-08-26.
+**P3's "completeness ≥85%" acceptance criterion: PASSED by all four cities
+with closed judged days.** Toronto over 100% is ADDED service running beyond
+the schedule, counted honestly. DC, SF and Zurich still have no closed day at
+or after `metrics_from`; their first reads land over the next two days.
 
 ---
 
@@ -228,22 +268,31 @@ service that is scheduled and that we never saw in realtime.
 | SF | tram 0 | 16 | 4 | 2 | 10 |
 | SF | metro 1 | 12 | 0 | 2 | 10 |
 | SF | rail 2 | 8 | 0 | 1 | 7 |
-| SF | bus 3 | 614 | 10 | **109** | 495 |
-| SF | ferry 4 | 14 | 0 | 8 | 6 |
+| SF | bus 3 | 614 | 10 | **75** | 529 |
+| SF | ferry 4 | 14 | 0 | 7 | 7 |
 | SF | cable car 5 | 3 | 0 | 0 | 3 |
 | Toronto | tram 0 (streetcar) | 16 | 0 | 0 | 16 |
 | Toronto | bus 3 | 204 | 6 | 0 | 198 |
 | Toronto | ferry 4 | 1 | 0 | 0 | 1 |
+| Zurich | S-Bahn 109 | 63 | 24 | 32 | 7 |
+| Zurich | bus 700 | 440 | 67 | 294 | 79 |
+| Zurich | tram 900 | 22 | 1 | 10 | 11 |
+| Zurich | boat 1000 | 10 | 1 | 9 | 0 |
 
-**DC and Toronto are complete** — every scheduled route is observed.
+**DC and Toronto are complete** — every scheduled route is observed. Zurich's
+large "scheduled, never seen" counts are one partial day of data, not a
+verdict — its coverage read matures with its first few closed days.
 
-**Ferries are the systematic hole.** Boston 9 routes, Helsinki 3, SF 8 of 14 —
-all scheduled, none (or few) observed. Helsinki's is confirmed agency-side:
-HSL's Suomenlinna ferry realtime is an AIS→MQTT stream
-(`HSLdevcom/suomenlinna-ferry-hfp`), not part of their GTFS-RT at all. Boston's
-and SF's have the same shape and have not been separately confirmed.
+**Ferries are the systematic hole.** Boston 9 routes, Helsinki 3, Zurich's
+boats 9 of 10, SF 7 of 14 — scheduled, none (or few) observed. Helsinki's is
+confirmed agency-side (AIS→MQTT, `HSLdevcom/suomenlinna-ferry-hfp`); Boston's
+was proven upstream on 2026-08-26 — **zero silver rows ever** for any Boat-%
+route — and is now a seeded known coverage gap, alongside its Orange-Line
+rail-replacement shuttles (same proof, 0 of 2,791 scheduled shuttle trips ever
+published in the feed).
 
-**SF's 109 unobserved bus routes** are not one failure but many small ones. The
+**SF's 75 unobserved bus routes** (down from 109 as more days accrued) are not
+one failure but many small ones. The
 511 feed aggregates ~30 operators under a single `city_key`, and they do not
 all publish realtime:
 
@@ -280,7 +329,7 @@ stating explicitly wherever an SF number is quoted.
 | **HSL** (Helsinki) | GTFS-RT TU + alerts, keyless | Tram, metro, suburban rail, regional/express/local bus, light rail, **ferry** | All but ferry | **No VehiclePositions feed at all.** Ferry realtime is AIS→MQTT, outside GTFS-RT. `trip_id` is empty; trips resolve on (route, direction, date, start time). |
 | **WMATA** (DC) | GTFS-RT rail + bus, keyed | Metrorail, Metrobus | Both, 100% | Two static zips (rail + bus) landed under one `gtfs_version_id`. |
 | **511.org** (SF Bay) | Regional aggregated GTFS-RT, `agency=RG`, keyed | ~30 operators: bus, tram, metro, regional rail, ferry, **cable car** | Most, with real per-operator gaps | 60 req/hr cap → 200s cadence. Cable car (`route_type` 5) is unique to this feed. |
-| **opentransportdata.swiss** (Zurich) | National `/la/gtfs-rt`, keyed | Whole Swiss network — filtered to 615 Zurich routes: S-Bahn, tram, bus, boat, aerial lift, funicular | **Nothing yet** | Poller staged, not yet live. National rail classes (TGV/ICE/IC/IR/RE/EXT) are excluded from the allow-list on purpose; S-Bahn (`route_type` 109) is kept. |
+| **opentransportdata.swiss** (Zurich) | National `/la/gtfs-rt`, keyed | Whole Swiss network — filtered to 615 Zurich routes: S-Bahn, tram, bus, boat, aerial lift, funicular | Bus, tram, S-Bahn observed (79/11/7 routes on day one); boats not yet | Live since 2026-08-25. National rail classes (TGV/ICE/IC/IR/RE/EXT) are excluded from the allow-list on purpose; S-Bahn (`route_type` 109) is kept. No VehiclePositions product on the Swiss LA API — trip updates only, like Helsinki. |
 | **CTA** (Chicago) | GTFS-RT, keyed | 'L' rail + bus | **Nothing** | Key issued, beta activation still returns `errCd 101`. |
 | **ODPT** (Tokyo) | `odpt:Train` JSON | Rail | **Nothing** | Not yet applied for. Its GTFS-RT is alerts-only, so the JSON API is the path. |
 | **Open-Meteo** | Hourly forecast JSON | n/a | Collected, unused | 1,776 rows in silver, no dbt model reads them. |

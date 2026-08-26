@@ -7,8 +7,9 @@
 -- docs/06-business-answers.md — re-run it to refresh those numbers rather than
 -- editing them by hand.
 --
--- Run one at a time (they are separated by the ;--split-- marker the scratch
--- runner uses) or paste individually into a worksheet.
+-- Run one at a time (statements are separated by the semicolon-dash-dash-split
+-- marker the scratch runner keys on; spelling it out here would split this very
+-- comment) or paste individually into a worksheet.
 --
 -- READ THIS BEFORE QUOTING ANY NUMBER:
 --   * Only CLOSED local service days at or after a city's dim_city.metrics_from
@@ -181,8 +182,8 @@ join TRANSIT.GOLD.FCT_WEATHER_HOURLY w
   on w.city_key = e.city_key and w.local_date = e.local_date and w.local_hour = e.local_hour
 where e.otp_band is not null
 group by 1, 2
-order by 1, 2;
-
+order by 1, 2
+;--split--
 
 -- ---------------------------------------------------------------------------
 -- Q8. Data completeness — measuring our own sources. Judged only on closed
