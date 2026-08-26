@@ -15,18 +15,21 @@ fresh = q("""
            round(datediff(second, max(fetched_at), current_timestamp()) / 60.0, 1) as pred_lag_min,
            count(*) as rows_last_hour
     from TRANSIT.SILVER.stop_time_predictions
-    where fetched_at > dateadd(hour, -1, current_timestamp())
+    where fetched_at > dateadd(hour, -4, current_timestamp())
     group by 1 order by 1
 """)
 fresh["city"] = fresh.city_key.map(city_name)
 st.caption(
-    "Silver lags raw by up to one drain interval (15 min) plus the drain itself; "
-    "the tripwire alarms at 40 min. Red here with a quiet inbox means the alert "
-    "path is broken too — check both."
+    "This measures the SNOWFLAKE VIEW of silver, which advances when the 2-hourly "
+    "chain re-pins the Iceberg metadata — so up to ~2h of lag here is design, not "
+    "outage (physical drains land hourly; the raw-side tripwire alarms at 40 min "
+    "independently). Investigate at 150+ min: that means a chain or drain actually "
+    "missed. Chasing 80-minute 'staleness' here cost a 25-minute ghost hunt on "
+    "2026-08-26 — read this caption before repeating it."
 )
 st.dataframe(
     fresh[["city", "pred_lag_min", "rows_last_hour"]].style.map(
-        lambda v: "background-color: #8b1e1e" if isinstance(v, float) and v > 40 else "",
+        lambda v: "background-color: #8b1e1e" if isinstance(v, float) and v > 150 else "",
         subset=["pred_lag_min"],
     ),
     hide_index=True,
