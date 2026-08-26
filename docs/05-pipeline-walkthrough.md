@@ -459,16 +459,36 @@ operators — say so wherever one is quoted. Full breakdown in `docs/06-business
 publishes alerts only for the subway, so Toronto is a surface-mode score by design. NYC buses
 are deliberately out of scope. Both are stated in the plan; neither is a defect to chase.
 
-### Things that are collected but not used
+### Collected but not yet used — optionality, not debt
 
-**Weather.** `silver.weather_hourly` fills every hour and no dbt model reads it. The
-resilience question — does Zurich handle snow better than New York — needs about two years
-of accrual before it can be answered, so the data is banking against that day.
+**[rev 2026-08-26] This section used to be framed as a list of loose ends. That framing
+was wrong and worth correcting**, because it changes what these fields are for.
 
-**`stg_gtfs__stops`.** Built, populated, no downstream consumer.
+The reliability question is what justified building the pipeline, but it is not the limit
+of what the data can answer. Every stop event carries local hour, day of week, a peak
+flag, mode, route, stop, direction, vehicle identity and — where the feed provides it —
+occupancy. Alongside hourly weather per city, that is a substrate for questions nobody has
+asked yet: how service volume responds to weather, whether crowding tracks delay, how
+overnight coverage differs between cities, how a network's shape changes across the day.
 
-**`completeness_exclusion_threshold` (0.70).** Declared in `dbt_project.yml` for the P6
-scorecard. No model reads it. Do not cite it as an active guard.
+Those are not the business question. They are the questions the business question makes
+*possible*, and they are why it is worth keeping fields the current models do not read.
+The distinction that matters is between **unused** (a field nothing reads because nothing
+has needed it yet — keep it) and **dead** (config that reads as an active guard and is
+not — delete it, as `completeness_exclusion_threshold` was on 2026-08-25).
+
+**Weather.** `silver.weather_hourly` fills every hour and no dbt model reads it yet. The
+resilience question — does Zurich handle snow better than New York — needs roughly two
+years of accrual before it means anything, so the series is banking against that. The
+2-year historical backfill (`make p5-backfill-weather`) is built and has never been run;
+weather is the one dimension here that *can* be backfilled, because Open-Meteo publishes
+a real archive.
+
+**`stg_gtfs__stops`.** Built and populated with names and coordinates. No consumer today;
+it is what any map, corridor analysis or stop-level view would be built on.
+
+**Route geometry** (`silver.gtfs_static_shapes`, 7.1M rows). Same shape: loaded for the
+P6 map, unread until then.
 
 ### A test that measures the wrong thing
 
