@@ -521,3 +521,36 @@ the guardrail the data was investigated first, and the 13 split three ways:
 
 The completeness floor did exactly what it was built for: it turned a silent 47%
 route-level data loss into a red build the same day the data existed.
+
+---
+
+## Overnight run log — 2026-08-26, 04:00–09:30Z (autonomous)
+
+Chains: **04:05Z GREEN · 06:05Z GREEN · 08:05Z FAILED–recovered.** Every green run
+verified at the tables, not the log line (gold last_altered moved, scorecard rebuilt by
+the chain, still 0 rows by design).
+
+- **Weather closed its loop end to end in one night**: `dim_weather` seed +
+  `stg_weather__hourly` + `fct_weather_hourly` (docs/02 join contract: city_key,
+  local_date, local_hour), the 2-year backfill ran to completion (124,738 rows,
+  2024-08-19 → today, all 7 cities), the 06:05Z chain built it all in-chain first try,
+  and business Q7 went from placeholder to a real answer with n on every cell.
+  Business sub-question 7 is no longer blocked on anything but winter.
+- **08:05Z failure was Snowflake, not us**: `000603 (XX000) SQL execution internal
+  error … incident 4356850` aborted int_stop_events_finalized after 147 tests had
+  passed. Retried 25 minutes later: clean. SNS alerted as designed. Nothing to fix on
+  our side; the incident number is logged here in case it recurs.
+- **DC's first judged day: city gate PASSED at 91.5%** (B1 ≥85%). Its two failing
+  route-days were WMATA's umbrella EXP/LCL routes — 825/473 trips scheduled, realtime
+  published for ~25% of them, and gold captured 93–98% of what was published. Seeded as
+  partial-publication gaps with the evidence in the seed row (Helsinki-partial
+  standard). Boston 90.1 · Helsinki 96.1 · NYC 103.0 (ADDED service + the 7-line
+  recovery) · Toronto 98.8. SF's first day closes ~10:00Z; Zurich's ~01:00Z tomorrow.
+- **One ghost hunt, institutionalised**: 82-minute "silver staleness" turned out to be
+  design — drains run HOURLY at :45 (Aug-24 cost fix) and Snowflake's silver view
+  advances only when the 2-hourly chain re-pins Iceberg metadata. The ops page caption
+  and the cloud-state memory now say so explicitly; physical freshness is measured from
+  iceberg metadata mtimes or raw S3, never from Snowflake max(fetched_at).
+- Noise catalogued: one drain (04:45Z) logged RedshiftPushdownException wrapping an
+  Iceberg write-task failure; the batch retried and committed (v635). Only real if a
+  drain commits nothing.
