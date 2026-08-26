@@ -10,8 +10,27 @@ models:
       - name: city_key
         data_tests: [not_null]
       - name: trip_uid
-        description: canonical trip identity (hash) shared with trip updates
-        data_tests: [not_null]
+        description: >
+          Canonical trip identity (hash) shared with trip updates. NULL when the ping
+          carried no trip descriptor at all — GTFS-RT makes VehiclePosition.trip
+          optional, so deadheading and unassigned vehicles legitimately have no trip.
+
+          [rev 2026-08-26] The bare not_null was REMOVED, and it is worth saying plainly
+          why: that test was not merely failing to catch a defect, it was MANDATING one.
+          Requiring trip_uid to always be populated is exactly why a fabricated identity
+          looked correct and NULL did not — the Spark hash collapsed every
+          descriptor-less ping onto a per-city-day constant (3,001,314 rows), and this
+          test went red the moment it was fixed properly.
+
+          A shape test that asserts a column is populated says nothing about whether the
+          value MEANS anything. assert_trip_uid_is_an_identity covers that. The not_null
+          is kept only where an identity genuinely must exist. Downstream is safe:
+          fct_vehicle_activity_hourly counts DISTINCT trip_uid, so NULLs are excluded
+          rather than inflating it by one phantom trip per city-day.
+        data_tests:
+          - not_null:
+              config:
+                where: "trip_id is not null or route_id is not null"
       - name: ts_utc
         description: ping timestamp (vehicle timestamp, else fetched_at)
         data_tests: [not_null]

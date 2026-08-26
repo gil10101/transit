@@ -207,40 +207,49 @@ def with_common(df: DataFrame) -> DataFrame:
             service_date_expr(F.col("fetched_at"), tz),
         ),
     )
+    # [rev 2026-08-26] trip_uid is NULL when the record carries no trip identity.
+    #
+    # Two nested traps here, and the first fix only moved the bug. Spark's concat_ws
+    # SKIPS nulls and returns '' rather than NULL when every input is null, so the
+    # COALESCE below never fired and every descriptor-less record hashed to
+    # sha256('<city>|<date>|'). Wrapping the inner concat in nullif fixed that half —
+    # and then the OUTER concat_ws skipped the now-NULL identity too, producing
+    # sha256('<city>|<date>') instead. Same collapse, different constant: 82,774 toronto
+    # rows still shared one uid 19 hours after the "fix" shipped. Verified against the
+    # live value: toronto's uid was exactly sha256('toronto|2026-08-25').
+    #
+    # The only correct value for "no trip identity" is NULL, so the hash is computed
+    # ONLY when an identity exists. GTFS-RT makes VehiclePosition.trip optional
+    # (deadheading, unassigned vehicles), so this is normal data, not upstream
+    # corruption. Trip updates are unaffected — 0 descriptor-less rows in any city.
+    #
+    # assert_trip_uid_is_an_identity is the guard; it would have caught both rounds in
+    # one build instead of by hand a day later.
+    identity = F.coalesce(
+        F.col("rec.trip_id"),
+        F.nullif(
+            F.concat_ws(
+                "-",
+                F.col("rec.route_id"),
+                F.col("rec.direction_id"),
+                F.col("rec.start_time"),
+            ),
+            F.lit(""),
+        ),
+    )
     return df.withColumn(
         "trip_uid",
-        F.sha2(
-            F.concat_ws(
-                "|",
-                F.col("city"),
-                F.date_format("service_date", "yyyy-MM-dd"),
-                # [rev 2026-08-25] nullif(..., '') is load-bearing. Spark's concat_ws
-                # SKIPS nulls and returns '' — never NULL — when every input is null, so
-                # the COALESCE never fired and every record with no trip descriptor
-                # hashed to the same sha256('<city>|<date>|'). Measured live: toronto
-                # 1,374,084 VP rows / 2,189 vehicles, sf 84,925 / 1,513, dc 194,495 /
-                # 1,363 all collapsed onto one trip_uid per city-day. GTFS-RT makes
-                # VehiclePosition.trip optional (deadheading, unassigned vehicles), so
-                # this is normal data, not corruption upstream. Trip updates are
-                # unaffected — 0 descriptor-less rows across all seven cities.
-                # NULL is the correct value for "no trip identity"; a hash of the empty
-                # string is a fake identity that silently joins unrelated vehicles.
-                # F.nullif needs Spark >= 3.5; EMR 7.5 runs 3.5.4 (see SPARK_VER in
-                # scripts/submit_emr_drain.sh) and the repo venv pins pyspark 3.5.9.
-                F.coalesce(
-                    F.col("rec.trip_id"),
-                    F.nullif(
-                        F.concat_ws(
-                            "-",
-                            F.col("rec.route_id"),
-                            F.col("rec.direction_id"),
-                            F.col("rec.start_time"),
-                        ),
-                        F.lit(""),
-                    ),
+        F.when(
+            identity.isNotNull(),
+            F.sha2(
+                F.concat_ws(
+                    "|",
+                    F.col("city"),
+                    F.date_format("service_date", "yyyy-MM-dd"),
+                    identity,
                 ),
+                256,
             ),
-            256,
         ),
     )
 
