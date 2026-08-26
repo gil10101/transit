@@ -28,7 +28,12 @@ transit:
       # these env vars; the defaults keep laptop runs on TERRAFORM_SVC unchanged.
       user: "{{ env_var('SNOWFLAKE_USER', 'TERRAFORM_SVC') }}"
       private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH', env_var('HOME') ~ '/.snowflake/keys/transit_terraform_key.p8') }}"
-      role: "{{ env_var('SNOWFLAKE_ROLE', 'ACCOUNTADMIN') }}"
+      # [rev 2026-08-26] default was ACCOUNTADMIN, and one laptop build quietly created
+      # the store_failures audit schema under it — objects the chain's TRANSIT_PIPELINE
+      # role could not replace, which took the whole warehouse_chain down. Laptop and
+      # chain now build as the SAME role, so every object has one owner. ACCOUNTADMIN
+      # remains available via SNOWFLAKE_ROLE for genuine admin work, never for builds.
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'TRANSIT_PIPELINE') }}"
       database: TRANSIT
       warehouse: TRANSFORM_XS
       schema: GOLD
