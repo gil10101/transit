@@ -691,10 +691,48 @@ Nearest first:
 2. Watch Zurich's first full day, and confirm the allow-list holds as the network wakes up.
 3. Decide the raw-archive retention question.
 4. Chase Chicago's key and apply for Tokyo's.
-5. Build the scorecard: slowly-changing dimensions, the weighted composite score, and the
-   dashboard that lets a stranger answer "which city is most reliable at 8am?" in two
-   clicks.
+5. ~~Build the scorecard~~ — built, see §17.
 
-The honest status: the measurement machinery is built and verified. The ranking it exists
-to produce is not built yet, and there is not enough history to publish one even if it
-were.
+## 17. The scorecard, the history books, and the dashboard (built 2026-08-26)
+
+**The score.** Each city gets one number per month, 0 to 100, made of four ingredients:
+how much longer people actually waited than the timetable promised (35% of the score —
+on frequent service, waiting IS the experience of reliability), how many arrivals were
+on time (30%), how many scheduled trips never ran (20%), and how often buses travel in
+bunches (15%). Every row shows its ingredients, its weights, and how much data sat
+behind it, so nobody has to take the headline number on faith.
+
+Three honesty rules are built into the table itself, not into a caveat somewhere:
+
+- **It refuses to score a city with less than 20 finished, judged days in a month.**
+  Right now that means the table is EMPTY — four days of data do not make a ranking,
+  and an empty table is the machine saying so. The dashboard shows progress toward the
+  bar instead of dressing four days up as a verdict.
+- **Missing evidence is not a score.** If a city has no wait-time data, that ingredient
+  goes blank and its weight is shared among the ingredients that exist. The first draft
+  quietly scored "we didn't measure this" as either zero or perfect, depending on the
+  ingredient — both wrong the same way, both caught before a single number was
+  published.
+- **Counting things once.** The reliability table keeps one row per direction of each
+  route, and each row repeats the route's trip totals — so adding them up counts most
+  routes twice. The first draft did exactly that (it would have claimed 199,654
+  scheduled trips where the truth is 111,127). The rewrite takes each figure from the
+  table that owns it, and a permanent test now fails the build if the totals ever drift
+  from the route-level truth.
+
+**The history books.** Route and stop reference tables are now *versioned*: when an
+agency renames a route or moves a stop, the old row is closed with an end date and a
+new row opens, so a January fact joins to what the network looked like in January, not
+today. These histories are recomputed from the versioned schedule files we already
+keep — nothing to back up, nothing that can drift.
+
+**The dashboard** (`make dashboard`): five pages — the scorecard (with its honest empty
+state), a delay hexmap where every city shares one color scale so pale-vs-red means the
+same thing everywhere, a route explorer whose hour-by-hour heatmap answers "which city
+is most reliable at 8am?" in two clicks, a lightly-delayed live vehicle map that states
+its lag instead of pretending, and an ops page whose staleness table exists specifically
+to catch the deploy trap that has bitten twice.
+
+The honest status now: the machinery, the score, and the window onto it are all built
+and tested. What remains is time — history accrues at one day per day, and the first
+publishable month arrives when a city crosses 20 judged days.
