@@ -491,3 +491,33 @@ published, then prod queries measured them:
 Reliability ratios are weighted by their own evidence counts — `banded_events`,
 `rated_gaps`, `ewt_gap_count`, newly published on fct_route_reliability_daily — never
 by trip counts that live at a different grain.
+
+### The 7-line regex casualty (found by the completeness floor, 2026-08-26)
+
+After the dim rebuild, `completeness_above_error_50pct` failed on 13 route-days. Per
+the guardrail the data was investigated first, and the 13 split three ways:
+
+- **9 Boston ferry routes + 2 Orange-Line shuttle routes: upstream non-publication,**
+  proven at silver — 0 prediction rows EVER for any Boat-% or Shuttle-% route while
+  the supplemented static schedules them heavily (shuttles: 2,791 trips over 3 days).
+  Seeded as known coverage gaps with the evidence in the seed row, same standard as
+  Helsinki's.
+- **NYC 7/7X at 36–49%: OUR bug, and a subtle one.** Silver held 661 distinct RT
+  trips against 642 scheduled (full coverage); gold kept 241. Every lost trip was
+  northbound. Root cause: Snowflake string literals eat backslashes, so the
+  direction regex `\.\.?([NS])` reached the engine as `..?([NS])` — "any two chars
+  then N/S" — and matched the S inside static id prefixes (`L0S3-…`). Every static
+  7 trip was labeled southbound; northbound RT trips joined nothing. Only the 7
+  bled because its RT ids are bare tokens (no path suffix), the one line that lives
+  entirely on the direction fallback — every other line exact-matches on the full
+  token first. duckdb does not process backslash escapes in plain strings, so dev
+  was green throughout: a pure dialect divergence. Fixed in the `re_extract` macro
+  (backslashes doubled for Snowflake, once, at the macro); the same broken pattern
+  also sat in the finalizer's direction fallback (contaminating direction for
+  routes whose NAME contains N or S — N, GS, FS, SI) and the alerts route
+  extraction, both healed by the macro fix. `assert_nyc_direction_survives_prefix`
+  pins it; broken-vs-fixed was demonstrated against live Snowflake (S vs N on the
+  same northbound id) before the rebuild.
+
+The completeness floor did exactly what it was built for: it turned a silent 47%
+route-level data loss into a red build the same day the data existed.
