@@ -27,3 +27,7 @@ sources:
       - name: gtfs_static_stop_times
       - name: gtfs_static_calendar
       - name: gtfs_static_calendar_dates
+      # written direct-to-Snowflake by the Dagster weather asset (1 row/city/hr,
+      # already bucketed to LOCAL date+hour in Python — quirk: session tz); no
+      # freshness SLA, the hourly job self-heals with past_days=2
+      - name: weather_hourly

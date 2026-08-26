@@ -1,0 +1,64 @@
+version: 2
+
+seeds:
+  - name: dim_weather
+    description: >
+      WMO weather code -> condition bucket, one explicit row per code open-meteo
+      can emit (no ranges — every code is visible and testable). weather_key IS
+      the WMO code.
+    columns:
+      - name: weather_key
+        data_tests: [unique, not_null]
+      - name: condition_bucket
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [clear, cloudy, rain, heavy_rain, snow, heavy_snow, fog, extreme]
+
+models:
+  - name: fct_weather_hourly
+    description: >
+      Hourly weather context per (city_key, local_date, local_hour) — the explicit
+      join contract with fct_stop_events is exactly those three columns. Context,
+      not reliability: rows exist for hours with no transit observations too.
+    columns:
+      - name: weather_hour_key
+        data_tests: [unique, not_null]
+      - name: city_key
+        data_tests: [not_null]
+      - name: local_date
+        data_tests: [not_null]
+      - name: local_hour
+        data_tests:
+          - not_null
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 23}
+              config: {severity: error}
+      - name: weather_key
+        description: raw WMO code; unknown codes surface as condition_bucket='unknown'
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_weather')
+                field: weather_key
+              config:
+                # a NEW WMO code from open-meteo should warn (bucket reads
+                # 'unknown', analysis still runs), not block the chain
+                severity: warn
+      - name: condition_bucket
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [clear, cloudy, rain, heavy_rain, snow, heavy_snow, fog, extreme, unknown]
+      - name: temp_c
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: -60, max_value: 60}
+              config: {severity: warn}
+      - name: precip_mm
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 500}
+              config: {severity: warn}

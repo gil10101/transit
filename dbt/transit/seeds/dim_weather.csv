@@ -1,0 +1,29 @@
+weather_key,wmo_description,condition_bucket
+0,Clear sky,clear
+1,Mainly clear,clear
+2,Partly cloudy,cloudy
+3,Overcast,cloudy
+45,Fog,fog
+48,Depositing rime fog,fog
+51,Light drizzle,rain
+53,Moderate drizzle,rain
+55,Dense drizzle,rain
+56,Light freezing drizzle,rain
+57,Dense freezing drizzle,heavy_rain
+61,Slight rain,rain
+63,Moderate rain,rain
+65,Heavy rain,heavy_rain
+66,Light freezing rain,rain
+67,Heavy freezing rain,heavy_rain
+71,Slight snow,snow
+73,Moderate snow,snow
+75,Heavy snow,heavy_snow
+77,Snow grains,snow
+80,Slight rain showers,rain
+81,Moderate rain showers,rain
+82,Violent rain showers,heavy_rain
+85,Slight snow showers,snow
+86,Heavy snow showers,heavy_snow
+95,Thunderstorm,extreme
+96,Thunderstorm with slight hail,extreme
+99,Thunderstorm with heavy hail,extreme

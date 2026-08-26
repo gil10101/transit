@@ -149,22 +149,39 @@ order by alerts desc
 
 
 -- ---------------------------------------------------------------------------
--- Q7. Weather sensitivity. NOT ANSWERABLE TODAY. Weather lands hourly in
--- TRANSIT.SILVER.WEATHER_HOURLY (city, local_date, local_hour, temp_c,
--- precip_mm, snowfall_cm, wind_kph, weather_code) but no dbt model reads it,
--- so there is no staging model to join. The query below is what it becomes the
--- day a stg_weather__hourly model exists — it is left here deliberately
--- unrunnable rather than silently omitted.
+-- Q7. Weather sensitivity. LIVE since 2026-08-26: fct_weather_hourly joins
+-- fct_stop_events on exactly (city_key, local_date, local_hour) — the explicit
+-- contract in docs/02. Two cuts: condition buckets, and OTP per mm of rain.
+-- Caveat until the 2yr backfill + accrual widen the sample: few days of summer
+-- data means "rain" cells may be thin — n rides along so nobody quotes a
+-- 40-event cell as a finding.
 -- ---------------------------------------------------------------------------
--- select c.city_name,
---        case when w.precip_mm >= 2 then 'wet' else 'dry' end as condition,
---        round(100.0 * sum(case when e.otp_band = 'on_time' then 1 else 0 end) / count(*), 1) as otp_pct
--- from TRANSIT.GOLD.FCT_STOP_EVENTS e
--- join TRANSIT.GOLD.DIM_CITY c on c.city_key = e.city_key
--- join TRANSIT.SILVER.WEATHER_HOURLY w
---   on w.city = e.city_key and w.local_date = e.local_date and w.local_hour = e.local_hour
--- where e.otp_band is not null
--- group by 1, 2 order by 1, 2;
+select c.city_name,
+       w.condition_bucket,
+       count(e.otp_band) as n_scored,
+       round(100.0 * count_if(e.otp_band = 'on_time') / nullif(count(e.otp_band), 0), 1) as otp_pct,
+       round(avg(e.delay_arr_sec)) as mean_delay_sec
+from TRANSIT.GOLD.FCT_STOP_EVENTS e
+join TRANSIT.GOLD.DIM_CITY c on c.city_key = e.city_key
+join TRANSIT.GOLD.FCT_WEATHER_HOURLY w
+  on w.city_key = e.city_key and w.local_date = e.local_date and w.local_hour = e.local_hour
+where e.otp_band is not null
+group by 1, 2
+having count(e.otp_band) >= 200
+order by 1, 2
+;--split--
+-- Q7b. Dry vs wet, one line per city (wet = >= 1mm/hr while the event happened)
+select c.city_name,
+       case when w.precip_mm >= 1 then 'wet' else 'dry' end as sky,
+       count(e.otp_band) as n_scored,
+       round(100.0 * count_if(e.otp_band = 'on_time') / nullif(count(e.otp_band), 0), 1) as otp_pct
+from TRANSIT.GOLD.FCT_STOP_EVENTS e
+join TRANSIT.GOLD.DIM_CITY c on c.city_key = e.city_key
+join TRANSIT.GOLD.FCT_WEATHER_HOURLY w
+  on w.city_key = e.city_key and w.local_date = e.local_date and w.local_hour = e.local_hour
+where e.otp_band is not null
+group by 1, 2
+order by 1, 2;
 
 
 -- ---------------------------------------------------------------------------
