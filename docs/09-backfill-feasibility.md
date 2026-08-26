@@ -117,22 +117,37 @@ not exist publicly.
 
 ## On dropping the raw archive
 
-The question assumed "transfer end to end to gold, don't hold the raw". That would save
-real money — raw currently accrues ~6.75 GB/day (~$37/month in S3 Standard after eight
-months, growing) versus GOLD's ~0.74 GB/day.
+The question assumed "transfer end to end to gold, don't hold the raw". Raw currently
+accrues ~6.75 GB/day against GOLD's ~0.74 GB/day, so dropping it saves real money
+(~$37/month in S3 Standard after eight months).
 
-**But raw is the replay layer, and this session is the argument for keeping it.** Three
-separate defects were found in a single day where the correct fix was "re-derive from the
-bytes we kept": the SF service-date misdating, the Zurich alert contamination, and the
-`trip_uid` collapse. Gold is *derived* — when the derivation is wrong, gold is wrong, and
-only raw can rebuild it.
+**[rev 2026-08-26] An earlier version of this section argued to keep raw as insurance
+against gold being wrong. That reasoning was backwards and is withdrawn.**
 
-Note what we chose in the SF case: we dropped the misdated rows from gold rather than
-replaying, because those days sat before `sf.metrics_from` and were not scored. That was
-the right call *there*, and it is not a general one — the reason it was safe is that we
-still hold the raw bytes if the judgement ever changes.
+The goal is a pipeline engineered so gold is never wrong — not one with a good recovery
+story for when it is. Every defect found while hardening this pipeline was our own code
+(a wrong cutover default, a missing filter call, `concat_ws` returning `''` instead of
+NULL), and **not one of them would have been prevented by keeping bytes**. They were
+preventable by contract tests, which is where that effort belongs. Using replay as the
+answer tolerates a pipeline that emits bad numbers and repairs them afterwards.
 
-A middle path already exists and is cheaper than deleting: raw transitions to S3
-STANDARD_IA at 30 days (`infra/modules/lake/main.tf`), which is where most of the volume
-lives. Dropping raw entirely trades ~$37/month for the ability to ever correct a
-derivation bug. At a $60/month run rate that is not a good trade.
+What raw is genuinely for is narrower and worth stating precisely:
+
+* **Upstream reality changing under us** — an agency renames a field, changes an id
+  namespace, or alters what a value means. That is not a bug we can test our way out of,
+  because the contract we would be asserting is the one that just changed. Toronto's
+  wrong-schedule-file episode was this shape.
+* **Answering questions the current models do not ask.** Raw holds every field the feed
+  carried, not just the ones the reliability question needed.
+
+Neither justifies it as a correctness crutch. And note what we actually chose for the SF
+phantom day: we **dropped** the misdated rows rather than replaying, because those days
+sat before `sf.metrics_from` and were never scored. Replay was available and was still
+the wrong tool.
+
+**Recommendation:** keep raw, but for the reasons above rather than as a safety net, and
+let the existing lifecycle do the cost work — it already transitions to STANDARD_IA at 30
+days (`infra/modules/lake/main.tf`), which covers most of the volume. If the archive is
+ever dropped, drop it as a deliberate scope decision about what questions the project
+wants to be able to answer later, not as a bet that the pipeline is now correct enough
+not to need it.
