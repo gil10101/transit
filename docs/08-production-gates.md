@@ -554,3 +554,22 @@ the chain, still 0 rows by design).
 - Noise catalogued: one drain (04:45Z) logged RedshiftPushdownException wrapping an
   Iceberg write-task failure; the batch retried and committed (v635). Only real if a
   drain commits nothing.
+
+### SF's first judged day (10:05Z chain, 2026-08-26) — gate PASSED, long tail seeded
+
+City completeness **86.4% (B1 ≥85% PASS)** on 640 route-days. The floor test failed 59
+route-days, investigated data-first and split three ways:
+
+1. **45 routes across 13 operators with ZERO silver rows ever** — the six dead
+   operators docs/06 already measured (CM/PE/UC/GF/MB/SS) plus seven more surfacing on
+   day one (AM/BA-shuttles/EE/GP/SC/SL/TF). Seeded per-route with scheduled-trip
+   evidence, generated from the measurement query itself.
+2. **8 partial-publication routes (SB/SI/VN/WC)** — gold captured 83–100% of what 511
+   published; shortfall is upstream. Seeded, Helsinki-partial standard.
+3. **2 misdated special-event shuttles (MV concert routes)** — OUR dating rule, not
+   their publication: 511 publishes these ~20h ahead with no start_date, so the
+   fallback (fetch local −4h) files advance copies under the PRIOR service day where
+   they read scheduled-but-never-run. Event-night fetches file correctly. Seeded with
+   the mechanism named. **BACKLOG (real fix): derive service_date from the predicted
+   event time when it is far ahead of fetch** — touches the canonical rule in
+   spark_jobs/timeutils + silver_normalize; needs fixtures, not a night change.
