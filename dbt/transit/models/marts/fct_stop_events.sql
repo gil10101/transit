@@ -32,11 +32,18 @@ localized as (
         c.schedule_matchable,
         c.peak_am_start, c.peak_am_end, c.peak_pm_start, c.peak_pm_end,
         r.mode,
+        dr.route_key,
+        ds.stop_key,
         {{ to_local('f.actual_arr_ts_utc', 'c.iana_tz') }} as actual_arr_ts_local
     from f
     join {{ ref('dim_city') }} c on c.city_key = f.city_key
     left join {{ ref('stg_gtfs__routes') }} r
       on r.city_key = f.city_key and r.route_id = f.route_id
+    -- SCD2 point-in-time FKs (P6). Natural ids stay on the fact — the keys are
+    -- additive, and NULL where the static never described the route/stop on
+    -- that service day.
+    {{ scd2_join(ref('dim_route'), 'dr', 'f.city_key', 'route_id', 'f.route_id', 'f.service_date') }}
+    {{ scd2_join(ref('dim_stop'), 'ds', 'f.city_key', 'stop_id', 'f.stop_id', 'f.service_date') }}
 )
 
 select
@@ -48,8 +55,10 @@ select
     trip_id_raw,
     static_trip_id,
     route_id,
+    route_key,
     direction_id,
     stop_id,
+    stop_key,
     vehicle_id,
     match_confidence,
     cast(actual_arr_ts_local as date) as local_date,

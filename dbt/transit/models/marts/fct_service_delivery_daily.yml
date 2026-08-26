@@ -17,6 +17,13 @@ models:
         data_tests: [not_null]
       - name: route_id
         data_tests: [not_null]
+      - name: route_key
+        description: SCD2 FK (P6); NULL when the static never described the route that day
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_route')
+                field: route_key
       - name: service_date
         data_tests: [not_null]
       # measures

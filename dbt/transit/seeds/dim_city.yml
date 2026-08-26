@@ -98,7 +98,8 @@ seeds:
           - value_within_range:
               name: metrics_from_within_a_week
               arguments:
-                max_value: "dateadd(day, 7, current_date)"
+                # cross-dialect: duckdb has no dateadd()
+                max_value: "current_date + interval '7 day'"
               config: {severity: error}
       - name: schedule_matchable
         description: >

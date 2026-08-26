@@ -23,14 +23,36 @@ models:
           # spec §7: out-of-bounds delays are audited, not dropped. Failures persist in
           # the store_failures table; known cause is weekend service changes absent from
           # the regular static feed (supplemented GTFS lands in P5).
+          # [rev 2026-08-26] schema pinned to dbt_audit: the default audit schema was
+          # created by an ACCOUNTADMIN laptop build, so the chain's TRANSIT_PIPELINE
+          # role could not replace the failures table (error 003041) and the whole
+          # chain went red. A schema this role creates itself is owned correctly from
+          # birth. The old GOLD_DBT_TEST__AUDIT schema is debris — dropping it needs
+          # ACCOUNTADMIN (one line, any time): drop schema TRANSIT.GOLD_DBT_TEST__AUDIT;
           - delay_within_bounds:
               config:
                 severity: warn
                 store_failures: true
+                schema: dbt_audit
       - name: otp_band
         data_tests:
           - accepted_values:
               values: [early, on_time, late, very_late]
+      # SCD2 FKs (P6). Nullable by design: NULL means the static never described
+      # this route/stop on this service day (Toronto's disjoint stop namespace is
+      # the standing example). relationships proves every non-NULL key resolves.
+      - name: route_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_route')
+                field: route_key
+      - name: stop_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_stop')
+                field: stop_key
 
   - name: int_stop_events_finalized
     columns:

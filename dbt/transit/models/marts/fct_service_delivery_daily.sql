@@ -124,6 +124,7 @@ rolled as (
 -- unexplained gap is how a warehouse ends up all-green and wrong.
 select
     r.*,
+    dr.route_key,
     c.metrics_from,
     cast(
         {{ to_local('current_timestamp', 'c.iana_tz') }} - interval '3 hour' as date
@@ -134,3 +135,4 @@ left join {{ ref('dim_city') }} c on c.city_key = r.city_key
 left join {{ ref('known_coverage_gaps') }} g
        on g.city_key = r.city_key
       and g.route_id = r.route_id
+{{ scd2_join(ref('dim_route'), 'dr', 'r.city_key', 'route_id', 'r.route_id', 'r.service_date') }}

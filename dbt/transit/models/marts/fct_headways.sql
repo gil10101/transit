@@ -1,5 +1,3 @@
--- P5: natural keys until SCD2 dims (P6)
---
 -- Observed consecutive arrivals per (city, route, direction, stop, service_date),
 -- one row per arrival that has a predecessor. ADDED trips are INCLUDED here —
 -- headways measure the service actually delivered, unlike OTP which excludes
@@ -27,8 +25,10 @@ with events as (
         city_key,
         service_date,
         route_id,
+        route_key,  -- SCD2 FKs resolved once, in fct_stop_events; inherited here
         coalesce(direction_id, -1) as direction_id,  -- match the -1 fold used in facts
         stop_id,
+        stop_key,
         stop_sequence,
         trip_uid,
         vehicle_id,
@@ -130,8 +130,10 @@ select
     city_key,
     service_date,
     route_id,
+    route_key,
     direction_id,
     stop_id,
+    stop_key,
     stop_sequence,
     trip_uid,
     prev_trip_uid,

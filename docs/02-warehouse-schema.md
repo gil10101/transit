@@ -39,7 +39,17 @@ Star schema. All timestamps stored as `TIMESTAMP_NTZ` with explicit `_utc` / `_l
 | agency_key | varchar PK (hash city+agency_id) |
 | city_key FK, agency_id, agency_name, agency_tz | |
 
-### dim_route — SCD2 via dbt snapshot on versioned static GTFS
+### dim_route — SCD2 derived from versioned static GTFS **[rev P6: NOT a dbt snapshot]**
+> [rev P6, 2026-08-26] Sketched as "via dbt snapshot"; built as a pure derivation from
+> silver instead. Silver keeps every `gtfs_version_id` as its own partition, so snapshot
+> state is strictly worse: a snapshot table IS the history (lose it, it's gone; this dim
+> rebuilds from silver), its valid_from is whenever the snapshot job ran (ours is the
+> version's real download date, parsed from the id), and history would stop accruing
+> whenever dbt doesn't run. Intervals: new on first appearance or attribute change;
+> CLOSED when a route leaves the static (re-appearance opens a fresh one); re-downloads
+> of unchanged zips (new version_id, same content) collapse by attribute comparison.
+> valid_to exclusive, NULL = current. `int_gtfs_versions` is the registry;
+> `assert_scd2_intervals_disjoint` guards join uniqueness.
 | Column | Type | Notes |
 |---|---|---|
 | route_key | varchar PK (hash city+route_id+valid_from) |
@@ -56,8 +66,13 @@ Star schema. All timestamps stored as `TIMESTAMP_NTZ` with explicit `_utc` / `_l
 | city_key FK, stop_id, stop_name, parent_station | | |
 | lat, lon, geo (GEOGRAPHY) | | |
 | h3_r8, h3_r9 | varchar | Snowflake `H3_LATLNG_TO_CELL` at build time → hexmap is a plain GROUP BY |
-| is_timepoint_default | boolean | **[rev]** rail→true, bus→from stop_times.timepoint; drives early-departure rule |
-| valid_from, valid_to, is_current, gtfs_version_id | | |
+| is_timepoint_default | boolean | **[rev P6: DEFERRED]** exists to drive the early-departure rule, which is itself unimplemented (fct_stop_events header); computing bus timepoints per version means walking every stop_times version. Add when the rule lands, not before |
+| valid_from, valid_to, is_current, gtfs_version_id | | same derived-SCD2 mechanism as dim_route |
+
+> [rev P6] Zurich (national feed): a stop is present in a version only if an
+> allow-listed trip serves it there, or it parents one that does (`int_stops_served`,
+> incremental per version so the 66.7M-row stop_times is walked once per new static,
+> not per chain run). Other cities keep full stops.txt including station records.
 
 ### dim_date, dim_time_local
 Standard calendar; `dim_time_local`: local_hour PK, daypart, is_peak. **[rev P5]** daypart buckets locked as implemented in `macros/daypart.sql` (baked into int_service_frequency, fct_headways, EWT slices): am_peak 5–9 / midday 10–15 / pm_peak 16–19 / evening 20–23 / overnight 0–4 — replaces the earlier six-bucket sketch; dim_time_local (P6) must match.
@@ -75,7 +90,7 @@ weather_key PK, wmo_code_range, condition_bucket ∈ {clear, cloudy, rain, heavy
 
 | Column | Type | Notes |
 |---|---|---|
-| city_key, agency_key, route_key, stop_key | FK | route/stop resolved against the SCD2 version valid on service_date **[rev]** |
+| city_key, route_key, stop_key | FK | **[rev P6]** point-in-time against the SCD2 interval covering service_date (`macros/scd2_join.sql`); a date before a route/stop's first interval falls back to that first interval (several cities' first static load postdates their first observed days); NULL where the static never described the id — Toronto's disjoint stop namespace is the standing case. Natural ids stay on the fact. agency_key dropped with dim_agency (agency_id rides on dim_route) |
 | trip_uid | varchar | degenerate; see data dictionary §F |
 | trip_id_raw, vehicle_id | varchar | as-received (nullable) |
 | direction_id, stop_sequence | int | |
@@ -122,7 +137,23 @@ Grain: (city_key, mode, service_date, local_hour). distinct_vehicles, distinct_t
 (city_key, route_key, service_date, direction_id): mode, otp_pct, early_pct, late_pct, very_late_pct, early_departure_pct, mean/median/p90_delay_sec, ewt_sec (frequent slices), bunching_pct, big_gap_pct, cancel_pct, completeness_pct, scheduled_trips, observed_trips.
 
 ### fct_city_scorecard_monthly
-(city_key, month): score_0_100, rank, s_wait, s_otp, s_cancel, s_bunch, frequent_service_share, mode_mix (variant object), completeness_pct, excluded_days[], methodology_version **[rev]** (scores are versioned — weight changes create v2, never silently rewrite history).
+(city_key, month): score_0_100, s_wait, s_otp, s_cancel, s_bunch, frequent_service_share, completeness_pct, excluded_route_days, judged_days, route_days, trip totals, weights, methodology_version **[rev]** (scores are versioned — weight changes create v2, never silently rewrite history).
+
+> [rev P6, 2026-08-26] As built, three rules the sketch didn't spell out:
+> **(1) refuses thin history** — no row under `scorecard_min_judged_days` (20) closed
+> judged days in the month; an empty table on 4 days of data is the correct output.
+> **(2) grain discipline** — delivery quantities (trips/cancel/completeness) come from
+> route-grain fct_service_delivery_daily; reliability ratios come from direction-grain
+> fct_route_reliability_daily weighted by their own evidence counts (banded_events,
+> rated_gaps, ewt_gap_count). Summing trip counts across direction rows double-counts
+> two-direction routes; `assert_scorecard_totals_match_route_grain` pins this.
+> **(3) missing evidence is not a score** — an absent input leaves its sub-score NULL
+> and the composite renormalises over the weights present (missing OTP is not 0;
+> missing EWT is not perfection).
+> Dropped from the sketch: `rank` (meaningless until ≥2 cities clear the guard — a
+> dashboard concern, not a fact), `mode_mix` variant (deferred; mode splits live in
+> fct_route_reliability_daily.mode), `excluded_days[]` array → `excluded_route_days`
+> count + the completeness floor var (`scorecard_min_completeness` 0.50).
 
 ### fct_benchmark_mlit_monthly
 (railway_urn, month): delay_certificate_days, our_measured_p50_delay, correlation context. Tokyo-only validation table.

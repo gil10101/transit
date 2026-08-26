@@ -1,0 +1,96 @@
+version: 2
+
+models:
+  - name: dim_route
+    description: >
+      SCD2 route dimension derived entirely from versioned silver static (NOT a dbt
+      snapshot — docs/02 amended: silver keeps every version, so history is
+      rebuildable from source, valid_from is the feed's real download date, and no
+      snapshot-run schedule is load-bearing). One row per (city, route_id, validity
+      interval); a new interval starts on first appearance or attribute change, an
+      interval closes when the route leaves the static, valid_to is exclusive and
+      NULL means current. assert_scd2_intervals_disjoint guards the point-in-time
+      join's uniqueness.
+    columns:
+      - name: route_key
+        description: md5(city_key | route_id | valid_from)
+        data_tests: [unique, not_null]
+      - name: city_key
+        data_tests: [not_null]
+      - name: route_id
+        data_tests: [not_null]
+      - name: mode
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [tram, metro, rail, bus, ferry, other]
+      - name: is_frequent_service_typical
+        description: >
+          indicative only — any schedule-derived frequent peak slice on any observed
+          date, stamped identically on every interval of the route. The scoring
+          classification lives in int_service_frequency at
+          (route x direction x daypart x service_date).
+        data_tests: [not_null]
+      - name: valid_from
+        data_tests: [not_null]
+      - name: valid_to
+        description: exclusive; NULL = current
+      - name: is_current
+        data_tests: [not_null]
+      - name: gtfs_version_id
+        description: version that OPENED this interval
+        data_tests: [not_null]
+
+  - name: dim_stop
+    description: >
+      SCD2 stop dimension, same derivation and amendment as dim_route. Zurich is cut
+      to stops served (or parented) by allow-listed trips per version via
+      int_stops_served; other cities keep full stops.txt including station records.
+      geo/h3_r8/h3_r9 are Snowflake-only build-time columns (duckdb dev pins NULL).
+      is_timepoint_default from the docs/02 sketch is deferred until the
+      early-departure rule that would consume it exists.
+    columns:
+      - name: stop_key
+        description: md5(city_key | stop_id | valid_from)
+        data_tests: [unique, not_null]
+      - name: city_key
+        data_tests: [not_null]
+      - name: stop_id
+        data_tests: [not_null]
+      - name: valid_from
+        data_tests: [not_null]
+      - name: is_current
+        data_tests: [not_null]
+
+  - name: dim_date
+    description: calendar spine 2024-01-01..2027-12-31, deterministic, no state
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+      - name: iso_dow
+        description: 1=Monday..7=Sunday on both dialects
+        data_tests:
+          - not_null
+          - value_within_range:
+              arguments: {min_value: 1, max_value: 7}
+              config: {severity: error}
+
+  - name: dim_time_local
+    description: >
+      one row per LOCAL hour; daypart from macros/daypart.sql so it can never drift
+      from the buckets baked into the frequency/headway/EWT models
+    columns:
+      - name: local_hour
+        data_tests:
+          - unique
+          - not_null
+          - value_within_range:
+              arguments: {min_value: 0, max_value: 23}
+              config: {severity: error}
+      - name: daypart
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [am_peak, midday, pm_peak, evening, overnight]
