@@ -73,12 +73,15 @@ def _connection() -> snowflake.connector.SnowflakeConnection:
 
 
 @st.cache_data(ttl=600, show_spinner="querying warehouse…")
-def q(sql: str) -> pd.DataFrame:
+def q(sql: str, params: dict | None = None) -> pd.DataFrame:
     """Run one read-only query, cached 10 minutes (keeps the XS warehouse asleep
-    between visits instead of paying per page interaction)."""
+    between visits instead of paying per page interaction).
+
+    Widget values are user-controlled (query params, websocket) — they go through
+    %(name)s bind parameters, never into the SQL string."""
     cur = _connection().cursor()
     try:
-        cur.execute(sql)
+        cur.execute(sql, params or {})
         df = cur.fetch_pandas_all()
     finally:
         cur.close()

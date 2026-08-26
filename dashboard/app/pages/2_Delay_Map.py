@@ -13,8 +13,8 @@ st.title("Where the delay lives")
 days = st.sidebar.slider("Closed days to include", 1, 30, 7)
 mode = st.sidebar.selectbox("Mode", ["all", "bus", "tram", "metro", "rail", "ferry"])
 
-mode_filter = "" if mode == "all" else f"and e.mode = '{mode}'"
-hexes = q(f"""
+hexes = q(
+    """
     select e.city_key, s.h3_r8,
            avg(e.delay_arr_sec) as mean_delay_sec,
            count(*) as events
@@ -22,11 +22,13 @@ hexes = q(f"""
     join dim_stop s on s.stop_key = e.stop_key
     where e.otp_band is not null
       and s.h3_r8 is not null
-      and e.service_date >= dateadd(day, -{int(days)}, current_date)
-      {mode_filter}
+      and e.service_date >= dateadd(day, -%(days)s, current_date)
+      and (%(mode)s = 'all' or e.mode = %(mode)s)
     group by 1, 2
     having count(*) >= 20
-""")
+    """,
+    {"days": int(days), "mode": mode},
+)
 
 st.caption(
     f"Mean arrival delay per hexagon over the last {days} days, scored events only "
