@@ -88,7 +88,7 @@ runbook, not an accident.
 
 | # | Gate | Threshold | Status |
 |---|---|---|---|
-| D1 | A human is notified when the pipeline actually breaks | alert within 60 min of a real failure | **BLOCKED on email confirmation** |
+| D1 | A human is notified when the pipeline actually breaks | alert within 60 min of a real failure | **PASS** (confirmed 2026-08-26) |
 | D2 | No alert fatigue | 0 chronically failing checks | **FAIL** |
 | D3 | Every hop's health is measurable without a human reading logs | one command per hop | **PASS** |
 
@@ -293,17 +293,25 @@ drains sharing one Spark checkpoint, which previously destroyed 58 minutes of da
   untargeted `terraform plan` and confirm it reports no changes.** That is the only way
   to know what targeting skipped.
 
-## D1 is built but not yet passing
+## D1 — PASSES as of 2026-08-26
 
-Every piece is correct and verified: topic created, IAM scoped to `sns:Publish` on that
-one ARN, `PIPELINE_ALERTS_TOPIC_ARN` confirmed live inside the dagster container, sensor
-registered with `default_status=RUNNING`.
+Every link in the chain verified independently, not inferred from the others:
 
-The subscription is still `PendingConfirmation`. SNS accepts every publish and delivers
-none of it until a human clicks the link. **A fully correct alerting path that ends in
-silence is indistinguishable from no alerting at all**, which is the failure this gate
-exists to close — so D1 stays FAIL until `list-subscriptions-by-topic` shows a real
-subscription ARN.
+| Link | How it was verified |
+|---|---|
+| Topic exists | `arn:aws:sns:us-east-2:622221238588:transit-pulse-pipeline-alerts` |
+| Subscription is real, not pending | `list-subscriptions-by-topic` returns a subscription ARN, not `PendingConfirmation` |
+| The box may publish to it | `iam simulate-principal-policy` on `transit-pulse-services` → `sns:Publish` **allowed**, scoped to that one ARN |
+| The container can see the topic | `PIPELINE_ALERTS_TOPIC_ARN` read back from inside `transit-dagster-daemon-1` |
+| The sensor is registered and on | dagster `jobs` table: `SENSOR \| DECLARED_IN_CODE \| pipeline_failure_alert`, taking `default_status=RUNNING` from code |
+
+The permission was checked with a policy *simulation* rather than a live publish, so
+verifying the alerting did not itself send an alert.
+
+**The confirmation step deserves remembering.** It sat in spam. Every component was
+correct and the path still ended in silence — which is indistinguishable from having no
+alerting at all, and is precisely the failure this gate exists to close. When adding a
+subscriber, confirm delivery reached a human before calling it done.
 
 ---
 
