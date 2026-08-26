@@ -21,17 +21,29 @@ resource "aws_s3_bucket_public_access_block" "this" {
   restrict_public_buckets = true
 }
 
-# raw archive: cheap storage after 30 days; history is the asset, never expire
+# raw archive: a rolling 30-day debug window, then gone.
+#
+# [rev 2026-08-26] "never expire — history is the asset" is withdrawn, deliberately.
+# The asset is GOLD: every event flows through the pipeline within the hour and the
+# contract-test principle (docs/08) replaced replay-as-recovery — none of the real
+# defects were fixable by replay, all by contracts, and the one replay we considered
+# (SF phantom day) bought nothing. Raw was compounding ~14 GB/day (59 GB at the time
+# of this change) as the only unbounded cost line, against a warehouse whose gold is
+# ~2.4 GB. Thirty days keeps every byte long enough to debug any incident the
+# tripwires can surface, then lets it go.
 resource "aws_s3_bucket_lifecycle_configuration" "raw" {
   bucket = aws_s3_bucket.this["raw"].id
   rule {
-    id     = "to-ia"
+    id     = "expire-raw-30d"
     status = "Enabled"
     filter {}
-    transition {
-      days          = 30
-      storage_class = "STANDARD_IA"
-    }
+    expiration { days = 30 }
+  }
+  rule {
+    id     = "abort-incomplete-uploads"
+    status = "Enabled"
+    filter {}
+    abort_incomplete_multipart_upload { days_after_initiation = 7 }
   }
 }
 

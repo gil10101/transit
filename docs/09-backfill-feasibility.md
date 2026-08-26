@@ -151,3 +151,12 @@ days (`infra/modules/lake/main.tf`), which covers most of the volume. If the arc
 ever dropped, drop it as a deliberate scope decision about what questions the project
 wants to be able to answer later, not as a bet that the pipeline is now correct enough
 not to need it.
+
+**[rev 2026-08-26, DECIDED — Jake]: raw expires after 30 days.** The scope decision
+above got made: the mission is a month-plus of *gold* per city at far lower cost, and
+raw had become the only compounding line (59 GB at ~14 GB/day, vs gold's 2.4 GB
+holding full granularity). Thirty days preserves the two genuine uses in their useful
+window — debugging an upstream change the tripwires surface, and reparsing recent
+bytes for a new question — while capping the archive at roughly a month's footprint
+(~$10/mo steady state). The un-reparseable long tail is the price, accepted
+deliberately. Enacted in `infra/modules/lake/main.tf` (expire-raw-30d).
