@@ -19,7 +19,7 @@ vp = q("""
 """)
 
 alerts = q("""
-    select city_key, count(distinct alert_id) as active_alerts
+    select city_key, sum(alerts_active) as active_alerts
     from fct_alerts_daily
     where service_date >= current_date - 1
     group by 1

@@ -102,3 +102,10 @@ p5-backfill-weather:
 # needs the TRANSIT_READER role first — see dashboard/app/lib.py header.
 dashboard:
 	uv run --group dashboard streamlit run dashboard/app/Home.py
+
+# Runs every dashboard page headless via streamlit AppTest, executing its real
+# queries against prod gold — catches schema drift the unit tests cannot (it
+# found fct_stop_events has no `mode` on its first run). Live Snowflake calls,
+# so it is a make target like poll-*, never part of `make test`.
+dashboard-smoke:
+	uv run --group dashboard python scripts/smoke_dashboard.py

@@ -26,6 +26,8 @@ dev = [
 dashboard = [
     "streamlit>=1.38",
     "pydeck>=0.9",
+    # pandas Styler.background_gradient (ops + route-explorer heatmaps) imports it
+    "matplotlib>=3.9",
 ]
 
 [tool.uv]

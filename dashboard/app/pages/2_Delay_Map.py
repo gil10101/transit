@@ -20,10 +20,11 @@ hexes = q(
            count(*) as events
     from fct_stop_events e
     join dim_stop s on s.stop_key = e.stop_key
+    left join dim_route r on r.route_key = e.route_key
     where e.otp_band is not null
       and s.h3_r8 is not null
       and e.service_date >= dateadd(day, -%(days)s, current_date)
-      and (%(mode)s = 'all' or e.mode = %(mode)s)
+      and (%(mode)s = 'all' or r.mode = %(mode)s)
     group by 1, 2
     having count(*) >= 20
     """,
