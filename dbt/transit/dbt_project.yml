@@ -29,6 +29,18 @@ vars:
   # zero-coverage routes (helsinki 4713, 12 trips, 0 observed), so 10 it is.
   completeness_min_trips: 10
   methodology_version: "1.0"
+  # P6 scorecard guards. A composite score is the most quotable number this project
+  # produces, so it must refuse to exist rather than be quietly thin.
+  #
+  # scorecard_min_judged_days: a city needs this many CLOSED, judged service days in a
+  # month before it is scored at all. The plan's bar for a credible ranking is ~30 days;
+  # 20 allows a month with onboarding or outage gaps to still count while making a
+  # 4-day sliver impossible to publish. On 2026-08-26 NO city clears this — which is the
+  # correct answer for four days of data, not a bug.
+  scorecard_min_judged_days: 20
+  # a route-day whose completeness is below this is evidence about our feed, not about
+  # the city's service, so it is excluded from the city's score inputs
+  scorecard_min_completeness: 0.50
   # v1 finalization knobs (documented in int_stop_events_finalized)
   finalize_horizon_min: 20
   prediction_staleness_min: 30
