@@ -124,3 +124,30 @@ select
     gtfs_version_id,
     source_format
 from localized
+-- [rev 2026-08-26] Drop events misdated a full service day into the past.
+--
+-- A stop event assigned to the PREVIOUS service day must have arrived in the small
+-- hours — that is what the GTFS noon rule exists for. An event filed to yesterday that
+-- arrives mid-morning is not overnight service, it is a bad service_date.
+--
+-- SF operators that omit start_date took the -12h default cutover, so everything
+-- fetched before local noon was stamped a day early. That created a PHANTOM service
+-- day: sf/2026-08-23 held 8,401 events across 433 trips, and EVERY ONE of them arrived
+-- on 2026-08-24. Fixed at source (spark_jobs/timeutils.py gives sf a 4h cutover), but
+-- the fix corrects new silver writes only and the historical rows persist.
+--
+-- Dropping rather than replaying from raw, deliberately: sf.metrics_from is 2026-08-25,
+-- so BOTH 08-23 and the real 08-24 sit before scoring starts. Replaying would have
+-- recovered 433 trips of morning data onto a day that is not scored either — no effect
+-- on any reliability number, for real work. The rows are excluded here instead of
+-- deleted from silver, so the observations survive in the replay layer if a future
+-- question ever needs them.
+--
+-- Cutoff at hour 6 and the 1-day gap are both measured, not guessed. Across all cities:
+-- sf had 7,119 previous-day rows ALL arriving 09:00-20:00, while helsinki (34,282),
+-- nyc (4,980) and boston (14,128) cluster entirely in hours 0-4 and toronto had 2 in
+-- 97,445. Genuine overnight service does not run at 9am.
+where not (
+    datediff('day', service_date, cast(actual_arr_ts_local as date)) = 1
+    and extract(hour from actual_arr_ts_local) >= 6
+)
