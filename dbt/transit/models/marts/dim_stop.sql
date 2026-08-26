@@ -90,21 +90,22 @@ states as (
         s.stop_lon,
         s.parent_station,
         s.location_type,
+        -- Absence keys on the JOINs, never on the hash — with every attribute
+        -- coalesced the md5 is non-NULL even for a missing stop row (same ghost-
+        -- row defect dim_route had; see its states CTE).
         case
             -- national-city stop not serving (nor parenting) any allow-listed
             -- trip in this version: treat as absent from the version.
             -- City list mirrors macros/national_allowlist.sql.
             when g.city_key = 'zurich' and a.stop_id is null then '__absent__'
-            else coalesce(
-                md5(concat_ws('|',
-                    coalesce(s.stop_name, ''),
-                    coalesce(cast(round(s.stop_lat, 6) as varchar), ''),
-                    coalesce(cast(round(s.stop_lon, 6) as varchar), ''),
-                    coalesce(s.parent_station, ''),
-                    coalesce(cast(s.location_type as varchar), '')
-                )),
-                '__absent__'
-            )
+            when s.stop_id is null then '__absent__'
+            else md5(concat_ws('|',
+                coalesce(s.stop_name, ''),
+                coalesce(cast(round(s.stop_lat, 6) as varchar), ''),
+                coalesce(cast(round(s.stop_lon, 6) as varchar), ''),
+                coalesce(s.parent_station, ''),
+                coalesce(cast(s.location_type as varchar), '')
+            ))
         end as state
     from grid g
     left join stops s

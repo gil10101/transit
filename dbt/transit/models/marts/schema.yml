@@ -39,8 +39,9 @@ models:
           - accepted_values:
               values: [early, on_time, late, very_late]
       # SCD2 FKs (P6). Nullable by design: NULL means the static never described
-      # this route/stop on this service day (Toronto's disjoint stop namespace is
-      # the standing example). relationships proves every non-NULL key resolves.
+      # this route/stop on this service day — RT-only stop ids, routes absent from
+      # the static, service days inside an absence gap. relationships proves every
+      # non-NULL key resolves.
       - name: route_key
         data_tests:
           - relationships:

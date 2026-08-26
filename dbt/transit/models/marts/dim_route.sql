@@ -63,16 +63,22 @@ states as (
         r.route_type,
         r.mode,
         r.route_color,
-        coalesce(
-            md5(concat_ws('|',
+        -- Absence keys on the JOIN, never on the hash: with every attribute
+        -- coalesced, md5(concat_ws(...)) is non-NULL even when the route row is
+        -- missing — an absent version would hash to the "all attributes empty"
+        -- state and produce a ghost dim row with NULL attributes. Same defect
+        -- class as the trip_uid concat_ws collapse; caught in prod by
+        -- not_null_dim_route_mode (16 rows) before any fact joined it.
+        case
+            when r.route_id is null then '__absent__'
+            else md5(concat_ws('|',
                 coalesce(r.agency_id, ''),
                 coalesce(r.route_short_name, ''),
                 coalesce(r.route_long_name, ''),
                 coalesce(cast(r.route_type as varchar), ''),
                 coalesce(r.route_color, '')
-            )),
-            '__absent__'
-        ) as state
+            ))
+        end as state
     from grid g
     left join routes r
       on r.city_key = g.city_key
