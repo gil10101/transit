@@ -441,3 +441,53 @@ Every defect that reaches gold gets a contract test before it is called fixed, a
 test must be shown FAILING against the bad data first. A fix nobody watched fail is a fix
 nobody has verified — which is how the `trip_uid` repair was reported as done while still
 broken.
+
+---
+
+## Incident + verification log — 2026-08-26
+
+### Chain outage: two independent failures in one dbt build (RESOLVED)
+
+The 02:05Z `warehouse_chain` run failed its dbt step; the run-failure sensor alerted
+Jake by SNS within seconds — **the alerting path's first live catch, proven in anger.**
+Two separate causes:
+
+1. **Stale baked image mandated a fixed bug.** The Spark trip_uid fix was live (silver
+   correctly writing NULL for identity-less vehicle positions — 123,963 rows), but the
+   dagster image still carried the OLD dbt project whose bare `not_null` on trip_uid
+   asserts the bug. The deploy trap documented above, hit again: a dbt change is not
+   deployed until the image is. Fixed: image rebuilt/pushed, service restarted, image
+   creation time verified on the box.
+2. **Two roles, one warehouse.** Laptop prod builds defaulted to role ACCOUNTADMIN and
+   had created the `store_failures` audit schema; the chain (TRANSIT_PIPELINE) hit
+   Snowflake 003041 "already exists, but current role has no privileges". Structural
+   fix, no admin needed: laptop profile now defaults to TRANSIT_PIPELINE (one role owns
+   everything it builds), and the audited test writes to a schema the pipeline role
+   created itself. Debris for Jake, one line, any time:
+   `drop schema TRANSIT.GOLD_DBT_TEST__AUDIT;`
+
+**Standing rule this adds: every identity that writes to the warehouse builds under the
+same role.** Ownership collisions are not permission noise — they took the whole chain
+down.
+
+### Scorecard rewrite before first score (caught by review, measured in prod)
+
+`check your work` review of the P6 scorecard found three defects before any number was
+published, then prod queries measured them:
+
+- **Direction-grain double count**: summing trip counts from
+  fct_route_reliability_daily (which repeats route-level values per direction row —
+  1,611 route-days × 2, 264 × 3) would have published 199,654 scheduled trips where the
+  true route-grain total is 111,127 (+80%). Delivery quantities now come from
+  route-grain fct_service_delivery_daily; `assert_scorecard_totals_match_route_grain`
+  pins it.
+- **Absence scored as evidence**: `coalesce(otp,0)` scored missing OTP as total failure
+  (toronto: 156 of 572 direction rows have NULL otp); `coalesce(ewt,0)` scored missing
+  EWT as perfection. Sub-scores now stay NULL and the composite renormalises over the
+  weights present.
+- **Mixed units side by side**: route_days counted direction rows, excluded_route_days
+  counted route rows. Both route-grain now.
+
+Reliability ratios are weighted by their own evidence counts — `banded_events`,
+`rated_gaps`, `ewt_gap_count`, newly published on fct_route_reliability_daily — never
+by trip counts that live at a different grain.
