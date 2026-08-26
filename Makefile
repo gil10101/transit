@@ -64,11 +64,15 @@ infra-init:
 	cd infra/envs/dev && terraform init \
 	  -backend-config="bucket=$$(cd ../../bootstrap && terraform output -raw state_bucket)"
 
+# [rev 2026-08-25] Both go through scripts/tf.sh. It writes the plan OUTSIDE the repo
+# (a saved plan embeds variable values in cleartext — that is how four live API keys
+# reached git) and sets the snowflake provider up for key-pair auth so `plan` can run at
+# all. See the header of that script; both traps cost real incidents.
 infra-plan:
-	cd infra/envs/dev && terraform plan -out=tfplan
+	bash scripts/tf.sh plan
 
 infra-apply:
-	cd infra/envs/dev && terraform apply tfplan
+	bash scripts/tf.sh apply
 
 deploy-images:
 	bash scripts/deploy_images.sh

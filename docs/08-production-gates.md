@@ -281,8 +281,15 @@ entirely, leaving the running Lambda on the OLD `ACTIVE_STATES` (missing `QUEUED
 `CANCELLING`) and the old non-idempotent `clientToken`. That is the guard against two
 drains sharing one Spark checkpoint, which previously destroyed 58 minutes of data.
 
-  `-target` is unavoidable here only because the Snowflake provider fails to configure
-  (`260000: account is empty`) even though it is unused. **Always finish with an
+  **[rev 2026-08-25] `-target` is no longer needed.** It was only ever required because
+  the Snowflake provider failed to authenticate, which made `terraform plan` fail outright
+  and left drift invisible. Two things were wrong, both recorded here because the comment
+  in `providers.tf` asserted the opposite: the provider was configured for PASSWORD auth
+  while `TERRAFORM_SVC` is key-pair only, and `.env` defines `SNOWFLAKE_PASSWORD`, which
+  the provider reads automatically and which errors "password: conflicts with private_key".
+  The provider is also NOT unused — `enable_snowflake` is true and it manages live grants.
+  `make infra-plan` (scripts/tf.sh) now sets this correctly and reports drift. **Always
+  finish with an
   untargeted `terraform plan` and confirm it reports no changes.** That is the only way
   to know what targeting skipped.
 
@@ -327,9 +334,9 @@ terraform -chdir=infra/envs/dev plan -target=module.spark.aws_lambda_function.dr
 terraform -chdir=infra/envs/dev apply "$PD/plan"
 ```
 
-`-target` is needed only because the unused Snowflake provider fails to configure
-(`260000: account is empty`). **Finish with an untargeted `terraform plan` and confirm it
-reports no changes** — that is the only way to see what targeting skipped. It is how this
+Prefer `make infra-plan` / `make infra-apply` (scripts/tf.sh), which handles the provider
+auth and writes the plan outside the repo. **Finish with an untargeted `terraform plan` and
+confirm it reports no changes** — that is the only way to see what targeting skipped. It is how this
 Lambda gap was found in the first place.
 
 Verify (the hash should stop being `Jvt6sbDQGIzzPr2AK2KednIB0o1gfmm43joFUm1VLqA=`):
