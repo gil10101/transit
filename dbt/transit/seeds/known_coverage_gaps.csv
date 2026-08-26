@@ -10,3 +10,14 @@ helsinki,9967,"Bus. 12 trips scheduled 2026-08-24, 0 realtime rows ever observed
 helsinki,2158,"Bus, PARTIAL publication. 131 trips scheduled 2026-08-24; HSL published realtime for 42 of them and all 42 matched and scored (100%). The shortfall is trips never published, not trips we failed to match.",2026-08-25
 helsinki,2159,"Bus, PARTIAL publication. 127 trips scheduled 2026-08-24; HSL published realtime for 31 and all 31 matched (100%). Observed only between 12:00 and 20:00 local, so publication is time-bounded upstream.",2026-08-25
 helsinki,2533,"Bus, PARTIAL publication. 129 trips scheduled 2026-08-24; HSL published realtime for 71 and all 71 matched (100%). Observed across the full 00:00-23:00 span, so this is not a truncated window - roughly half the day's trips are simply never published.",2026-08-25
+boston,Boat-EastBoston,"Ferry. MBTA's GTFS-RT trip-updates feed carries no ferry predictions at all: 0 silver rows ever across every Boat-% route while 125 trips were scheduled over 3 days. Same class as Helsinki's ferries.",2026-08-26
+boston,Boat-F1,"Ferry, same as Boat-EastBoston. 80 trips scheduled over 3 days, 0 realtime rows ever.",2026-08-26
+boston,Boat-F10,"Ferry, same as Boat-EastBoston. 42 trips scheduled over 2 days, 0 realtime rows ever.",2026-08-26
+boston,Boat-F2H,"Ferry, same as Boat-EastBoston. 102 trips scheduled over 3 days, 0 realtime rows ever.",2026-08-26
+boston,Boat-F4,"Ferry, same as Boat-EastBoston. 190 trips scheduled over 3 days, 0 realtime rows ever.",2026-08-26
+boston,Boat-F6,"Ferry, same as Boat-EastBoston. 22 trips scheduled over 2 days, 0 realtime rows ever.",2026-08-26
+boston,Boat-F7,"Ferry, same as Boat-EastBoston. 22 trips scheduled over 2 days, 0 realtime rows ever.",2026-08-26
+boston,Boat-F8,"Ferry, same as Boat-EastBoston. 8 trips scheduled on 1 day, 0 realtime rows ever.",2026-08-26
+boston,Boat-Lynn,"Ferry, same as Boat-EastBoston. 31 trips scheduled over 3 days, 0 realtime rows ever.",2026-08-26
+boston,Shuttle-NorthStationOakGroveLocal,"Orange Line rail-replacement shuttle. The supplemented static schedules it heavily (1,301 trips over 3 days) but MBTA's GTFS-RT trip-updates feed published 0 predictions for it - 0 silver rows ever. Diversion shuttles appear in the static as planning placeholders; their realtime, where it exists, is not in the feed we poll.",2026-08-26
+boston,Shuttle-NorthStationOakGroveViaWellingtonExpress,"Orange Line rail-replacement shuttle, same as Shuttle-NorthStationOakGroveLocal. 1,490 trips scheduled over 3 days, 0 silver rows ever.",2026-08-26

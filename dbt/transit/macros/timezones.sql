@@ -47,10 +47,19 @@
     {%- endif -%}
 {% endmacro %}
 
--- regex capture group extraction
+-- regex capture group extraction.
+--
+-- [rev 2026-08-26] Snowflake string literals treat backslash as an ESCAPE and eat
+-- it, so a pattern written '\.\.?([NS])' reached the regex engine as '..?([NS])' —
+-- "any two characters then N/S" — which matched the S inside static id prefixes
+-- like 'L0S3-…'. Every static 7 trip was labeled southbound, the northbound half
+-- of the 7 line matched nothing, and 346 of 661 RT trips silently vanished between
+-- silver and gold (2026-08-24; caught by completeness_above_error_50pct). duckdb
+-- does not process backslash escapes in plain strings, so dev never saw it. The
+-- pattern is doubled for Snowflake here, once, so call sites stay dialect-free.
 {% macro re_extract(col, pattern, group) %}
     {%- if target.type == "snowflake" -%}
-        regexp_substr({{ col }}, '{{ pattern }}', 1, 1, 'e', {{ group }})
+        regexp_substr({{ col }}, '{{ pattern | replace('\\', '\\\\') }}', 1, 1, 'e', {{ group }})
     {%- else -%}
         regexp_extract({{ col }}, '{{ pattern }}', {{ group }})
     {%- endif -%}
