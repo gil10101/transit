@@ -97,3 +97,8 @@ snowflake-refresh:
 p5-backfill-weather:
 	docker compose exec dagster-daemon \
 	  dagster asset materialize -m transit_dagster.definitions --select weather_backfill_2yr
+
+# P6 dashboard, local run against prod gold (read path only). Deployed variant
+# needs the TRANSIT_READER role first — see dashboard/app/lib.py header.
+dashboard:
+	uv run --group dashboard streamlit run dashboard/app/Home.py
