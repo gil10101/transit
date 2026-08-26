@@ -106,7 +106,12 @@ def kafka_bootstrap() -> str:
 
 
 def checkpoint_root() -> str:
-    return f"{lake_base()}/checkpoints"
+    # TP_CHECKPOINT_ROOT exists so shuffle-partition changes are POSSIBLE at all: a
+    # stateful streaming query cannot change spark.sql.shuffle.partitions on a live
+    # checkpoint, so the partition cut (200 -> 16, 2026-08-26 S3-request cost fix)
+    # ships together with a fresh checkpoint root. Swap procedure and its ~minutes
+    # of accepted gap: docs/08 "Checkpoint v2 migration".
+    return os.environ.get("TP_CHECKPOINT_ROOT", f"{lake_base()}/checkpoints")
 
 
 def ensure_table(spark: SparkSession, name: str, ddl_columns: str, partition_by: str) -> None:

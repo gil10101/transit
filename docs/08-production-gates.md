@@ -573,3 +573,34 @@ route-days, investigated data-first and split three ways:
    the mechanism named. **BACKLOG (real fix): derive service_date from the predicted
    event time when it is far ahead of fetch** — touches the canonical rule in
    spark_jobs/timeutils + silver_normalize; needs fixtures, not a night change.
+
+### Checkpoint v2 migration + cost package (2026-08-26, budget-driven)
+
+S3 requests were 60% of the AWS bill ($5.7/day: ~950k Tier-1 PUTs) — Spark checkpoint
+churn across 200 shuffle partitions x 4 queries x 36 drains/day. Package, one apply:
+
+1. **spark.sql.shuffle.partitions 200 -> 16** — cannot change on a live checkpoint, so
+   it ships with a fresh root (`checkpoints2/`, via TP_CHECKPOINT_ROOT). ~92% fewer
+   state files per batch.
+2. **Standalone hourly drain DISABLED** — the 2-hourly chain drain remains the only
+   drain (36 -> 12 runs/day). Nothing downstream read silver sooner than the chain
+   re-pin anyway.
+3. **Raw expires at 7 days** (Jake's call, down from the 30 staged earlier).
+
+**Swap procedure (order matters):**
+1. Fire one manual drain (old checkpoint) to empty Kafka: invoke the drain Lambda.
+2. `make infra-apply` (schedule + lifecycle + Lambda env apply instantly).
+3. Services box user_data changed -> `cloud-init clean --logs && reboot` (the
+   documented trap; a plain restart keeps the OLD SPARK_PARAMS).
+4. Next chain drain starts checkpoints2 at Kafka LATEST. **Accepted, documented gap:**
+   messages produced between step 1 finishing and that drain starting (~5-15 min if
+   run back-to-back) never reach silver; raw retains them for 7 days. Do NOT
+   "recover" the gap by startingOffsets=earliest — the fresh dedup state would admit
+   the whole Kafka retention window as duplicates.
+5. After the first v2 drain commits (metadata under checkpoints2 growing, silver
+   advancing): delete the old `checkpoints/` prefix.
+
+Projected: S3 requests ~-85%, EMR ~-60%; steady-state gross ~$2.5-3/day
+(EC2+VPC floor $1.25 included) ≈ $75-90/mo -> with these cuts ~ $60/mo, against the
+$100 target; the $50 alarm may still ping this month from the Aug-23/24 debugging spike
+already spent.

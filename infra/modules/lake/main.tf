@@ -33,11 +33,13 @@ resource "aws_s3_bucket_public_access_block" "this" {
 # tripwires can surface, then lets it go.
 resource "aws_s3_bucket_lifecycle_configuration" "raw" {
   bucket = aws_s3_bucket.this["raw"].id
+  # [rev 2026-08-26, Jake] 30 -> 7 days: a one-week debug window is enough for
+  # anything the tripwires surface, and the budget pressure is real.
   rule {
-    id     = "expire-raw-30d"
+    id     = "expire-raw-7d"
     status = "Enabled"
     filter {}
-    expiration { days = 30 }
+    expiration { days = 7 }
   }
   rule {
     id     = "abort-incomplete-uploads"

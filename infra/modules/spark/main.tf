@@ -178,9 +178,17 @@ locals {
     # than every data table in the lakehouse combined (measured 2026-08-24;
     # offsets/ and commits/ were correctly bounded, state/ was 23,686 files).
     # Recovery only ever needs the last committed version; 5 is head-room.
-    # NB: shuffle-partition count is deliberately NOT changed — a stateful
-    # streaming query cannot change it without discarding its checkpoint.
     "--conf spark.sql.streaming.minBatchesToRetain=5",
+    # [rev 2026-08-26] 200 -> 16. The default wrote state/offset files across 200
+    # shuffle partitions x 4 queries x every micro-batch — ~950k S3 Tier-1 PUTs/day,
+    # $5.7/day, 60% of the entire AWS bill, for streams whose biggest stateful op
+    # (the 2h dedup) holds ~100 MB. A stateful query cannot change this on a live
+    # checkpoint, so it ships with the fresh checkpoint root below (swap procedure:
+    # docs/08 "Checkpoint v2 migration"; the old checkpoints/ dir is deleted once
+    # the first v2 drain commits).
+    "--conf spark.sql.shuffle.partitions=16",
+    "--conf spark.emr-serverless.driverEnv.TP_CHECKPOINT_ROOT=s3://${var.lakehouse_bucket}/checkpoints2",
+    "--conf spark.executorEnv.TP_CHECKPOINT_ROOT=s3://${var.lakehouse_bucket}/checkpoints2",
     "--conf spark.emr-serverless.driverEnv.TP_CLOUD=1",
     "--conf spark.emr-serverless.driverEnv.TP_TRIGGER=available_now",
     "--conf spark.emr-serverless.driverEnv.TP_CITY_TZS=${local.city_tzs}",
@@ -297,6 +305,13 @@ resource "aws_iam_role_policy" "scheduler_invoke" {
 resource "aws_scheduler_schedule" "drain" {
   name                = "${var.prefix}-emr-drain"
   schedule_expression = var.drain_schedule
+  # [rev 2026-08-26] DISABLED as a cost cut: the 2-hourly chain submits its own
+  # drain, so the standalone hourly sweeper only bought ~1h fresher silver that
+  # nothing downstream reads sooner (Snowflake re-pins on the chain anyway) at
+  # 24 extra EMR runs + their checkpoint churn per day. Kafka retention carries
+  # the 2h backlog comfortably; SNS screams if the chain stops draining.
+  # Re-enable by flipping this to ENABLED if the chain cadence ever slows.
+  state = "DISABLED"
   flexible_time_window {
     mode = "OFF"
   }
