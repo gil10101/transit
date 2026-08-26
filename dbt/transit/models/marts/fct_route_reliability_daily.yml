@@ -18,11 +18,36 @@ models:
         data_tests: [not_null]
       - name: route_id
         data_tests: [not_null]
+      - name: route_key
+        description: SCD2 FK (P6); NULL when the static never described the route that day
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_route')
+                field: route_key
       - name: direction_id
         data_tests: [not_null]
       - name: mode
         description: route_type-derived mode; 'unknown' when route missing from static
         data_tests: [not_null]
+      # evidence sizes — the denominators behind the ratios, exposed so consumers
+      # (the scorecard) can weight each ratio by its own evidence instead of by
+      # trip counts that live at route grain
+      - name: banded_events
+        description: >
+          stop events with an otp_band behind otp_pct; 0 when events survived the
+          ADDED/skipped/stale filters but none banded (otp_pct NULL then), NULL when
+          nothing survived at all
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: 0}
+      - name: ewt_gap_count
+        description: actual gaps behind ewt_sec (frequent slices only); NULL when no EWT
+        data_tests:
+          - value_within_range:
+              arguments: {min_value: 1}
+      - name: rated_gaps
+        description: gaps with a gap_ratio behind bunching_pct/big_gap_pct
       # OTP block (shares of banded, non-ADDED stop events; each 0..1)
       - name: otp_pct
         data_tests:

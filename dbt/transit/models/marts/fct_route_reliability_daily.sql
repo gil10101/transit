@@ -1,5 +1,3 @@
--- P5: natural keys until SCD2 dims (P6)
---
 -- Route-day reliability per (city, route, service_date, direction):
 --   * OTP shares + delay stats from fct_stop_events, ADDED trips EXCLUDED
 --     (locked rule: volume yes, OTP no) and SKIPPED stop events EXCLUDED from
@@ -125,7 +123,8 @@ route_ewt as (
         route_id,
         direction_id,
         sum(case when ewt_slice_sec is not null then ewt_slice_sec * n_gaps end)
-            / nullif(sum(case when ewt_slice_sec is not null then n_gaps end), 0) as ewt_sec
+            / nullif(sum(case when ewt_slice_sec is not null then n_gaps end), 0) as ewt_sec,
+        sum(case when ewt_slice_sec is not null then n_gaps end) as ewt_gap_count
     from slice_ewt
     group by city_key, service_date, route_id, direction_id
 
@@ -151,8 +150,15 @@ select
     b.city_key,
     b.service_date,
     b.route_id,
+    dr.route_key,
     b.direction_id,
     coalesce(r.mode, 'unknown') as mode,
+    -- Evidence sizes ride along with every ratio so a consumer can weight or
+    -- discount it honestly. A 96% OTP from 3 banded events and one from 3,000
+    -- are different facts, and the scorecard must not average them as equals.
+    o.n_banded as banded_events,
+    e.ewt_gap_count,
+    g.n_rated as rated_gaps,
     cast(o.n_on_time as double) / nullif(o.n_banded, 0) as otp_pct,
     cast(o.n_early as double) / nullif(o.n_banded, 0) as early_pct,
     cast(o.n_late as double) / nullif(o.n_banded, 0) as late_pct,
@@ -183,3 +189,4 @@ left join {{ ref('fct_service_delivery_daily') }} d
  and d.route_id = b.route_id
 left join {{ ref('stg_gtfs__routes') }} r
   on r.city_key = b.city_key and r.route_id = b.route_id
+{{ scd2_join(ref('dim_route'), 'dr', 'b.city_key', 'route_id', 'b.route_id', 'b.service_date') }}

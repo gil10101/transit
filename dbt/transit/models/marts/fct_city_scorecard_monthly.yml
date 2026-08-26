@@ -14,6 +14,16 @@ models:
       Scores are versioned, never silently rewritten: every row carries
       methodology_version and the four weights that produced it, so changing weights
       creates v2 rows rather than reinterpreting history.
+
+      Grain discipline: delivery quantities (trips, cancel, completeness) come from
+      route-grain fct_service_delivery_daily; reliability ratios (otp, ewt, bunching)
+      come from direction-grain fct_route_reliability_daily weighted by their own
+      evidence counts. Summing trip counts from the direction-grain mart double-counts
+      two-direction routes — assert_scorecard_totals_match_route_grain pins this.
+
+      A sub-score whose input was never measured stays NULL and its weight is
+      renormalised over the components that exist: absence of evidence neither
+      punishes (missing OTP is not 0) nor flatters (missing EWT is not perfection).
     columns:
       - name: scorecard_key
         description: md5 of (city_key, month, methodology_version)
@@ -81,11 +91,15 @@ models:
 
       - name: completeness_pct
         description: how much of the scheduled service we actually observed, service-weighted
+      - name: route_days
+        description: eligible route-days behind the score, route grain — same unit as excluded_route_days
+        data_tests: [not_null]
       - name: excluded_route_days
         description: >
-          Route-days dropped for failing the completeness floor. On the row on purpose:
-          a score computed after discarding a third of a city's routes means something
-          different from one that discarded none, and the reader cannot tell otherwise.
+          Route-days dropped for failing the completeness floor, route grain. On the row
+          on purpose: a score computed after discarding a third of a city's routes means
+          something different from one that discarded none, and the reader cannot tell
+          otherwise.
         data_tests: [not_null]
       - name: methodology_version
         data_tests: [not_null]

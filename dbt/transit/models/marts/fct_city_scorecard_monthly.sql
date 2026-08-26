@@ -3,7 +3,7 @@
 -- Grain: (city_key, month). Full refresh each run — the score is a function of the
 -- month's data, so it must be recomputed rather than accumulated.
 --
--- THIS IS THE MOST QUOTABLE NUMBER THE PROJECT PRODUCES, which drives three decisions:
+-- THIS IS THE MOST QUOTABLE NUMBER THE PROJECT PRODUCES, which drives four decisions:
 --
 -- 1. IT REFUSES TO EXIST RATHER THAN BE THIN. A city needs var('scorecard_min_judged_days')
 --    closed, judged service days in the month or it produces no row. On 2026-08-26 that
@@ -18,6 +18,20 @@
 -- 3. IT SHOWS ITS WORKING. score_0_100 is useless without the sub-scores, the inputs they
 --    came from, and how much was excluded — so all of it is on the row. A reader must be
 --    able to see WHY a city scored what it did without re-deriving anything.
+--
+-- 4. MISSING EVIDENCE IS NOT A SCORE. A sub-score whose input is absent stays NULL and its
+--    weight is renormalised over the components that exist. The first version of this
+--    model coalesced missing OTP to 0 (scoring absence as total failure) and missing EWT
+--    to 0 excess wait (scoring absence as perfection) — both wrong the same way round:
+--    they turned "we didn't measure this" into a measurement.
+--
+-- GRAIN DISCIPLINE (the bug that forced the rewrite): fct_route_reliability_daily is
+-- direction-grain and repeats route-level delivery values on every direction row, so
+-- summing its trip counts double-counts two-direction routes (triple where an unmatched
+-- direction folds to -1). Delivery quantities are therefore taken from route-grain
+-- fct_service_delivery_daily directly, and reliability ratios are weighted by their own
+-- evidence counts (banded_events, rated_gaps, ewt_gap_count), never by trip counts that
+-- live at a different grain.
 --
 -- Weights (var score_weights): wait .35, otp .30, cancel .20, bunch .15. Wait dominates
 -- deliberately — on frequent service, which is where most riders are, waiting longer than
@@ -37,30 +51,22 @@ with weights as (
 -- city's own local time, it is at or after that city's metrics_from, and completeness
 -- clears the floor. A route-day below the floor is evidence about our feed rather than
 -- about the city's service, so including it would score our own coverage.
-eligible as (
+-- ROUTE grain — one row per (city, route, service_date).
+eligible_route_days as (
 
     select
-        r.city_key,
-        date_trunc('month', r.service_date) as month,
-        r.service_date,
-        r.route_id,
-        r.direction_id,
-        r.mode,
-        r.otp_pct,
-        r.ewt_sec,
-        r.bunching_pct,
-        r.cancel_pct,
-        r.completeness_pct,
-        r.scheduled_trips,
-        r.observed_trips
-    from {{ ref('fct_route_reliability_daily') }} r
-    join {{ ref('fct_service_delivery_daily') }} d
-      on d.city_key = r.city_key
-     and d.route_id = r.route_id
-     and d.service_date = r.service_date
+        d.city_key,
+        date_trunc('month', d.service_date) as month,
+        d.service_date,
+        d.route_id,
+        d.trips_scheduled,
+        d.trips_observed,
+        d.trips_cancelled,
+        d.completeness_pct
+    from {{ ref('fct_service_delivery_daily') }} d
     where d.service_day_closed
       and d.service_date >= d.metrics_from
-      and coalesce(r.completeness_pct, 0) >= {{ var('scorecard_min_completeness') }}
+      and coalesce(d.completeness_pct, 0) >= {{ var('scorecard_min_completeness') }}
 
 ),
 
@@ -79,30 +85,71 @@ excluded as (
 
 ),
 
-per_city as (
+-- Delivery quantities at their native route grain: real trip totals, and
+-- cancel/completeness averaged with each route-day weighted by the service it
+-- actually scheduled — a 200-trip trunk route and a 12-trip feeder must not
+-- count equally toward a city's score.
+delivery as (
 
     select
         city_key,
         month,
-        count(distinct service_date)                  as judged_days,
-        count(*)                                      as route_days,
-        sum(scheduled_trips)                          as scheduled_trips,
-        sum(observed_trips)                           as observed_trips,
-        -- weight each route-day by the service it actually represents: a 200-trip trunk
-        -- route and a 12-trip feeder must not count equally toward a city's score
-        sum(otp_pct * observed_trips)      / nullif(sum(case when otp_pct      is not null then observed_trips end), 0) as otp_pct,
-        sum(bunching_pct * observed_trips) / nullif(sum(case when bunching_pct is not null then observed_trips end), 0) as bunching_pct,
-        sum(cancel_pct * scheduled_trips)  / nullif(sum(case when cancel_pct   is not null then scheduled_trips end), 0) as cancel_pct,
-        sum(completeness_pct * scheduled_trips) / nullif(sum(case when completeness_pct is not null then scheduled_trips end), 0) as completeness_pct,
-        -- ewt exists only on frequent slices; weighting it by observed trips keeps a
-        -- one-off frequent route from dominating a city with mostly timetabled service
-        sum(ewt_sec * observed_trips)      / nullif(sum(case when ewt_sec      is not null then observed_trips end), 0) as ewt_sec,
-        -- how much of the city's service is frequent enough for EWT to mean anything.
-        -- Published because it is the main reason two cities' scores are not directly
-        -- comparable: a mostly-timetabled network is being judged on a different mix.
-        sum(case when ewt_sec is not null then observed_trips else 0 end)
-            / nullif(sum(observed_trips), 0) as frequent_service_share
-    from eligible
+        count(distinct service_date) as judged_days,
+        count(*)                     as route_days,
+        sum(trips_scheduled)         as scheduled_trips,
+        sum(trips_observed)          as observed_trips,
+        cast(sum(trips_cancelled) as double) / nullif(sum(trips_scheduled), 0) as cancel_pct,
+        sum(completeness_pct * trips_scheduled) / nullif(sum(trips_scheduled), 0) as completeness_pct
+    from eligible_route_days
+    group by 1, 2
+
+),
+
+-- Reliability ratios weighted by their own evidence: OTP by banded events,
+-- bunching by rated gaps, EWT by the gap count behind each route-day's figure.
+-- Direction rows join to eligible route-days, so a route excluded for
+-- completeness contributes no reliability either.
+reliability as (
+
+    select
+        r.city_key,
+        e.month,
+        sum(r.otp_pct * r.banded_events)
+            / nullif(sum(case when r.otp_pct      is not null then r.banded_events end), 0) as otp_pct,
+        sum(r.bunching_pct * r.rated_gaps)
+            / nullif(sum(case when r.bunching_pct is not null then r.rated_gaps end), 0) as bunching_pct,
+        sum(r.ewt_sec * r.ewt_gap_count)
+            / nullif(sum(case when r.ewt_sec      is not null then r.ewt_gap_count end), 0) as ewt_sec
+    from {{ ref('fct_route_reliability_daily') }} r
+    join eligible_route_days e
+      on e.city_key = r.city_key
+     and e.route_id = r.route_id
+     and e.service_date = r.service_date
+    group by 1, 2
+
+),
+
+-- How much of the city's observed service runs frequently enough for EWT to
+-- mean anything. Published because it is the main reason two cities' scores are
+-- not directly comparable: a mostly-timetabled network is being judged on a
+-- different mix from a turn-up-and-go one.
+frequent_share as (
+
+    select
+        e.city_key,
+        e.month,
+        sum(case when f.has_ewt then e.trips_observed else 0 end)
+            / nullif(sum(cast(e.trips_observed as double)), 0) as frequent_service_share
+    from eligible_route_days e
+    left join (
+        select city_key, route_id, service_date,
+               max(case when ewt_sec is not null then true else false end) as has_ewt
+        from {{ ref('fct_route_reliability_daily') }}
+        group by 1, 2, 3
+    ) f
+      on f.city_key = e.city_key
+     and f.route_id = e.route_id
+     and f.service_date = e.service_date
     group by 1, 2
 
 ),
@@ -110,18 +157,38 @@ per_city as (
 scored as (
 
     select
-        p.*,
+        d.city_key,
+        d.month,
+        d.judged_days,
+        d.route_days,
+        d.scheduled_trips,
+        d.observed_trips,
+        d.cancel_pct,
+        d.completeness_pct,
+        r.otp_pct,
+        r.bunching_pct,
+        r.ewt_sec,
+        fs.frequent_service_share,
         w.w_wait, w.w_otp, w.w_cancel, w.w_bunch,
         -- Sub-scores, each 0-100 and each "higher is better" so the composite reads the
-        -- obvious way. The EWT anchor is 600s: a rider waiting ten minutes longer than
-        -- the timetable promised is a total failure of frequent service, and anything
-        -- beyond that is not more informative. Stated here rather than buried in a var
-        -- because it is a judgement, not a tuning knob.
-        100.0 * least(1.0, greatest(0.0, 1.0 - coalesce(p.ewt_sec, 0) / 600.0)) as s_wait,
-        100.0 * least(1.0, greatest(0.0, coalesce(p.otp_pct, 0)))              as s_otp,
-        100.0 * least(1.0, greatest(0.0, 1.0 - coalesce(p.cancel_pct, 0)))     as s_cancel,
-        100.0 * least(1.0, greatest(0.0, 1.0 - coalesce(p.bunching_pct, 0)))   as s_bunch
-    from per_city p
+        -- obvious way — and each NULL when its input was never measured. The EWT anchor
+        -- is 600s: a rider waiting ten minutes longer than the timetable promised is a
+        -- total failure of frequent service, and anything beyond that is not more
+        -- informative. Stated here rather than buried in a var because it is a
+        -- judgement, not a tuning knob.
+        case when r.ewt_sec is not null
+             then 100.0 * least(1.0, greatest(0.0, 1.0 - r.ewt_sec / 600.0)) end as s_wait,
+        case when r.otp_pct is not null
+             then 100.0 * least(1.0, greatest(0.0, r.otp_pct)) end               as s_otp,
+        case when d.cancel_pct is not null
+             then 100.0 * least(1.0, greatest(0.0, 1.0 - d.cancel_pct)) end      as s_cancel,
+        case when r.bunching_pct is not null
+             then 100.0 * least(1.0, greatest(0.0, 1.0 - r.bunching_pct)) end    as s_bunch
+    from delivery d
+    left join reliability r
+           on r.city_key = d.city_key and r.month = d.month
+    left join frequent_share fs
+           on fs.city_key = d.city_key and fs.month = d.month
     cross join weights w
 
 )
@@ -131,9 +198,21 @@ select
         as scorecard_key,
     s.city_key,
     s.month,
+    -- Composite over the components that exist, weights renormalised so absence
+    -- neither punishes nor flatters. Which components were present is visible in
+    -- the sub-score columns: a NULL sub-score took no part in this number.
     round(
-        s.w_wait * s.s_wait + s.w_otp * s.s_otp
-        + s.w_cancel * s.s_cancel + s.w_bunch * s.s_bunch
+        (
+            coalesce(s.w_wait   * s.s_wait,   0)
+          + coalesce(s.w_otp    * s.s_otp,    0)
+          + coalesce(s.w_cancel * s.s_cancel, 0)
+          + coalesce(s.w_bunch  * s.s_bunch,  0)
+        ) / nullif(
+            case when s.s_wait   is not null then s.w_wait   else 0 end
+          + case when s.s_otp    is not null then s.w_otp    else 0 end
+          + case when s.s_cancel is not null then s.w_cancel else 0 end
+          + case when s.s_bunch  is not null then s.w_bunch  else 0 end
+        , 0)
     , 1) as score_0_100,
     round(s.s_wait, 1)   as s_wait,
     round(s.s_otp, 1)    as s_otp,
