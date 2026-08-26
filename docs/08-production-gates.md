@@ -371,3 +371,73 @@ aws sns list-subscriptions-by-topic --region us-east-2 \
 finally passes. Everything else on that path is built and verified: topic created, IAM
 scoped to `sns:Publish` on that one ARN, `PIPELINE_ALERTS_TOPIC_ARN` confirmed live inside
 the dagster container, sensor registered with `default_status=RUNNING`.
+
+---
+
+## The engineering principle this pass settled
+
+Early in this work I argued for keeping the raw archive as insurance against gold being
+wrong. That framing was backwards, and the correction is worth recording because it
+changes what "production ready" means here.
+
+**The goal is a pipeline engineered so gold is never wrong — not one with a good recovery
+story for when it is.** Replay is a backstop for upstream reality changing underneath us.
+It is not a substitute for correctness, and treating it as one tolerates a pipeline that
+produces bad numbers and repairs them afterwards.
+
+Every defect found in this pass was **our own code**, not an upstream surprise:
+
+| Defect | Cause | Would replay have prevented it? |
+|---|---|---|
+| SF phantom service day | wrong cutover default | no |
+| Zurich alerts unfiltered | a missing function call | no |
+| `trip_uid` collapse | `concat_ws` returns `''`, not NULL | no |
+| Iceberg refresh aborting | no error handling | no |
+| Drain guard missing states | incomplete enum | no |
+
+All five were preventable by a contract test. None was preventable by keeping bytes.
+
+### Shape tests versus contract tests
+
+The review found **~40 of ~95 tests cannot fail**. They assert *shape* — not-null, unique,
+within-range — which says nothing about whether a value MEANS anything.
+
+The `trip_uid` episode is the sharpest illustration, and it has two halves worth keeping:
+
+**The shape test was enforcing the bug.** `stg_gtfsrt__vehicle_positions.trip_uid` carried
+a bare `not_null`. That test required an identity to always exist, so fabricating one
+looked correct and NULL was forbidden. It did not merely fail to catch the defect — it
+*mandated* it. Fixing the code properly turned that test red across 3,001,314 rows.
+
+**The first fix moved the bug rather than removing it.** Spark's `concat_ws` skips nulls
+and returns `''` when all inputs are null, so every descriptor-less ping hashed to
+`sha256('<city>|<date>|')`. Wrapping the inner concat in `nullif` fixed that half — and
+then the OUTER `concat_ws` skipped the now-NULL identity too, producing
+`sha256('<city>|<date>')`. Same collapse, new constant. 82,774 toronto rows still shared
+one uid **nineteen hours after the fix shipped and was reported as done**, and it was
+found by hand, not by anything going red.
+
+`assert_trip_uid_is_an_identity` failed with exactly the 11 degenerate uids on its first
+run and passed after the real fix. One contract test caught in seconds what three shape
+tests had been missing for days.
+
+### Where a contract belongs
+
+Enforce it **at the gold boundary, not only at the point of production.** The `trip_uid`
+rule now lives in two places: Spark writes NULL when there is no identity, and
+`stg_gtfsrt__vehicle_positions` nulls a fabricated identity regardless of what silver
+already holds.
+
+That split is deliberate. Silver is the record of what arrived and keeps its history,
+including history written by buggy code. **Gold must not inherit a bad derivation from
+it.** A contract enforced only in the producing job leaves every row written before the
+fix silently wrong; a contract enforced at the boundary makes gold correct immediately and
+stays correct even when upstream is imperfect. That is the structural answer to "gold is
+never wrong".
+
+### The standing rule
+
+Every defect that reaches gold gets a contract test before it is called fixed, and the
+test must be shown FAILING against the bad data first. A fix nobody watched fail is a fix
+nobody has verified — which is how the `trip_uid` repair was reported as done while still
+broken.
