@@ -96,10 +96,17 @@ models:
           - value_within_range:
               arguments: {min_value: 0, max_value: 1}
       # delivery block (route-level, repeated per direction)
+      # [rev 2026-08-27] cancel_pct CAN exceed 1: the numerator is the feed's
+      # CANCELED trip ids, the denominator is our latest-static schedule, and the
+      # two describe different universes (Zurich 91-E cancelled 95 trips against
+      # 90 scheduled during a service change). Same class as completeness > 100%
+      # and handled the same way: tolerance to 1.2 at warn severity — the value
+      # is honest, and the scorecard clamps before scoring.
       - name: cancel_pct
         data_tests:
           - value_within_range:
-              arguments: {min_value: 0, max_value: 1}
+              arguments: {min_value: 0, max_value: 1.2}
+              config: {severity: warn}
       - name: completeness_pct
         data_tests:
           - value_within_range:
