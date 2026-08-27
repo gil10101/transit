@@ -1,8 +1,11 @@
 -- THE model: prediction snapshots -> one finalized stop event per
--- (city_key, service_date, trip_uid, stop_sequence). v1 finalization method is
--- last_prediction only: NYC VP status/current_stop_sequence are unreliable
--- (dictionary quirk ③), so the last prediction observed before the vehicle
--- plausibly passed the stop stands in for the actual.
+-- (city_key, service_date, trip_uid, stop_sequence). Two finalization methods:
+--   * last_prediction — the last observed prediction before the vehicle plausibly
+--     passed the stop stands in for the actual (NYC VP status is unreliable,
+--     dictionary quirk ③, so passage detection is not used).
+--   * delay_plus_schedule [rev 2026-08-27] — for feeds that publish delay-only
+--     StopTimeEvents (Zurich: 97% of rows carry arr_delay_sec and no timestamp),
+--     the actual is schedule + stated delay. Tokyo's odpt_stated is this family.
 --
 -- Mechanics:
 --   * ignore predictions fetched > prediction_staleness_min after their own
@@ -44,7 +47,17 @@ with preds as (
       on m.city_key = p.city_key
      and m.service_date = p.service_date
      and m.trip_uid = p.trip_uid
-    where coalesce(p.arr_pred_ts_utc, p.dep_pred_ts_utc) is not null
+    -- [rev 2026-08-27] A prediction is EITHER an absolute time OR a delay —
+    -- GTFS-RT allows delay-only StopTimeEvents and Zurich's national feed uses
+    -- them almost exclusively (97% of its 4.1M rows/day carry arr_delay_sec and
+    -- no timestamp). The old filter demanded a timestamp and silently threw the
+    -- whole city away: 38k RT trips/day survived silver, matched the static at
+    -- 99.5%, and then 1.1k reached gold. Caught by completeness_above_error_50pct
+    -- on Zurich's FIRST judged day (410 route-days at 0.7%). Delay-only rows are
+    -- admitted here and get their timestamps synthesized from schedule + delay
+    -- after the static join below; rows with neither time nor delay stay out.
+    where (p.arr_pred_ts_utc is not null or p.dep_pred_ts_utc is not null
+           or p.arr_delay_sec is not null or p.dep_delay_sec is not null)
     {% if is_incremental() %}
       and p.service_date >= current_date - cast(ceil({{ var('lookback_hours') }} / 24.0) as int)
     {% endif %}
@@ -52,7 +65,10 @@ with preds as (
 
 fresh as (
     select * from preds
-    where fetched_at <= {{ dbt.dateadd('minute', var('prediction_staleness_min'), 'event_pred_ts') }}
+    -- delay-only rows have no event_pred_ts yet; their staleness is judged after
+    -- synthesis, on the same rule, in `ranked`
+    where event_pred_ts is null
+       or fetched_at <= {{ dbt.dateadd('minute', var('prediction_staleness_min'), 'event_pred_ts') }}
 ),
 
 watermark as (
@@ -66,7 +82,9 @@ sched_ranked as (
         s.sched_arr_ts_utc, s.sched_dep_ts_utc, s.timepoint, s.gtfs_version_id,
         row_number() over (
             partition by f.city_key, f.service_date, f.trip_uid, f.stop_id, f.fetched_at
-            order by abs({{ seconds_between('f.event_pred_ts', 's.sched_arr_ts_utc') }})
+            -- delay-only rows anchor on fetch time; only loop routes visiting a
+            -- stop twice in one trip even reach the tiebreak
+            order by abs({{ seconds_between("coalesce(f.event_pred_ts, f.fetched_at)", 's.sched_arr_ts_utc') }})
         ) as sched_rn
     from fresh f
     join {{ ref('int_gtfs_scheduled_stop_times') }} s
@@ -84,7 +102,19 @@ enriched as (
         sr.sched_dep_ts_utc,
         sr.timepoint,
         sr.gtfs_version_id,
-        coalesce(f.stop_sequence, sr.static_stop_sequence) as stop_sequence_eff
+        coalesce(f.stop_sequence, sr.static_stop_sequence) as stop_sequence_eff,
+        -- Synthesized actuals: schedule + stated delay stands in where the feed
+        -- publishes no absolute time (the canonical COALESCE rule extended to the
+        -- timestamps themselves). NULL when there is neither a time nor a
+        -- schedule row to add the delay to — no schedule, no synthesized event.
+        coalesce(
+            f.arr_pred_ts_utc,
+            {{ dbt.dateadd('second', 'f.arr_delay_sec', 'sr.sched_arr_ts_utc') }}
+        ) as arr_eff_ts_utc,
+        coalesce(
+            f.dep_pred_ts_utc,
+            {{ dbt.dateadd('second', 'f.dep_delay_sec', 'sr.sched_dep_ts_utc') }}
+        ) as dep_eff_ts_utc
     from fresh f
     left join sched_ranked sr
       on sr.city_key = f.city_key and sr.service_date = f.service_date
@@ -95,9 +125,10 @@ enriched as (
 ranked as (
     select
         e.*,
+        coalesce(e.event_pred_ts, e.arr_eff_ts_utc, e.dep_eff_ts_utc) as event_eff_ts,
         row_number() over (
             partition by e.city_key, e.service_date, e.trip_uid, e.stop_sequence_eff
-            order by e.fetched_at desc, e.event_pred_ts desc
+            order by e.fetched_at desc, coalesce(e.event_pred_ts, e.arr_eff_ts_utc, e.dep_eff_ts_utc) desc
         ) as rn,
         count(*) over (
             partition by e.city_key, e.service_date, e.trip_uid, e.stop_sequence_eff
@@ -118,7 +149,14 @@ ranked as (
     -- class of rule as the sequence filter — no identity, no event.
     where e.stop_sequence_eff is not null
       and e.stop_id is not null
-      and e.event_pred_ts <= w.max_fetched - interval '{{ var("finalize_horizon_min") }} minutes'
+      -- no timestamp even after synthesis = no event (delay-only row that never
+      -- matched a schedule); and the staleness rule applies to synthesized rows
+      -- exactly as it did to raw-timestamp rows in `fresh`
+      and coalesce(e.event_pred_ts, e.arr_eff_ts_utc, e.dep_eff_ts_utc) is not null
+      and e.fetched_at <= {{ dbt.dateadd('minute', var('prediction_staleness_min'),
+                                         'coalesce(e.event_pred_ts, e.arr_eff_ts_utc, e.dep_eff_ts_utc)') }}
+      and coalesce(e.event_pred_ts, e.arr_eff_ts_utc, e.dep_eff_ts_utc)
+          <= w.max_fetched - interval '{{ var("finalize_horizon_min") }} minutes'
 )
 
 select
@@ -143,8 +181,8 @@ select
     timepoint,
     sched_arr_ts_utc,
     sched_dep_ts_utc,
-    arr_pred_ts_utc as actual_arr_ts_utc,
-    dep_pred_ts_utc as actual_dep_ts_utc,
+    arr_eff_ts_utc as actual_arr_ts_utc,
+    dep_eff_ts_utc as actual_dep_ts_utc,
     cast(coalesce(
         arr_delay_sec,
         {{ seconds_between('sched_arr_ts_utc', 'coalesce(arr_pred_ts_utc, dep_pred_ts_utc)') }}
@@ -156,7 +194,10 @@ select
     schedule_relationship,
     (schedule_relationship = 'CANCELED') as cancelled_flag,
     (stu_schedule_relationship = 'SKIPPED') as skipped_flag,
-    'last_prediction' as finalization_method,
+    -- which rule produced the actual: a real published timestamp, or schedule
+    -- plus the feed's stated delay (Zurich; Tokyo's odpt_stated joins this family)
+    case when arr_pred_ts_utc is not null or dep_pred_ts_utc is not null
+         then 'last_prediction' else 'delay_plus_schedule' end as finalization_method,
     prediction_count,
     first_seen_utc,
     last_seen_utc,
