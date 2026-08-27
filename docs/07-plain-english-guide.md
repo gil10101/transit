@@ -630,8 +630,14 @@ drain), raw archive expires at 7 days, EMR debug logs at 14.
 | Snowflake | ~2–2.5 cr/day → **65–75 cr/mo** | $0 while trial credits last (~5 months at this rate), then ~$130–150/mo at list — **the real long-term decision**: pay it, halve it with 4h chains, or take the planned Redshift-swap option (docs/04 open decision) |
 | Data feeds | $0 forever | the entire input side of this warehouse is free |
 
-**Invoice today and for the next several months: $0.00/mo.** When credits end, the
-honest run-rate is ~$75–80 AWS + the Snowflake decision.
+**Invoice today: $0.00/mo — and the runway is measured, not assumed.** AWS promo
+credits remaining as of 2026-08-27: **$143.57, expiring 2027-01-27** (per Jake, from
+the console Credits page). At the post-package run-rate that covers all of August and
+all of September — the entire first scoreable month costs $0 cash — and exhausts
+around **October 20**, three weeks after the first full-month ranking exists. First
+real AWS charge: late October (~$25–30 partial month, then ~$75–80/mo). Snowflake's
+trial clock lands in the same season. Both pay-or-change decisions therefore arrive
+with a month of real results already in hand.
 
 ### The defect that dominated the bill (kept for the record)
 
