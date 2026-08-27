@@ -37,7 +37,7 @@ more than 60s ahead; `very_late` is 15 min or worse.
 
 | City | Scored events | On time | Early | Late | Very late |
 |---|---:|---:|---:|---:|---:|
-| Zurich | 3,377 | **83.9%** | 4.7% | 7.4% | 4.0% |
+| Zurich | 547,190 | **96.1%** | — | — | — |
 | Helsinki | 1,378,897 | **81.0%** | 12.7% | 6.0% | 0.3% |
 | New York | 604,145 | 67.5% | 22.4% | 9.0% | 1.2% |
 | SF Bay Area | 1,394,139 | 58.5% | 21.9% | 16.1% | 3.5% |
@@ -45,8 +45,13 @@ more than 60s ahead; `very_late` is 15 min or worse.
 | Washington DC | 884,318 | 53.9% | 23.0% | 18.9% | 4.3% |
 | Toronto | 2,365,483 | 49.2% | **41.1%** | 7.9% | 1.8% |
 
-Zurich's 83.9% leads the table on 3,377 events — treat it as a first reading,
-not a result; its first judged day only just closed.
+Zurich's 96.1% on 547k events is the real number — and a lesson. Until
+2026-08-27 its whole network was silently reduced to ~3k events because the Swiss
+feed publishes delay-only predictions (no timestamps) and finalization demanded
+timestamps; the completeness gate caught it on Zurich's FIRST judged day and the
+delay_plus_schedule finalization method fixed it (docs/08). Swiss punctuality
+lives up to its reputation: first place, by fifteen points. Band splits pending
+the next full battery re-run.
 
 **Toronto's 41% early is the finding here, not its 49.2% on-time.** Toronto is
 not late — it is *ahead of schedule* four times out of ten. For a bus network
