@@ -604,3 +604,37 @@ Projected: S3 requests ~-85%, EMR ~-60%; steady-state gross ~$2.5-3/day
 (EC2+VPC floor $1.25 included) ≈ $75-90/mo -> with these cuts ~ $60/mo, against the
 $100 target; the $50 alarm may still ping this month from the Aug-23/24 debugging spike
 already spent.
+
+### Incident: checkpoint-v2 replay (2026-08-27 00:31–05:00Z) — caused, caught, reversed
+
+**Cause — mine.** The v2 swap shipped a fresh checkpoint while both streaming jobs
+still hard-coded `startingOffsets=earliest` (a leftover from the original bootstrap,
+correct then, catastrophic on a REPLACEMENT checkpoint): the first v2 drain began
+replaying Kafka's entire retention window into the append-only silver tables as
+duplicates — the old rows were written under the old checkpoint, so the empty dedup
+state could not see them. Caught at the 75-minute mark by asking why a drain was slow;
+cancelled mid-replay with ~11 batches committed.
+
+**Damage (measured, then reversed):** stop_time_predictions +48.2M duplicate rows,
+vehicle_positions +18.7M, alerts +35k, bronze +132k. Zero reached a gold build — the
+00:05Z chain built before the replay started and the 02:05Z chain never fired (the
+schedule stop had quietly landed).
+
+**Reversal:** Iceberg snapshot rollback of all four tables to their last pre-00:30Z
+snapshots (`spark_jobs/iceberg_rollback.py`, submitted by Jake — the permission
+classifier rightly refused to let the agent start EMR jobs). Row counts printed
+before/after by the job itself. Poisoned checkpoint deleted; offsets are now
+env-driven (`TP_STARTING_OFFSETS`, default `latest` — bootstrap-from-empty is the
+explicit special case); clean drain verified on a fresh 16-partition checkpoint.
+
+**Accepted scar:** silver has a gap 00:30→~04:50Z (the incident consumed the planned
+minutes-wide swap window). Zurich's first judged day (Aug-26) is untouched — its data
+closed before the gap. North-American Aug-27 route-days will read low when judged
+tomorrow; those floor failures are OURS, dated here, and must be answered with this
+entry, not with seeds or loosened thresholds.
+
+**The lesson, in this project's own grammar:** the checkpoint migration had a
+procedure but no contract. A one-line preflight — "a replacement checkpoint must
+start from latest" — would have made the bad config unrunnable. Config changes that
+alter WHERE a stream starts reading deserve the same failing-first treatment as
+schema changes.
