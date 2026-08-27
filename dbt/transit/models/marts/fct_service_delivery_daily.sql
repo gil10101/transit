@@ -54,14 +54,34 @@ observed as (
 
 cancelled as (
 
+    -- [rev 2026-08-27] Two counts, two universes, kept apart BY CONSTRUCTION.
+    -- The feed cancels trips from ITS schedule universe; our denominator is the
+    -- latest loaded static. During a Swiss service change, 91-E had 95 CANCELED
+    -- trip ids against 90 scheduled — the ratio broke 100% and three chains went
+    -- red. The first response widened the range test; that was a patch and was
+    -- reverted. The fix: trips_cancelled counts only cancels whose trip MATCHES
+    -- our schedule (int_trip_matching is the RT<->static bridge every city
+    -- already goes through, including HSL's empty trip_ids), so cancel_pct is a
+    -- true fraction of the denominator and can NEVER exceed 1. Cancels of trips
+    -- outside our schedule stay visible in trips_cancelled_unscheduled — feed
+    -- truth, not thrown away, just never divided by the wrong denominator.
     select
-        city_key,
-        route_id,
-        service_date,
-        count(distinct trip_uid) as trips_cancelled
-    from {{ ref('stg_gtfsrt__trip_updates') }}
-    where schedule_relationship = 'CANCELED'
-    group by city_key, route_id, service_date
+        c.city_key,
+        c.route_id,
+        c.service_date,
+        -- distinct STATIC trips, not RT uids: a re-keyed RT trip cancelled twice
+        -- is one scheduled trip cancelled once. This is what makes
+        -- cancelled <= scheduled an invariant rather than an observation.
+        count(distinct m.static_trip_id) as trips_cancelled,
+        count(distinct case when m.trip_uid is null then c.trip_uid end)
+            as trips_cancelled_unscheduled
+    from {{ ref('stg_gtfsrt__trip_updates') }} c
+    left join {{ ref('int_trip_matching') }} m
+      on m.city_key = c.city_key
+     and m.service_date = c.service_date
+     and m.trip_uid = c.trip_uid
+    where c.schedule_relationship = 'CANCELED'
+    group by c.city_key, c.route_id, c.service_date
 
 ),
 
@@ -70,15 +90,16 @@ unioned as (
 
     select city_key, route_id, service_date,
            trips_scheduled, 0 as trips_observed, 0 as trips_added,
-           0 as trips_observed_scheduled, 0 as trips_cancelled
+           0 as trips_observed_scheduled, 0 as trips_cancelled,
+           0 as trips_cancelled_unscheduled
     from scheduled
     union all
     select city_key, route_id, service_date,
-           0, trips_observed, trips_added, trips_observed_scheduled, 0
+           0, trips_observed, trips_added, trips_observed_scheduled, 0, 0
     from observed
     union all
     select city_key, route_id, service_date,
-           0, 0, 0, 0, trips_cancelled
+           0, 0, 0, 0, trips_cancelled, trips_cancelled_unscheduled
     from cancelled
 
 ),
@@ -94,6 +115,7 @@ rolled as (
         sum(trips_observed) as trips_observed,
         sum(trips_added) as trips_added,
         sum(trips_cancelled) as trips_cancelled,
+        sum(trips_cancelled_unscheduled) as trips_cancelled_unscheduled,
         cast(sum(trips_observed_scheduled) as double)
             / nullif(sum(trips_scheduled), 0) as completeness_pct
     from unioned

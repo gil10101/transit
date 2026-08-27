@@ -37,7 +37,17 @@ models:
         description: observed trips flagged ADDED
         data_tests: [not_null]
       - name: trips_cancelled
-        description: distinct CANCELED trips from trip updates (they never reach fct_stop_events)
+        description: >
+          distinct STATIC trips whose cancellation matched our schedule via
+          int_trip_matching — same universe as trips_scheduled by construction,
+          so cancelled/scheduled is a true fraction. CANCELED trips never reach
+          fct_stop_events, hence counted at the feed.
+        data_tests: [not_null]
+      - name: trips_cancelled_unscheduled
+        description: >
+          feed cancellations of trips OUTSIDE our loaded schedule (newer static
+          version, service-change re-keys). Kept visible, never divided by
+          trips_scheduled — the 2026-08-27 Zurich 91-E lesson.
         data_tests: [not_null]
       - name: completeness_pct
         description: observed non-ADDED / scheduled; null when nothing scheduled

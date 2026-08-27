@@ -96,17 +96,19 @@ models:
           - value_within_range:
               arguments: {min_value: 0, max_value: 1}
       # delivery block (route-level, repeated per direction)
-      # [rev 2026-08-27] cancel_pct CAN exceed 1: the numerator is the feed's
-      # CANCELED trip ids, the denominator is our latest-static schedule, and the
-      # two describe different universes (Zurich 91-E cancelled 95 trips against
-      # 90 scheduled during a service change). Same class as completeness > 100%
-      # and handled the same way: tolerance to 1.2 at warn severity — the value
-      # is honest, and the scorecard clamps before scoring.
+      # [rev 2026-08-27, second pass] cancel_pct <= 1 is a real INVARIANT again:
+      # the numerator now counts distinct STATIC trips whose cancellation matched
+      # our schedule (fct_service_delivery_daily's cancelled CTE), so it shares
+      # the denominator's universe by construction. The intermediate tolerance-to-
+      # 1.2-at-warn version of this test was a patch (Zurich 91-E, 95 cancels vs
+      # 90 scheduled during a service change) and was reverted the same day —
+      # feed cancels of trips outside our schedule live in
+      # trips_cancelled_unscheduled instead of inflating this ratio.
       - name: cancel_pct
         data_tests:
           - value_within_range:
-              arguments: {min_value: 0, max_value: 1.2}
-              config: {severity: warn}
+              arguments: {min_value: 0, max_value: 1}
+              config: {severity: error}
       - name: completeness_pct
         data_tests:
           - value_within_range:
