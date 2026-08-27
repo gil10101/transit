@@ -638,3 +638,27 @@ procedure but no contract. A one-line preflight — "a replacement checkpoint mu
 start from latest" — would have made the bad config unrunnable. Config changes that
 alter WHERE a stream starts reading deserve the same failing-first treatment as
 schema changes.
+
+### Zurich resurrected: the delay-only feed (2026-08-27, second find of the night)
+
+The post-rollback rebuild failed its floor test on Zurich's first judged day — 410
+route-days at 0.7% completeness. Data-first: silver held 4.1M predictions and 38k
+matched trips for the day; gold held 1.1k trips. Root cause: **the Swiss LA feed
+publishes delay-only StopTimeEvents** (97% of rows carry arr_delay_sec and no
+timestamp — legal GTFS-RT, the inverse of every other city), and finalization
+demanded a timestamp before the schedule join that could have supplied one.
+Fix: delay-only rows are admitted and their actuals synthesized as schedule +
+stated delay (`finalization_method='delay_plus_schedule'` — the family Tokyo's
+odpt_stated will join). Result: 5,210 -> 552,827 events for the judged day,
+completeness 1.9% -> **93.8% (gate PASS)**, OTP **96.1%** on 547k scored events —
+first place, and the number the thin sample had been underselling.
+
+Remaining floor rows all evidenced and seeded: Swiss RT covers no boats, no
+aerial/funicular, and skips several night/event/regional bus classes (26 routes,
+0 silver rows ever); 4 SF partial-publication stragglers with per-route counts.
+**Unexplained below-floor rows warehouse-wide: 0. All seven cities pass B1.**
+
+The night's two incidents share one shape: a filter written for the common case
+(timestamps exist; checkpoints are born, not replaced) silently deleting an
+entire category of truth — and both were caught by the completeness floor, not
+by anyone reading code. The gate teaches; the gate stays.
