@@ -595,29 +595,51 @@ Every input to it is built; the ranking is not.
 
 ---
 
-## 13. What it costs
+## 13. What it costs — actual, not estimated
 
-Real numbers from AWS Cost Explorer for 1–25 August: **$22.38 of usage, fully covered by
-credits, $0.00 actually billed.**
+Two different questions, answered separately, by platform. Numbers are measured
+(AWS console + Cost Explorer, Snowflake metering_history), stamped 2026-08-27.
 
-The shape is more interesting than the total. S3 is 64% of it — and almost none of that
-is storage. It is *requests*: 2.36 million write-class and 6.4 million read-class calls
-against roughly $0.008 of actual bytes. Spark's checkpointing generates it, rewriting
-state files across 200 partitions on every micro-batch of four concurrent queries.
+### What the BUILD cost (Aug 22–27: zero to production, 7 cities)
 
-The alerts stream is the clearest example: 3,267 checkpoint objects holding 1.9 MB. More
-objects than the prediction stream, for a thousandth of the data.
+| Platform | Gross usage | Actually billed | Where it went |
+|---|---|---|---|
+| AWS | **$44.12** month-to-date | $0.00 (promo credits) | S3 $25.63 (almost entirely checkpoint *requests*, not bytes) · EMR $13.08 · EC2 $2.98 · VPC $1.42 · rest $1.01 |
+| Snowflake | **18.7 credits** (~$40 at list) | $0.00 (trial credits) | TRANSFORM_XS 18.0 cr; daily burn told the story: 0.8 cr on quiet days, **8.7 on the full-refresh marathon day** |
+| Transit + weather data | $0 | $0 | every feed used is free (MTA, MBTA, TTC, HSL, WMATA, 511, Swiss OTD, Open-Meteo) |
 
-Two things are unresolved:
+**Total cash spent building this: $0.00.** Total gross value consumed: ~$85.
 
-1. **The raw archive has no expiry.** It grows forever, for every city. It is also the
-   replay layer, which is the whole point of keeping it — so an expiry policy is a real
-   tradeoff, not an obvious win.
-2. **EMR debug logs have no expiry either.** 3.4 GB in three days, and nobody reads them
-   after the week they were produced. This one is close to free money.
+Roughly half the AWS spend was two anomalous debugging days (Aug 23–24, $22 between
+them) plus the write-amplification defect below — the build itself was cheap; finding
+its bugs was the expensive part, which is the correct way around.
 
-The next efficiency lever, if cost moves, is reducing Spark's shuffle partitions from the
-default 200.
+### What RUNNING it costs (maintenance, after the 2026-08-26 cost package)
+
+The package: Spark shuffle partitions 200→16 on a fresh checkpoint (the request-churn
+killer), standalone hourly drains disabled (the 2-hourly chain drain is the only
+drain), raw archive expires at 7 days, EMR debug logs at 14.
+
+| Platform | Projected steady state | Notes |
+|---|---|---|
+| AWS — EC2 + EBS | ~$30/mo | two small ARM boxes (pollers+Dagster, Kafka); the true floor |
+| AWS — EMR Serverless | ~$25/mo | 12 chain drains/day + weekly static parse; next lever if needed: chain 2h→4h (≈−$15/mo, Jake pre-approved coarser cadence) |
+| AWS — S3 | ~$10/mo | requests after the 16-partition fix; storage is cents (raw is a rolling 7-day window, gold is 2.4 GB) |
+| AWS — VPC endpoints + misc | ~$12/mo | interface endpoints, CloudWatch, ECR |
+| **AWS total** | **~$75–80/mo gross** | measure after 48h of the new regime; under the $100 target, above the $50 early-warning alarm — either raise the alarm or take the 4h-chain lever |
+| Snowflake | ~2–2.5 cr/day → **65–75 cr/mo** | $0 while trial credits last (~5 months at this rate), then ~$130–150/mo at list — **the real long-term decision**: pay it, halve it with 4h chains, or take the planned Redshift-swap option (docs/04 open decision) |
+| Data feeds | $0 forever | the entire input side of this warehouse is free |
+
+**Invoice today and for the next several months: $0.00/mo.** When credits end, the
+honest run-rate is ~$75–80 AWS + the Snowflake decision.
+
+### The defect that dominated the bill (kept for the record)
+
+S3 was never storage: at peak, Spark checkpointing wrote ~950k request-class calls a
+day — state files sharded across 200 shuffle partitions × 4 streams × 36 drains — for
+roughly $0.03 of actual bytes. The fix (16 partitions, chain-only drains, fresh
+checkpoint root) is docs/08 "Checkpoint v2 migration". A cost bill can be a
+correctness signal: the money was pointing at write-amplification the whole time.
 
 ---
 
