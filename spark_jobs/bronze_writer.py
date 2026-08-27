@@ -7,6 +7,8 @@ where service_date is derived from fetched_at via the noon rule in city-local ti
 
 from __future__ import annotations
 
+import os
+
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
@@ -66,7 +68,7 @@ def build_stream(spark: SparkSession) -> DataFrame:
         spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", kafka_bootstrap())
         .option("subscribePattern", "transit\\..*")
-        .option("startingOffsets", "earliest")
+        .option("startingOffsets", os.environ.get("TP_STARTING_OFFSETS", "latest"))
         .option("failOnDataLoss", "false")
         .option("maxOffsetsPerTrigger", "1000")  # messages, not bytes: one SF
         # trip-update chunk is ~900 KB while an NYC one is ~50 KB, so 5000

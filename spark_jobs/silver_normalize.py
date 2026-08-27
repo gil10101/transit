@@ -130,7 +130,7 @@ def read_topic(spark: SparkSession, topic: str, record: T.StructType) -> DataFra
         spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", kafka_bootstrap())
         .option("subscribe", topic)
-        .option("startingOffsets", "earliest")
+        .option("startingOffsets", os.environ.get("TP_STARTING_OFFSETS", "latest"))
         .option("failOnDataLoss", "false")
         .option("maxOffsetsPerTrigger", "1000")  # messages, not bytes: one SF
         # trip-update chunk is ~900 KB while an NYC one is ~50 KB, so 5000
