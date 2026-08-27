@@ -117,3 +117,8 @@ sf,EM:Hollis,"Bus, partial publication, same operator/evidence as EM:Shell/Pow: 
 sf,MC:RED,"Bus, partial publication (operator MC): 22 scheduled, 5 published+captured on the first judged day; shortfall upstream, measured 2026-08-27.",2026-08-27
 sf,MC:GRAY,"Bus, partial publication, same operator/evidence as MC:RED: 22 scheduled, 4 published+captured.",2026-08-27
 sf,MV:B - AM,"Special-event shuttle, same advance-publication misdating mechanism as MV:B - PM Concert (seeded 2026-08-26).",2026-08-27
+sf,PE:501,"Bus, operator PE (Petaluma) publishes no realtime in the 511 RG feed: 0 silver rows ever for this route (10 trips scheduled 2026-08-26). Same operator-level gap as the 6 PE routes seeded 2026-08-26.",2026-08-27
+sf,VN:B,"Bus, operator VN intermittent publication: 23 silver trips on earlier days, 0 published on 2026-08-26 (20 scheduled). Shortfall upstream, same operator pattern as VN:E/VN:11X.",2026-08-27
+sf,VN:C,"Bus, operator VN partial publication: 14 of 48 scheduled trips published 2026-08-26, gold captured all 14. Shortfall upstream.",2026-08-27
+sf,WC:11,"Bus, operator WC partial publication: 5 of 18 scheduled published 2026-08-26, all captured. Shortfall upstream, same as WC:JX/JPX/Lynx.",2026-08-27
+sf,WC:15,"Bus, operator WC partial publication: 6 of 15 scheduled published 2026-08-26, all captured. Shortfall upstream.",2026-08-27

@@ -662,3 +662,19 @@ The night's two incidents share one shape: a filter written for the common case
 (timestamps exist; checkpoints are born, not replaced) silently deleting an
 entire category of truth — and both were caught by the completeness floor, not
 by anyone reading code. The gate teaches; the gate stays.
+
+### The tripwire learns the difference between blind and disrupted (2026-08-27)
+
+The 08:05Z chain went red on ONE route-day: Boston Orange Line, Aug-26 — 482 trips
+scheduled, 466 OBSERVED, completeness 37%. The feed missed nothing; MBTA replaced the
+scheduled Orange service with ADDED diversion trips (the same disruption whose
+shuttles are seeded), and completeness counts only non-ADDED against schedule. A
+true fact about MBTA's day, not a data defect — and the wrong thing to page about.
+
+Amendment (test semantics, documented here per the guardrail): the error-severity
+floor now fires only when `trips_observed < 50%` of scheduled — i.e., when the feed
+is actually blind. Disruption days remain fully visible: completeness_pct stays
+37.1% in the fact, the warn-severity test still lists them, and the scorecard still
+excludes them from scoring and counts them in excluded_route_days. The tripwire
+pages on blindness; the facts record disruption. Those were always two different
+questions, and now the tests know it.

@@ -72,6 +72,17 @@ models:
           # error severity they would be permanently red — and a check that is always
           # red trains everyone to ignore every check. The warn test above still covers
           # them, so they stay visible. Only agency-confirmed gaps are seeded.
+          #
+          # [rev 2026-08-27] The error test is a FEED-DEATH tripwire, not a
+          # service-delivery judgment — so it now also requires that the feed
+          # actually saw under half the scheduled volume (trips_observed counts
+          # ADDED). Boston's Orange Line on 2026-08-26 taught the difference: 482
+          # scheduled, 466 OBSERVED, completeness 37% — the schedule was replaced
+          # by ADDED diversion service, the feed missed nothing, and the chain
+          # went red over a true fact about MBTA's day. Disruption days stay
+          # visible in completeness_pct, in the warn test, and in the scorecard's
+          # own exclusion accounting; the error tripwire fires only when WE are
+          # blind, which is the thing it can actually page anyone about.
           - value_within_range:
               name: completeness_above_error_50pct
               arguments: {min_value: 0.50}
@@ -80,4 +91,5 @@ models:
                 store_failures: true
                 where: "service_day_closed and service_date >= metrics_from
                   and trips_scheduled >= {{ var('completeness_min_trips') }}
-                  and not known_coverage_gap"
+                  and not known_coverage_gap
+                  and trips_observed < trips_scheduled * 0.50"
