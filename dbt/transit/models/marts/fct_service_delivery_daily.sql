@@ -16,13 +16,17 @@
 -- The completeness tests never saw them — service_day_closed already excluded them —
 -- but a fact table that asserts tomorrow's service was missed is wrong on its face and
 -- silently poisons any chart or average built on the raw mart.
-with scheduled as (
+-- the schedule universe at TRIP grain: every (city, service_date, trip) the
+-- static calendar says runs, up to the city's local today. Both the scheduled
+-- denominator and the cancelled numerator draw from THIS set, which is what
+-- makes cancelled <= scheduled an invariant instead of a hope.
+with active_trips as (
 
     select
         t.city_key,
         t.route_id,
         d.service_date,
-        count(distinct t.trip_id) as trips_scheduled
+        t.trip_id
     from {{ ref('stg_gtfs__trips') }} t
     join {{ ref('int_service_dates') }} d
       on d.city_key = t.city_key
@@ -30,7 +34,18 @@ with scheduled as (
     join {{ ref('dim_city') }} dc
       on dc.city_key = t.city_key
     where d.service_date <= cast({{ to_local('current_timestamp', 'dc.iana_tz') }} as date)
-    group by t.city_key, t.route_id, d.service_date
+
+),
+
+scheduled as (
+
+    select
+        city_key,
+        route_id,
+        service_date,
+        count(distinct trip_id) as trips_scheduled
+    from active_trips
+    group by city_key, route_id, service_date
 
 ),
 
@@ -69,17 +84,24 @@ cancelled as (
         c.city_key,
         c.route_id,
         c.service_date,
-        -- distinct STATIC trips, not RT uids: a re-keyed RT trip cancelled twice
-        -- is one scheduled trip cancelled once. This is what makes
-        -- cancelled <= scheduled an invariant rather than an observation.
-        count(distinct m.static_trip_id) as trips_cancelled,
-        count(distinct case when m.trip_uid is null then c.trip_uid end)
+        -- distinct STATIC trips ACTIVE THAT DATE, not RT uids and not merely
+        -- id-matched trips: the matcher proves identity, active_trips proves the
+        -- calendar ran it that day (the 91-E cancels id-matched 95 static trips
+        -- of which only 90 were calendar-active — a service change cancelling
+        -- other days' ids). Numerator drawn from the denominator's own set:
+        -- cancelled <= scheduled by construction.
+        count(distinct a.trip_id) as trips_cancelled,
+        count(distinct case when a.trip_id is null then c.trip_uid end)
             as trips_cancelled_unscheduled
     from {{ ref('stg_gtfsrt__trip_updates') }} c
     left join {{ ref('int_trip_matching') }} m
       on m.city_key = c.city_key
      and m.service_date = c.service_date
      and m.trip_uid = c.trip_uid
+    left join active_trips a
+      on a.city_key = c.city_key
+     and a.service_date = c.service_date
+     and a.trip_id = m.static_trip_id
     where c.schedule_relationship = 'CANCELED'
     group by c.city_key, c.route_id, c.service_date
 
