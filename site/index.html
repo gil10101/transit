@@ -11,7 +11,7 @@
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous"></script>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
 <script src="https://unpkg.com/deck.gl@9.0.36/dist.min.js" integrity="sha384-w/54/rLWDJgv9c3QdtRYUtL5h1sXLHGM4wH9frLq+CMEpTUpzCYAYpUsxtgPylpc" crossorigin="anonymous"></script>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
 
@@ -36,6 +36,9 @@
       </a>
     </div>
   </div>
+  <div class="header-banner">Every figure is a warehouse snapshot captured
+    <span id="as-of-banner" class="mono">—</span>. The pipeline itself is live — it drains,
+    re-pins, and re-scores all seven cities every two hours.</div>
 </header>
 
 <main id="top">
@@ -50,7 +53,7 @@
     agency's own published schedule.</p>
     <div class="tile-grid" id="hero-tiles"></div>
     <p class="hero-note">Kafka &middot; Spark &middot; Iceberg &middot; Snowflake &middot;
-    dbt &middot; Dagster. Every number on this page is a warehouse snapshot, stamped
+    dbt &middot; Dagster — the warehouse behind every number, snapshot
     <span id="as-of-hero" class="mono"></span>.</p>
   </div>
   <div class="hero-legend" id="hero-legend"></div>
@@ -253,6 +256,6 @@
   </div>
 </footer>
 
-<script src="app.js"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

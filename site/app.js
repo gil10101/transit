@@ -76,6 +76,7 @@ async function renderTiles() {
   const day = s.as_of.slice(0, 10);
   $("as-of").textContent = day;
   $("as-of-hero").textContent = s.as_of;
+  $("as-of-banner").textContent = s.as_of;
   $("as-of-footer").textContent = day;
   $("hero-tiles").innerHTML = [
     tile(fmt(c.stop_events), "stop events scored"),
