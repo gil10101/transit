@@ -381,7 +381,10 @@ function mapLayers(id, data, theme, hero) {
     return hex2rgb(info.route_color) || MODE_COLOR[+info.route_type] || [96, 140, 190];
   };
   const veh = sem.veh.split(",").map(Number), ring = sem.ring.split(",").map(Number);
-  const shapes = data.shapes.map((s) => ({ path: parsePath(s.path), color: routeColor(s.route_id) }));
+  // parse once per city: route colors are theme-independent (agency colors),
+  // theme only touches alpha, applied in the accessor below
+  data._shapes ??= data.shapes.map((s) => ({ path: parsePath(s.path), color: routeColor(s.route_id) }));
+  const shapes = data._shapes;
   return [
     new deck.PathLayer({
       id: id + "-routes", data: shapes, getPath: (d) => d.path,
@@ -444,7 +447,9 @@ async function renderCityMap(key, recenter) {
     frame.appendChild(loading);
   }
   const [data, summary, hexes] = await Promise.all([
-    loadJSON(`data/maps/${key}.json`), loadJSON("data/summary.json"), loadJSON("data/hexes.json"),
+    loadJSON(`data/maps/${key}.json`), loadJSON("data/summary.json"),
+    // hex data (738KB) only when that layer is actually shown
+    mapMode === "hexes" ? loadJSON("data/hexes.json") : null,
   ]);
   frame.querySelector(".map-loading")?.remove();
   if (activeCity !== key) return; // a later tab click won the race
