@@ -69,6 +69,16 @@ module "services" {
   swiss_otd_sa_token = var.swiss_otd_sa_token
 }
 
+# External box watchdog (separate module: see the cycle note in its header).
+# Alarms already exist live (CLI, 2026-08-28) — import before the next apply.
+module "box_alarms" {
+  source               = "../../modules/box_alarms"
+  prefix               = var.prefix
+  topic_arn            = module.monitoring.pipeline_alerts_topic_arn
+  services_instance_id = module.services.instance_id
+  kafka_instance_id    = module.kafka.instance_id
+}
+
 module "snowflake" {
   count                  = var.enable_snowflake ? 1 : 0
   source                 = "../../modules/snowflake"

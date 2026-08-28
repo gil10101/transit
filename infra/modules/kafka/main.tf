@@ -89,3 +89,4 @@ resource "aws_instance" "kafka" {
 }
 
 output "private_ip" { value = aws_instance.kafka.private_ip }
+output "instance_id" { value = aws_instance.kafka.id }
