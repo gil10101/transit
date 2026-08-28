@@ -24,24 +24,32 @@ const MAP_STYLES = {
   dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
 };
 const SEMANTIC = {
-  light: { good: "#059669", warn: "#d97700", bad: "#cc0000", early: "#2563eb", veh: "26,26,26", glow: "37,99,235", routeAlpha: 95, heroAlpha: 175 },
-  dark:  { good: "#a3be8c", warn: "#ebc88d", bad: "#bf616a", early: "#85c1fc", veh: "216,222,233", glow: "133,193,252", routeAlpha: 80, heroAlpha: 150 },
+  light: { good: "#059669", warn: "#d97700", bad: "#cc0000", early: "#2563eb", veh: "37,99,235", ring: "255,255,255", routeAlpha: 95, heroAlpha: 175 },
+  dark:  { good: "#a3be8c", warn: "#ebc88d", bad: "#bf616a", early: "#85c1fc", veh: "133,193,252", ring: "26,26,26", routeAlpha: 80, heroAlpha: 150 },
 };
 
 // ---------- theme ----------
-function storedTheme() {
-  try { return localStorage.getItem("theme"); } catch { return null; }
-}
+// The head inline script stamps data-theme from cookie/localStorage pre-paint;
+// this module only reads, toggles, and persists (sky §7a-c contract).
 function currentTheme() {
   const t = document.documentElement.getAttribute("data-theme");
   if (t) return t;
   return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
-function applyStoredTheme() {
-  const t = storedTheme();
-  if (t) document.documentElement.setAttribute("data-theme", t);
-}
 function cityColor(key) { return CITIES[key][currentTheme()]; }
+
+const SIDEBAR_FILL = { light: "#f5f5f5", dark: "#1f1f1f" };
+
+function persistTheme(theme) {
+  try { localStorage.setItem("theme", theme); } catch { /* private mode */ }
+  const { hostname, protocol } = location;
+  const onSite = hostname === "gillu.me" || hostname.endsWith(".gillu.me");
+  const attrs = [`theme=${theme}`, "path=/", `max-age=${60 * 60 * 24 * 365}`, "samesite=lax"];
+  // a domain attribute the browser can't match is rejected outright
+  if (onSite) attrs.push("domain=.gillu.me");
+  if (protocol === "https:") attrs.push("secure");
+  document.cookie = attrs.join("; ");
+}
 
 // ---------- helpers ----------
 const $ = (id) => document.getElementById(id);
@@ -365,7 +373,7 @@ function mapLayers(id, data, theme, hero) {
     const info = data.routes[r] || {};
     return hex2rgb(info.route_color) || MODE_COLOR[+info.route_type] || [96, 140, 190];
   };
-  const veh = sem.veh.split(",").map(Number), glow = sem.glow.split(",").map(Number);
+  const veh = sem.veh.split(",").map(Number), ring = sem.ring.split(",").map(Number);
   const shapes = data.shapes.map((s) => ({ path: parsePath(s.path), color: routeColor(s.route_id) }));
   return [
     new deck.PathLayer({
@@ -379,12 +387,9 @@ function mapLayers(id, data, theme, hero) {
       getRadius: hero ? 3.9 : 2.4, radiusUnits: "pixels", pickable: !hero,
     }),
     new deck.ScatterplotLayer({
-      id: id + "-veh-glow", data: data.vehicles, getPosition: (d) => [+d.lon, +d.lat],
-      getFillColor: [...glow, 48], getRadius: 5.5, radiusUnits: "pixels",
-    }),
-    new deck.ScatterplotLayer({
       id: id + "-veh", data: data.vehicles, getPosition: (d) => [+d.lon, +d.lat],
-      getFillColor: [...veh, 235], getRadius: 2.2, radiusUnits: "pixels",
+      getFillColor: [...veh, 235], getRadius: 2.6, radiusUnits: "pixels",
+      stroked: true, getLineColor: [...ring, 200], lineWidthMinPixels: 1,
     }),
   ];
 }
@@ -395,7 +400,7 @@ function legendHTML(theme, vehicles) {
     <span><span class="dot" style="background:${sem.good}"></span>on time</span>
     <span><span class="dot" style="background:${sem.warn}"></span>1–5 min late</span>
     <span><span class="dot" style="background:${sem.bad}"></span>&gt;5 min late</span>` +
-    (vehicles ? `<span><span class="dot" style="background:rgb(${sem.veh});box-shadow:0 0 5px rgb(${sem.glow})"></span>vehicle · latest fix</span>` : "");
+    (vehicles ? `<span><span class="dot" style="background:rgb(${sem.veh})"></span>vehicle · latest fix</span>` : "");
 }
 
 let heroDeck = null, cityDeck = null, activeCity = "nyc";
@@ -483,16 +488,37 @@ function rethemeAll() {
   renderCityMap(activeCity, false);
 }
 
-applyStoredTheme();
+function updateToggle() {
+  const target = currentTheme() === "dark" ? "light" : "dark";
+  const btn = $("theme-toggle");
+  btn.setAttribute("aria-label", `Switch to ${target} theme`);
+  btn.title = `Switch to ${target} theme`;
+  btn.querySelector(".corner-fill").style.background = SIDEBAR_FILL[target];
+}
+
 $("theme-toggle").addEventListener("click", () => {
-  const next = currentTheme() === "dark" ? "light" : "dark";
-  document.documentElement.setAttribute("data-theme", next);
-  try { localStorage.setItem("theme", next); } catch { /* private mode */ }
-  rethemeAll();
+  const target = currentTheme() === "dark" ? "light" : "dark";
+  const apply = () => {
+    document.documentElement.setAttribute("data-theme", target);
+    persistTheme(target);
+    updateToggle();
+    rethemeAll();
+  };
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!document.startViewTransition || reduced) { apply(); return; }
+  const transition = document.startViewTransition(apply);
+  transition.ready.then(() => {
+    const radius = Math.hypot(innerWidth, innerHeight);
+    document.documentElement.animate(
+      { clipPath: ["circle(0px at 0px 0px)", `circle(${radius}px at 0px 0px)`] },
+      { duration: 700, easing: "cubic-bezier(0.4, 0, 0.2, 1)", pseudoElement: "::view-transition-new(root)" },
+    );
+  });
 });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-  if (!document.documentElement.getAttribute("data-theme")) rethemeAll();
+  if (!document.documentElement.getAttribute("data-theme")) { updateToggle(); rethemeAll(); }
 });
+updateToggle();
 let resizeT = null;
 addEventListener("resize", () => {
   clearTimeout(resizeT);
