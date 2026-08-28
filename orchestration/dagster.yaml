@@ -10,3 +10,25 @@ storage:
       db_name:
         env: DAGSTER_PG_DB
       port: 5432
+
+# Serialize warehouse_chain runs. Nothing did before 2026-08-28: a manual
+# relaunch at 17:43Z collided with the 18:05Z schedule, two dbt builds ran at
+# once on the 2GB services box, and the resulting memory thrash took down the
+# SSM agent and every poller. One chain at a time is a correctness rule, not
+# tuning — the freshness tripwire still runs alongside (max_concurrent_runs 3
+# leaves it headroom).
+run_coordinator:
+  module: dagster._core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 3
+    tag_concurrency_limits:
+      - key: dagster/job_name
+        value: warehouse_chain
+        limit: 1
+
+# A wedged run would now block the queue forever, so cap runtime: a normal
+# chain takes ~35 min; anything past 90 is stuck and should fail loudly.
+run_monitoring:
+  enabled: true
+  max_runtime_seconds: 5400
