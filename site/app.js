@@ -23,9 +23,11 @@ const MAP_STYLES = {
   light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
   dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
 };
+// veh is INK, deliberately outside the delay ramp: a vehicle is an object,
+// not a measurement, and must never share a hue with "early" blue
 const SEMANTIC = {
-  light: { good: "#059669", warn: "#d97700", bad: "#cc0000", early: "#2563eb", veh: "37,99,235", ring: "255,255,255", routeAlpha: 95, heroAlpha: 175 },
-  dark:  { good: "#a3be8c", warn: "#ebc88d", bad: "#bf616a", early: "#85c1fc", veh: "133,193,252", ring: "26,26,26", routeAlpha: 80, heroAlpha: 150 },
+  light: { good: "#059669", warn: "#d97700", bad: "#cc0000", early: "#2563eb", veh: "26,26,26", ring: "255,255,255", routeAlpha: 95, heroAlpha: 175 },
+  dark:  { good: "#a3be8c", warn: "#ebc88d", bad: "#bf616a", early: "#85c1fc", veh: "216,222,233", ring: "26,26,26", routeAlpha: 80, heroAlpha: 150 },
 };
 
 // ---------- theme ----------
@@ -400,7 +402,7 @@ function legendHTML(theme, vehicles) {
     <span><span class="dot" style="background:${sem.good}"></span>on time</span>
     <span><span class="dot" style="background:${sem.warn}"></span>1–5 min late</span>
     <span><span class="dot" style="background:${sem.bad}"></span>&gt;5 min late</span>` +
-    (vehicles ? `<span><span class="dot" style="background:rgb(${sem.veh})"></span>vehicle · latest fix</span>` : "");
+    (vehicles ? `<span><span class="dot" style="background:rgb(${sem.veh});box-shadow:0 0 0 1px rgb(${sem.ring})"></span>vehicle · latest fix</span>` : "");
 }
 
 let heroDeck = null, cityDeck = null, activeCity = "nyc";
