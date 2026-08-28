@@ -46,8 +46,9 @@ INFRA_RETRY = RetryPolicy(max_retries=2, delay=120, backoff=Backoff.EXPONENTIAL)
 @asset(group_name="pipeline", retry_policy=INFRA_RETRY)
 def emr_drain(emr: EmrResource) -> MaterializeResult:
     """One availableNow drain (Kafka -> bronze -> silver Iceberg), identical to what the
-    hourly EventBridge Lambda submits. EventBridge stays; this run guarantees silver is
-    freshly committed when the chain refreshes Snowflake.
+    hourly EventBridge Lambda submits. The EventBridge schedule is DISABLED since
+    2026-08-26 (cost cut) — this chain is the only scheduled drain; the run guarantees
+    silver is freshly committed when the chain refreshes Snowflake.
 
     [rev 2026-08-25] This used to claim "the app's 4 vCPU cap queues, not corrupts, any
     overlap with a scheduled drain". Both halves were wrong. The app is provisioned at
@@ -123,6 +124,12 @@ warehouse_chain_job = define_asset_job(
     "warehouse_chain",
     selection=AssetSelection.assets(emr_drain, snowflake_iceberg_refresh, transit_dbt_assets),
     description="drain -> iceberg refresh -> dbt build (+ warehouse asset checks)",
+    # This tag exists solely for the QueuedRunCoordinator's tag_concurrency_limits
+    # in dagster.yaml. It must be an explicit job tag: Dagster stores the job name
+    # as a run COLUMN, never as a tag, so a `dagster/job_name` limit key silently
+    # matches nothing (config validates, limits nothing — found in review after
+    # the 2026-08-28 overlap wedge shipped with exactly that no-op key).
+    tags={"transit/serialize": "warehouse_chain"},
 )
 
 pipeline_schedule = ScheduleDefinition(

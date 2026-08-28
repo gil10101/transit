@@ -64,6 +64,12 @@ class EmrResource(ConfigurableResource):
             states=list(EMR_ACTIVE_STATES),
         )["jobRuns"]
         for run in runs:
+            # A CANCELLING run is a corpse, not work in progress: after a
+            # timeout-cancel it lingers in that state, and adopting it makes a
+            # retry attempt wait for CANCELLED and fail — burning one of the
+            # two retries in exactly the slow-drain case the retries exist for.
+            if run.get("state") == "CANCELLING":
+                continue
             if str(run.get("name", "")).startswith(prefix):
                 return run["id"]
         return None

@@ -158,9 +158,10 @@ durable copy.
 ### 4.3 Transform — Spark bronze + silver
 
 **Code:** `spark_jobs/silver_normalize.py` (drain), `spark_jobs/gtfs_static_parse.py` (schedules).
-**Runs as:** EMR Serverless app `transit-pulse-streaming`, triggered hourly by a Lambda
-on an EventBridge schedule, and again by Dagster's 2-hour chain (which adopts an
-in-flight run rather than starting a second one).
+**Runs as:** EMR Serverless app `transit-pulse-streaming`, triggered by Dagster's
+2-hour chain. The hourly EventBridge->Lambda drain still exists but is DISABLED
+since 2026-08-26 (cost cut — see the rev comment in `infra/modules/spark/main.tf`);
+the chain adopts any in-flight run rather than starting a second one.
 
 One job starts **four concurrent streaming queries** — bronze envelopes, silver stop-time
 predictions, silver vehicle positions, silver alerts — all with
@@ -389,7 +390,7 @@ guess, and never a quietly loosened threshold.
 | Pollers: nyc, boston, toronto, helsinki, dc, sf | services EC2 `i-0f0d6e32cb15ce471`, one container each | 30s (SF 200s) | running |
 | Poller: zurich | services box | 60s trip updates / 600s alerts | **live since 2026-08-25 03:08Z** — allow-list shipped (615 routes) |
 | Kafka broker | EC2 `10.20.0.34:9092` | always | running |
-| EMR drain (`transit-drain`) | Lambda `transit-pulse-emr-drain` on EventBridge | hourly | healthy — SUCCESS on every run since 2026-08-25 01:45Z |
+| EMR drain (`transit-drain`) | Lambda `transit-pulse-emr-drain` on EventBridge | hourly | **DISABLED 2026-08-26** (cost cut — chain drains instead; flip to ENABLED in spark module to restore) |
 | Dagster 2h chain: drain → Iceberg refresh → dbt build → checks | services box | `5 */2 * * *` | running |
 | Dagster freshness tripwire | services box | `10,25,40,55 * * * *` | running — detects a killed feed within ~55 min |
 | Dagster weather asset | services box | `20 * * * *` | running |

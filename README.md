@@ -42,7 +42,7 @@ Local dev is the same code against Redpanda + MinIO + duckdb (`make up`, dbt
 `--target dev`); cloud is a profile switch. `infra/` is the Terraform for all of it,
 behind a $50 budget alarm; real August cost ran **under $10/week** after the checkpoint-
 churn and national-feed cost bugs were found and fixed (the hunt is documented in
-`docs/08-production-gates.md`).
+`docs/10-production-gates.md`).
 
 ## What makes the numbers trustworthy
 
@@ -104,7 +104,7 @@ architecture:
 | `docs/05-pipeline-walkthrough.md` | end-to-end onboarding, every filter and why |
 | `docs/06-business-answers.md` | the 8 sub-questions with measured answers |
 | `docs/07-plain-english-guide.md` | the whole system in plain language |
-| `docs/08-production-gates.md` | quality gates A–G, incident log, verification evidence |
+| `docs/10-production-gates.md` | quality gates A–G, incident log, verification evidence |
 | `docs/09-backfill-feasibility.md` | why GTFS-RT history cannot be backfilled, only accrued |
 
 ## Layout

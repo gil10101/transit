@@ -6,9 +6,11 @@
 # thrashed the services box — SSM agent and all pollers died at 18:06Z and the
 # only signal was silence. These alarms watch from outside the box.
 #
-# This module lives separately from `monitoring` because the services module
-# consumes monitoring's topic ARN — putting instance-id variables into
-# monitoring would make the two modules reference each other (a cycle).
+# This module lives separately from `monitoring` as an organizational choice:
+# monitoring is account-level (budget, topic), these are per-instance. (An
+# earlier revision claimed mutual module references would be a terraform
+# cycle — false: terraform graphs at resource level, and topic -> instance ->
+# alarm is a DAG. Kept separate anyway; the reason is tidiness, not necessity.)
 #
 # [import] All three alarms were created live via `aws cloudwatch
 # put-metric-alarm` on 2026-08-28 with these exact names. Before the next
@@ -53,7 +55,10 @@ resource "aws_cloudwatch_metric_alarm" "services_status_check" {
   datapoints_to_alarm = 2
   threshold           = 0
   comparison_operator = "GreaterThanThreshold"
-  treat_missing_data  = "notBreaching"
+  # Missing data here means the instance is stopped, terminated, or too
+  # dead to emit metrics — the highest-consequence states. notBreaching
+  # would go silent exactly then (review finding, 2026-08-28).
+  treat_missing_data  = "breaching"
   alarm_actions       = [var.topic_arn]
   ok_actions          = [var.topic_arn]
 }
@@ -70,7 +75,10 @@ resource "aws_cloudwatch_metric_alarm" "kafka_status_check" {
   datapoints_to_alarm = 2
   threshold           = 0
   comparison_operator = "GreaterThanThreshold"
-  treat_missing_data  = "notBreaching"
+  # Missing data here means the instance is stopped, terminated, or too
+  # dead to emit metrics — the highest-consequence states. notBreaching
+  # would go silent exactly then (review finding, 2026-08-28).
+  treat_missing_data  = "breaching"
   alarm_actions       = [var.topic_arn]
   ok_actions          = [var.topic_arn]
 }

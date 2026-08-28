@@ -13,22 +13,31 @@ storage:
 
 # Serialize warehouse_chain runs. Nothing did before 2026-08-28: a manual
 # relaunch at 17:43Z collided with the 18:05Z schedule, two dbt builds ran at
-# once on the 2GB services box, and the resulting memory thrash took down the
-# SSM agent and every poller. One chain at a time is a correctness rule, not
-# tuning — the freshness tripwire still runs alongside (max_concurrent_runs 3
-# leaves it headroom).
+# once on the services box (t4g.medium, 4GB), and the resulting thrash took
+# down the SSM agent and every poller. One chain at a time is a correctness
+# rule, not tuning — the freshness tripwire still runs alongside
+# (max_concurrent_runs 3 leaves it headroom).
+#
+# The limit key is the explicit `transit/serialize` job tag set in
+# assets_pipeline.py, NOT `dagster/job_name`: Dagster keeps the job name as a
+# run column and never writes it as a tag, so a job-name key validates cleanly
+# and matches nothing. The first version of this file shipped that no-op.
 run_coordinator:
   module: dagster._core.run_coordinator
   class: QueuedRunCoordinator
   config:
     max_concurrent_runs: 3
     tag_concurrency_limits:
-      - key: dagster/job_name
+      - key: transit/serialize
         value: warehouse_chain
         limit: 1
 
-# A wedged run would now block the queue forever, so cap runtime: a normal
-# chain takes ~35 min; anything past 90 is stuck and should fail loudly.
+# A wedged run would now block the queue for the cap duration, so cap runtime —
+# but generously. 90 min was too tight against the system's own budgets: the
+# EMR drain timeout is deliberately 50 min per attempt for backlog replays, so
+# a chain legitimately retrying once exceeds 90 min while healthy (and a
+# 55-min drain to SUCCESS is already in the 08-27 EMR history). 3h kills only
+# the truly wedged. Queued time does not count toward the cap.
 run_monitoring:
   enabled: true
-  max_runtime_seconds: 5400
+  max_runtime_seconds: 10800
