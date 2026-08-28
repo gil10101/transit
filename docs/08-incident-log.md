@@ -64,10 +64,11 @@ Structural fixes, not patches:
   runs emits no failure event. Validated live: the CPU alarm fired mid-incident.
 - Docker json-log rotation (50m x 3) via /etc/docker/daemon.json on both
   boxes + both user_data templates: nothing rotated container logs before.
-  STAGED, not yet active: json-file log-opts bind at container creation, so
-  running containers keep unbounded logs until their next recreate (the
-  dagster pair picks it up at the next image deploy; pollers, postgres and
-  kafka at their next recreate/reboot).
+  STAGED, not yet active: dockerd reads daemon.json only at startup AND
+  log-opts bind per-container at creation — so activation needs a dockerd
+  restart followed by container recreation (verified: containers recreated
+  2026-08-28 20:49Z still show log-opts map[]). Both boxes get it at their
+  next reboot; growth is ~2G/month against 20G+ free, so nothing forces one.
 
 Data note: pollers were down 18:06–18:48Z, so that window was never captured —
 unlike the kafka incident's gap it is NOT replayable from raw. Both windows
