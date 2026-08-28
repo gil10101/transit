@@ -50,6 +50,10 @@ resource "aws_instance" "kafka" {
     #!/bin/bash
     set -euo pipefail
     dnf install -y docker
+    # Cap container json logs before dockerd first starts: unbounded logs are
+    # the same slow disk-filler class as the 168h retention below.
+    mkdir -p /etc/docker
+    printf '{\n  "log-driver": "json-file",\n  "log-opts": { "max-size": "50m", "max-file": "3" }\n}\n' > /etc/docker/daemon.json
     systemctl enable --now docker
     TOKEN=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
     PRIVATE_IP=$(curl -sH "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)

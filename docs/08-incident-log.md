@@ -33,3 +33,30 @@ Structural fixes, not patches:
 Data note: broker-down window ≈ 16:00–recovery; pollers kept raw S3 fresh, so
 the Kafka-side gap is replayable from raw if ever needed; silver resumes from
 committed checkpoints (latest offsets) at the next green drain.
+
+## 2026-08-28 · Services box wedge (overlapping warehouse_chain runs)
+The 17:43Z manual relaunch (4aed9466, recovering from the kafka outage above)
+overlapped the 18:05Z scheduled chain — nothing serialized chain runs, so two
+dbt builds ran concurrently on the 2GB services box. Memory thrash killed the
+SSM agent and every poller at ~18:06Z; CPU stayed pinned 60%+ with no
+self-heal until an operator reboot at 18:48Z. 4aed9466 had already committed
+its drain and Iceberg refresh (silver current to 17:46Z) but its dbt build
+never completed — and because gold is written only by dbt, no partial gold
+exists; the chain is atomic by construction.
+
+Structural fixes, not patches:
+- QueuedRunCoordinator with a tag concurrency limit of 1 on warehouse_chain:
+  a manual relaunch now queues behind (never beside) a scheduled run. Plus
+  run_monitoring with a 90-min runtime cap so a wedged run fails loudly
+  instead of blocking the queue (commit 39e60dd).
+- External CloudWatch watchdog -> pipeline-alerts SNS (commit 0cce44e):
+  sustained-CPU wedge alarm + status-check alarms on both boxes. This closes
+  the run-failure sensor's structural blind spot — a box too sick to start
+  runs emits no failure event. Validated live: the CPU alarm fired mid-incident.
+- Docker json-log rotation (50m x 3) via /etc/docker/daemon.json on both
+  boxes + both user_data templates: nothing rotated container logs before.
+
+Data note: pollers were down 18:06–18:48Z, so that window was never captured —
+unlike the kafka incident's gap it is NOT replayable from raw. Both windows
+seeded in incident_days for 2026-08-28 (all 7 polled cities). Recovery chain
+a1858eca launched through the queue at 18:53Z.

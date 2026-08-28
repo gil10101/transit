@@ -404,6 +404,10 @@ resource "aws_instance" "services" {
     #!/bin/bash
     set -euo pipefail
     dnf install -y docker
+    # Cap container json logs before dockerd first starts; nothing rotated
+    # them before 2026-08-28 and a month unattended would grow them unbounded.
+    mkdir -p /etc/docker
+    printf '{\n  "log-driver": "json-file",\n  "log-opts": { "max-size": "50m", "max-file": "3" }\n}\n' > /etc/docker/daemon.json
     systemctl enable --now docker
     mkdir -p /usr/local/lib/docker/cli-plugins
     curl -sL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-aarch64" \
