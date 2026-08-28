@@ -173,10 +173,16 @@ select
     cast(
         {{ to_local('current_timestamp', 'c.iana_tz') }} - interval '3 hour' as date
     ) > r.service_date as service_day_closed,
-    g.route_id is not null as known_coverage_gap
+    g.route_id is not null as known_coverage_gap,
+    -- dated our-outage marker (seed incident_days): the executable form of a
+    -- docs/08 incident entry. Only the error tripwire reads it.
+    i.city_key is not null as incident_day
 from rolled r
 left join {{ ref('dim_city') }} c on c.city_key = r.city_key
 left join {{ ref('known_coverage_gaps') }} g
        on g.city_key = r.city_key
       and g.route_id = r.route_id
+left join {{ ref('incident_days') }} i
+       on i.city_key = r.city_key
+      and i.service_date = r.service_date
 {{ scd2_join(ref('dim_route'), 'dr', 'r.city_key', 'route_id', 'r.route_id', 'r.service_date') }}

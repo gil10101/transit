@@ -102,4 +102,5 @@ models:
                 where: "service_day_closed and service_date >= metrics_from
                   and trips_scheduled >= {{ var('completeness_min_trips') }}
                   and not known_coverage_gap
+                  and not incident_day
                   and trips_observed < trips_scheduled * 0.50"

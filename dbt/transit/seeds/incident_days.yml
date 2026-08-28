@@ -1,0 +1,20 @@
+version: 2
+seeds:
+  - name: incident_days
+    description: >
+      Dated, city-scoped OUR-OUTAGE exemptions for the blindness tripwire — the
+      executable form of a docs/08 incident entry. Not for agency gaps (that is
+      known_coverage_gaps) and never open-ended: every row names one service_date
+      and cites its incident. Route-days on an incident day stay fully visible in
+      completeness_pct and the warn-severity test; only the error tripwire skips
+      them, because paging on our own documented outage teaches people to ignore
+      pages.
+    config:
+      column_types: {service_date: date}
+    columns:
+      - name: city_key
+        data_tests: [not_null]
+      - name: service_date
+        data_tests: [not_null]
+      - name: reason
+        data_tests: [not_null]

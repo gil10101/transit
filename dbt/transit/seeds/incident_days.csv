@@ -1,0 +1,8 @@
+city_key,service_date,reason
+nyc,2026-08-27,"checkpoint-v2 replay incident: silver blind 00:30-04:50Z (docs/08 2026-08-27 entry)"
+boston,2026-08-27,"checkpoint-v2 replay incident: silver blind 00:30-04:50Z (docs/08)"
+toronto,2026-08-27,"checkpoint-v2 replay incident: silver blind 00:30-04:50Z (docs/08)"
+dc,2026-08-27,"checkpoint-v2 replay incident: silver blind 00:30-04:50Z (docs/08)"
+sf,2026-08-27,"checkpoint-v2 replay incident: silver blind 00:30-04:50Z (docs/08)"
+helsinki,2026-08-27,"checkpoint-v2 replay incident: silver blind 00:30-04:50Z = 03:30-07:50 local morning (docs/08)"
+zurich,2026-08-27,"checkpoint-v2 replay incident: silver blind 00:30-04:50Z = 02:30-06:50 local (docs/08)"
