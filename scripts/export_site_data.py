@@ -216,6 +216,23 @@ modes = q("""
 """)
 dump("modes.json", {"as_of": AS_OF, "rows": modes})
 
+# --- hexes.json: stop delay aggregated to H3 r8, last 7 days ----------------
+# same aggregation as the dashboard delay-map page: scored events only, hexes
+# under 20 events dropped, ONE shared scale across cities
+hexes = q("""
+    select e.city_key, s.h3_r8,
+           round(avg(e.delay_arr_sec)) as mean_delay_sec,
+           count(*) as events
+    from fct_stop_events e
+    join dim_stop s on s.stop_key = e.stop_key
+    where e.otp_band is not null
+      and s.h3_r8 is not null
+      and e.service_date >= dateadd(day, -7, current_date)
+    group by 1, 2
+    having count(*) >= 20
+""")
+dump("hexes.json", {"as_of": AS_OF, "days": 7, "rows": hexes})
+
 # --- routes.json: most / least reliable routes (evidence-weighted) ----------
 ROUTE_AGG = """
     select r.city_key, r.route_id,

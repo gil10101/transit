@@ -482,7 +482,9 @@ h2 {
 .data-table .route-name { color: var(--muted-foreground); font-size: 11.5px; }
 
 /* ---------- network maps ---------- */
+.tab-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .city-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.mode-tabs button { font-size: 12px; padding: 4px 10px; }
 .city-tabs button {
   border: 1px solid var(--border);
   border-radius: 8px;

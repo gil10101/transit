@@ -10,9 +10,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous"></script>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
+<script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js" integrity="sha384-nKUDlg+fT0U/eEt4KWP9n034kLe/eVj6k7CVjbu6qfRhJdEyinlGajS9+9AU+UZ5" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/deck.gl@9.0.36/dist.min.js" integrity="sha384-w/54/rLWDJgv9c3QdtRYUtL5h1sXLHGM4wH9frLq+CMEpTUpzCYAYpUsxtgPylpc" crossorigin="anonymous"></script>
 <script>try{var m=document.cookie.match(/(?:^|;\s*)theme=(light|dark)/);var t=m?m[1]:localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
-<link rel="stylesheet" href="styles.css?v=6">
+<link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
 
@@ -127,11 +128,17 @@
     <div>
       <div class="eyebrow">NETWORK · THE WAREHOUSE, DRAWN</div>
       <h2>Every route, from static GTFS to gold</h2>
-      <p class="section-note">Route paths from each agency's static feed, stations colored by
-      measured mean delay on the latest full service day, plus the last fix per vehicle from
-      the most recent drained window.</p>
+      <p class="section-note" id="network-note">Route paths from each agency's static feed,
+      stations colored by measured mean delay on the latest full service day, plus the last
+      fix per vehicle from the most recent drained window.</p>
     </div>
-    <div class="city-tabs" id="city-tabs" role="tablist"></div>
+    <div class="tab-stack">
+      <div class="city-tabs" id="city-tabs" role="tablist"></div>
+      <div class="city-tabs mode-tabs" id="map-mode" role="tablist">
+        <button role="tab" data-mode="network" aria-selected="true">routes + vehicles</button>
+        <button role="tab" data-mode="hexes" aria-selected="false">delay hexes</button>
+      </div>
+    </div>
   </div>
   <div class="map-frame">
     <div id="city-map"></div>
@@ -260,6 +267,6 @@
   </div>
 </footer>
 
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

@@ -367,10 +367,15 @@ const hex2rgb = (h) => {
 };
 const parsePath = (s) => s.split(",").map((p) => { const a = p.split(" "); return [+a[0], +a[1]]; });
 
-function mapLayers(id, data, theme, hero) {
+function delayColorFn(theme) {
   const sem = SEMANTIC[theme];
   const OK = hex2rgb(sem.good), WARN = hex2rgb(sem.warn), BAD = hex2rgb(sem.bad), EARLY = hex2rgb(sem.early);
-  const delayColor = (d) => d == null ? [128, 128, 128] : d < -60 ? EARLY : d < 60 ? OK : d < 300 ? WARN : BAD;
+  return (d) => d == null ? [128, 128, 128] : d < -60 ? EARLY : d < 60 ? OK : d < 300 ? WARN : BAD;
+}
+
+function mapLayers(id, data, theme, hero) {
+  const sem = SEMANTIC[theme];
+  const delayColor = delayColorFn(theme);
   const routeColor = (r) => {
     const info = data.routes[r] || {};
     return hex2rgb(info.route_color) || MODE_COLOR[+info.route_type] || [96, 140, 190];
@@ -405,7 +410,12 @@ function legendHTML(theme, vehicles) {
     (vehicles ? `<span><span class="dot" style="background:rgb(${sem.veh});box-shadow:0 0 0 1px rgb(${sem.ring})"></span>vehicle · latest fix</span>` : "");
 }
 
-let heroDeck = null, cityDeck = null, activeCity = "nyc";
+let heroDeck = null, cityDeck = null, activeCity = "nyc", mapMode = "network";
+
+const NETWORK_NOTE = document.getElementById("network-note")?.textContent;
+const HEX_NOTE = "Mean arrival delay aggregated to H3 hexagons over the last 7 days, " +
+  "scored events only — hexes under 20 events dropped. One shared scale for every city: " +
+  "that Zurich reads pale while others glow is the comparison.";
 
 async function renderHero() {
   const theme = currentTheme();
@@ -433,15 +443,33 @@ async function renderCityMap(key, recenter) {
     loading.textContent = "loading network…";
     frame.appendChild(loading);
   }
-  const [data, summary] = await Promise.all([loadJSON(`data/maps/${key}.json`), loadJSON("data/summary.json")]);
+  const [data, summary, hexes] = await Promise.all([
+    loadJSON(`data/maps/${key}.json`), loadJSON("data/summary.json"), loadJSON("data/hexes.json"),
+  ]);
   frame.querySelector(".map-loading")?.remove();
   if (activeCity !== key) return; // a later tab click won the race
-  const [lat, lon, zoom] = meta.view;
+  const [lat, lon, baseZoom] = meta.view;
+  const zoom = mapMode === "hexes" ? baseZoom - 1 : baseZoom; // hex view reads city-wide
+  const delayColor = delayColorFn(theme);
+  const layers = mapMode === "hexes"
+    ? [new deck.H3HexagonLayer({
+        id: "city-hex",
+        data: hexes.rows.filter((r) => r.city_key === key),
+        getHexagon: (d) => d.h3_r8,
+        getFillColor: (d) => [...delayColor(+d.mean_delay_sec), 145],
+        extruded: false,
+        pickable: true,
+      })]
+    : mapLayers("city", data, theme, false);
   const props = {
     mapStyle: MAP_STYLES[theme],
-    layers: mapLayers("city", data, theme, false),
-    getTooltip: ({ layer, object }) =>
-      layer?.id === "city-stops" && object ? { text: `${object.delay}s mean delay` } : null,
+    layers,
+    getTooltip: ({ layer, object }) => {
+      if (!object) return null;
+      if (layer?.id === "city-stops") return { text: `${object.delay}s mean delay` };
+      if (layer?.id === "city-hex") return { text: `${object.mean_delay_sec}s mean · ${Number(object.events).toLocaleString()} events` };
+      return null;
+    },
   };
   if (recenter) props.initialViewState = { latitude: lat, longitude: lon, zoom, pitch: 0, bearing: 0 };
   if (cityDeck) cityDeck.setProps(props);
@@ -455,10 +483,13 @@ async function renderCityMap(key, recenter) {
       ${tile(data.shapes.length, "route paths")}
       ${tile(data.vehicles.length || "—", "vehicles · last fix")}
     </div>`;
-  $("city-legend").innerHTML = legendHTML(theme, data.vehicles.length > 0);
-  $("city-note").textContent = VP_ABSENT[key] ?? "";
+  $("city-legend").innerHTML = legendHTML(theme, mapMode === "network" && data.vehicles.length > 0);
+  $("city-note").textContent = mapMode === "hexes" ? HEX_NOTE : (VP_ABSENT[key] ?? "");
+  $("network-note").textContent = mapMode === "hexes" ? HEX_NOTE : NETWORK_NOTE;
   document.querySelectorAll("#city-tabs button").forEach((b) =>
     b.setAttribute("aria-selected", String(b.dataset.city === key)));
+  document.querySelectorAll("#map-mode button").forEach((b) =>
+    b.setAttribute("aria-selected", String(b.dataset.mode === mapMode)));
 }
 
 function renderTabs() {
@@ -466,6 +497,11 @@ function renderTabs() {
     `<button role="tab" data-city="${key}" aria-selected="${key === activeCity}">${c.name.toLowerCase()}</button>`).join("");
   $("city-tabs").querySelectorAll("button").forEach((b) =>
     b.addEventListener("click", () => renderCityMap(b.dataset.city, true)));
+  $("map-mode").querySelectorAll("button").forEach((b) =>
+    b.addEventListener("click", () => {
+      mapMode = b.dataset.mode;
+      renderCityMap(activeCity, true);
+    }));
 }
 
 // ---------- reveal on scroll ----------
