@@ -38,3 +38,4 @@ data/
 # `sensitive = true` only redacts CLI display, never the plan archive.
 tfplan*
 .jars/
+!site/data/
