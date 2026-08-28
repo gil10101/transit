@@ -32,10 +32,14 @@ with events as (
 
     -- null direction (unmatched trip without a ..N/..S token) folds to -1 so the
     -- grain, joins, and md5 key behave identically on duckdb and Snowflake
-    -- (concat_ws skips NULLs on duckdb but propagates them on Snowflake)
+    -- (concat_ws skips NULLs on duckdb but propagates them on Snowflake).
+    -- [rev 2026-08-28] route folds the same way: an unmatched ADDED trip whose
+    -- feed rows omit route_id lands in __unrouted__, same bucket as the
+    -- delivery mart, instead of a NULL that breaks the grain keys.
     select
-        * exclude (direction_id),
-        coalesce(direction_id, -1) as direction_id
+        * exclude (direction_id, route_id),
+        coalesce(direction_id, -1) as direction_id,
+        coalesce(route_id, '__unrouted__') as route_id
     from {{ ref('fct_stop_events') }}
     {% if is_incremental() %}
     where service_date >= current_date - cast(ceil({{ var('lookback_hours') }} / 24.0) as int)

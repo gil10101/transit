@@ -39,6 +39,7 @@ with preds as (
     select
         p.*,
         m.static_trip_id,
+        m.route_id as matched_route_id,
         m.direction_id as matched_direction_id,
         m.match_confidence,
         coalesce(p.arr_pred_ts_utc, p.dep_pred_ts_utc) as event_pred_ts
@@ -166,7 +167,9 @@ select
     stop_sequence_eff as stop_sequence,
     trip_id as trip_id_raw,
     static_trip_id,
-    route_id,
+    -- matched trips inherit the static route when the feed omits route_id
+    -- (SF ADDED trips, 2026-08-27) — same authority rule as the matcher itself
+    coalesce(route_id, matched_route_id) as route_id,
     case
         when city_key = 'nyc' then coalesce(
             matched_direction_id,

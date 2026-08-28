@@ -76,6 +76,7 @@ static_by_id as (
     select
         city_key,
         trip_id,
+        route_id,
         direction_id,
         row_number() over (
             partition by city_key, trip_id
@@ -93,7 +94,12 @@ exact as (
         r.service_date,
         r.trip_id,
         r.trip_uid,
-        r.route_id,
+        -- [rev 2026-08-28] the static's route is authoritative once the trip id
+        -- matched: SF published an ADDED trip (SA:t_6153536_b_86615_tn_0) whose
+        -- RT rows carry NO route_id even though the id exists in the 511 static.
+        -- The null walked through finalized into the delivery mart and broke its
+        -- not_null keys on 2026-08-27. A matched trip inherits the static route.
+        coalesce(r.route_id, s.route_id) as route_id,
         r.trip_id as static_trip_id,
         s.direction_id,
         1.0 as match_confidence

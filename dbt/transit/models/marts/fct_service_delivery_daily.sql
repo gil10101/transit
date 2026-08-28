@@ -51,9 +51,15 @@ scheduled as (
 
 observed as (
 
+    -- [rev 2026-08-28] the route grain must survive events with no route at all:
+    -- an ADDED trip that never matched static and whose feed rows omit route_id
+    -- (matched ones now inherit the static route upstream). Those land in an
+    -- explicit __unrouted__ bucket instead of a NULL key that breaks
+    -- delivery_key/route_id not_null — visible, counted, never joined to dims
+    -- (route_key stays NULL by construction).
     select
         city_key,
-        route_id,
+        coalesce(route_id, '__unrouted__') as route_id,
         service_date,
         count(distinct trip_uid) as trips_observed,
         count(distinct case
@@ -82,7 +88,7 @@ cancelled as (
     -- truth, not thrown away, just never divided by the wrong denominator.
     select
         c.city_key,
-        c.route_id,
+        coalesce(c.route_id, '__unrouted__') as route_id,
         c.service_date,
         -- distinct STATIC trips ACTIVE THAT DATE, not RT uids and not merely
         -- id-matched trips: the matcher proves identity, active_trips proves the

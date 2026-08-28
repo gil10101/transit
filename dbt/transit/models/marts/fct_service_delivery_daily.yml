@@ -16,6 +16,10 @@ models:
       - name: city_key
         data_tests: [not_null]
       - name: route_id
+        description: >
+          natural route id; '__unrouted__' collects observed trips whose feed
+          rows carry no route_id and never matched static (matched trips inherit
+          the static route upstream). route_key stays NULL for that bucket.
         data_tests: [not_null]
       - name: route_key
         description: SCD2 FK (P6); NULL when the static never described the route that day
