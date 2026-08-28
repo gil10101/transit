@@ -1,6 +1,6 @@
 /* Transit Pulse static site. All data is build-time warehouse snapshots in
-   ./data; the two deck.gl maps and the charts re-render on theme change so the
-   validated light/dark series palettes both get used, never auto-flipped. */
+   ./data; the deck.gl maps and charts re-render on theme change so the validated
+   light/dark series palettes both get used, never auto-flipped. */
 
 "use strict";
 
@@ -65,13 +65,18 @@ async function loadJSON(path) {
 function tile(value, label) {
   return `<div class="tile"><b>${value}</b><span>${label}</span></div>`;
 }
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
 
-// ---------- hero + pipeline tiles ----------
+// ---------- header stamp + hero/pipeline tiles ----------
 async function renderTiles() {
   const s = await loadJSON("data/summary.json");
   const c = s.census;
-  $("as-of").textContent = s.as_of;
-  $("as-of-footer").textContent = s.as_of;
+  const day = s.as_of.slice(0, 10);
+  $("as-of").textContent = day;
+  $("as-of-hero").textContent = s.as_of;
+  $("as-of-footer").textContent = day;
   $("hero-tiles").innerHTML = [
     tile(fmt(c.stop_events), "stop events scored"),
     tile(fmt(s.trips.observed), "trips observed"),
@@ -99,7 +104,7 @@ function sparkline(points, color) {
     lo = mid - 2; hi = mid + 2;
   }
   const x = (i) => P + (i * (W - 2 * P)) / (points.length - 1);
-  const y = (v) => hi === lo ? H / 2 : P + ((hi - v) * (H - 2 * P)) / (hi - lo);
+  const y = (v) => P + ((hi - v) * (H - 2 * P)) / (hi - lo);
   const d = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.otp_pct).toFixed(1)}`).join("");
   const dots = points.map((p, i) =>
     `<circle cx="${x(i).toFixed(1)}" cy="${y(p.otp_pct).toFixed(1)}" r="2.4" fill="${color}">` +
@@ -133,10 +138,10 @@ async function renderStandings() {
   $("standings-rows").innerHTML = head + rows;
 }
 
-// ---------- hourly chart ----------
+// ---------- line charts (shared for hourly + daily) ----------
 const hidden = new Set();
 
-async function renderHourlyLegend() {
+async function renderChartLegend() {
   const s = await loadJSON("data/summary.json");
   $("hourly-legend").innerHTML = s.standings.map((r) => {
     const key = r.city_key;
@@ -151,70 +156,73 @@ async function renderHourlyLegend() {
       else if (visible.length === 1 && visible[0] === key) Object.keys(CITIES).forEach((c) => hidden.delete(c)); // un-isolate
       else if (visible.length > 1 && !hidden.size) { Object.keys(CITIES).forEach((c) => c !== key && hidden.add(c)); } // isolate
       else hidden.add(key);
-      renderHourlyLegend();
-      renderHourlyChart();
+      renderChartLegend();
+      renderLineCharts();
     });
   });
 }
 
-async function renderHourlyChart() {
-  const data = await loadJSON("data/hourly.json");
-  const svg = $("hourly-chart");
-  const W = svg.clientWidth || 900, H = 340;
-  const M = { top: 14, right: 18, bottom: 30, left: 44 };
+/* series: {cityKey: [{x, y} ...]} on an integer x grid; xLabel maps x → tick text. */
+function drawLineChart({ svgId, tipId, series, xMax, xTickStep, xLabel, tipTitle }) {
+  const svg = $(svgId);
+  if (!svg) return;
+  const W = svg.clientWidth || 640, H = svg.clientHeight || 280;
+  const M = { top: 12, right: 14, bottom: 28, left: 40 };
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
 
-  const series = {};
-  for (const r of data.rows) (series[r.city_key] ??= [])[r.local_hour] = { otp: +r.otp_pct, events: +r.events };
-  const visible = Object.keys(CITIES).filter((c) => series[c] && !hidden.has(c));
-  const vals = visible.flatMap((c) => series[c].filter(Boolean).map((p) => p.otp));
+  const visible = Object.keys(CITIES).filter((c) => series[c]?.some(Boolean) && !hidden.has(c));
+  const vals = visible.flatMap((c) => series[c].filter(Boolean).map((p) => p.y));
+  if (!vals.length) { svg.innerHTML = ""; return; }
   const lo = Math.max(0, Math.floor((Math.min(...vals) - 5) / 10) * 10);
   const hi = Math.min(100, Math.ceil((Math.max(...vals) + 3) / 10) * 10);
-  const x = (h) => M.left + (h * (W - M.left - M.right)) / 23;
+  const x = (i) => M.left + (i * (W - M.left - M.right)) / Math.max(1, xMax);
   const y = (v) => M.top + ((hi - v) * (H - M.top - M.bottom)) / (hi - lo);
 
-  const css = getComputedStyle(document.documentElement);
-  const gridCol = css.getPropertyValue("--grid-line").trim();
-  const mutedCol = css.getPropertyValue("--muted").trim();
-
+  const gridCol = cssVar("--border"), mutedCol = cssVar("--muted-foreground");
   let g = "";
   for (let v = lo; v <= hi; v += 10) {
-    g += `<line x1="${M.left}" x2="${W - M.right}" y1="${y(v)}" y2="${y(v)}" stroke="${gridCol}" stroke-width="1"/>` +
-      `<text x="${M.left - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="${mutedCol}" font-family="Geist Mono,monospace">${v}%</text>`;
+    g += `<line x1="${M.left}" x2="${W - M.right}" y1="${y(v)}" y2="${y(v)}" stroke="${gridCol}" stroke-width="0.5"/>` +
+      `<text x="${M.left - 8}" y="${y(v) + 4}" text-anchor="end" font-size="10.5" fill="${mutedCol}" font-family="Geist Mono,monospace">${v}%</text>`;
   }
-  for (let h = 0; h <= 23; h += 3) {
-    g += `<text x="${x(h)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="${mutedCol}" font-family="Geist Mono,monospace">${String(h).padStart(2, "0")}</text>`;
+  for (let i = 0; i <= xMax; i += xTickStep) {
+    g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="10.5" fill="${mutedCol}" font-family="Geist Mono,monospace">${xLabel(i)}</text>`;
   }
   for (const c of visible) {
     let d = "", prev = false;
-    for (let h = 0; h < 24; h++) {
-      const p = series[c][h];
+    for (let i = 0; i <= xMax; i++) {
+      const p = series[c][i];
       if (!p) { prev = false; continue; }
-      d += `${prev ? "L" : "M"}${x(h).toFixed(1)},${y(p.otp).toFixed(1)}`;
+      d += `${prev ? "L" : "M"}${x(i).toFixed(1)},${y(p.y).toFixed(1)}`;
       prev = true;
     }
     g += `<path d="${d}" fill="none" stroke="${cityColor(c)}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    if (xMax <= 10) { // few points (daily chart): mark them
+      for (let i = 0; i <= xMax; i++) {
+        const p = series[c][i];
+        if (p) g += `<circle cx="${x(i)}" cy="${y(p.y)}" r="2.6" fill="${cityColor(c)}"/>`;
+      }
+    }
   }
-  g += `<line id="crosshair" y1="${M.top}" y2="${H - M.bottom}" stroke="${mutedCol}" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>`;
-  g += `<g id="hover-dots"></g>`;
-  g += `<rect id="hit" x="${M.left}" y="${M.top}" width="${W - M.left - M.right}" height="${H - M.top - M.bottom}" fill="transparent"/>`;
+  g += `<line class="cross" y1="${M.top}" y2="${H - M.bottom}" stroke="${mutedCol}" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>`;
+  g += `<g class="hover-dots"></g>`;
+  g += `<rect class="hit" x="${M.left}" y="${M.top}" width="${W - M.left - M.right}" height="${H - M.top - M.bottom}" fill="transparent"/>`;
   svg.innerHTML = g;
 
-  const tip = $("hourly-tooltip");
-  const hit = svg.querySelector("#hit");
-  const cross = svg.querySelector("#crosshair");
-  const dotsG = svg.querySelector("#hover-dots");
+  const tip = $(tipId);
+  const hit = svg.querySelector(".hit");
+  const cross = svg.querySelector(".cross");
+  const dotsG = svg.querySelector(".hover-dots");
   const move = (ev) => {
     const rect = svg.getBoundingClientRect();
     const px = ((ev.clientX - rect.left) / rect.width) * W;
-    const h = Math.max(0, Math.min(23, Math.round(((px - M.left) * 23) / (W - M.left - M.right))));
-    cross.setAttribute("x1", x(h)); cross.setAttribute("x2", x(h));
+    const i = Math.max(0, Math.min(xMax, Math.round(((px - M.left) * xMax) / (W - M.left - M.right))));
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i));
     cross.setAttribute("visibility", "visible");
-    const at = visible.map((c) => ({ c, p: series[c][h] })).filter((d) => d.p).sort((a, b) => b.p.otp - a.p.otp);
+    const at = visible.map((c) => ({ c, p: series[c][i] })).filter((d) => d.p).sort((a, b) => b.p.y - a.p.y);
     dotsG.innerHTML = at.map((d) =>
-      `<circle cx="${x(h)}" cy="${y(d.p.otp)}" r="4" fill="${cityColor(d.c)}" stroke="var(--bg)" stroke-width="2"/>`).join("");
-    tip.innerHTML = `<div class="t-title mono">${String(h).padStart(2, "0")}:00 local</div>` + at.map((d) =>
-      `<div class="t-row"><span class="dot" style="background:${cityColor(d.c)}"></span>${CITIES[d.c].name}<b class="mono">${d.p.otp.toFixed(1)}%</b></div>`).join("");
+      `<circle cx="${x(i)}" cy="${y(d.p.y)}" r="4" fill="${cityColor(d.c)}" stroke="${cssVar("--surface")}" stroke-width="2"/>`).join("");
+    tip.innerHTML = `<div class="t-title mono">${tipTitle(i)}</div>` + at.map((d) =>
+      `<div class="t-row"><span class="dot" style="background:${cityColor(d.c)}"></span>${CITIES[d.c].name}<b class="mono">${d.p.y.toFixed(1)}%</b></div>`).join("");
     tip.hidden = false;
     const wrap = svg.parentElement.getBoundingClientRect();
     const tx = ev.clientX - wrap.left;
@@ -227,6 +235,115 @@ async function renderHourlyChart() {
     cross.setAttribute("visibility", "hidden");
     dotsG.innerHTML = "";
   });
+}
+
+async function renderLineCharts() {
+  const [hourly, daily] = await Promise.all([loadJSON("data/hourly.json"), loadJSON("data/daily.json")]);
+
+  const hSeries = {};
+  for (const r of hourly.rows) (hSeries[r.city_key] ??= [])[r.local_hour] = { y: +r.otp_pct };
+  drawLineChart({
+    svgId: "hourly-chart", tipId: "hourly-tooltip", series: hSeries,
+    xMax: 23, xTickStep: 3,
+    xLabel: (h) => String(h).padStart(2, "0"),
+    tipTitle: (h) => `${String(h).padStart(2, "0")}:00 local`,
+  });
+
+  const dates = [...new Set(daily.rows.map((r) => r.service_date))].sort();
+  const idx = new Map(dates.map((d, i) => [d, i]));
+  const dSeries = {};
+  for (const r of daily.rows) (dSeries[r.city_key] ??= [])[idx.get(r.service_date)] = { y: +r.otp_pct };
+  drawLineChart({
+    svgId: "daily-chart", tipId: "daily-tooltip", series: dSeries,
+    xMax: dates.length - 1, xTickStep: 1,
+    xLabel: (i) => dates[i]?.slice(5).replace("-", "/") ?? "",
+    tipTitle: (i) => dates[i] ?? "",
+  });
+}
+
+// ---------- delay distribution small multiples ----------
+async function renderDist() {
+  const [dist, summary] = await Promise.all([loadJSON("data/dist.json"), loadJSON("data/summary.json")]);
+  const byCity = {};
+  for (const r of dist.rows) (byCity[r.city_key] ??= new Map()).set(+r.bucket_sec, +r.n);
+  const order = summary.standings.map((r) => r.city_key).filter((c) => byCity[c]);
+  const W = 300, H = 46, B0 = -300, B1 = 900, STEP = 30;
+  const nb = (B1 - B0) / STEP + 1;
+  const sem = SEMANTIC[currentTheme()];
+  const mutedCol = cssVar("--muted-foreground");
+
+  $("dist-grid").innerHTML = order.map((c) => {
+    const m = byCity[c];
+    const total = [...m.values()].reduce((a, b) => a + b, 0);
+    const shares = [];
+    let peak = 0;
+    for (let i = 0; i < nb; i++) {
+      const s = (m.get(B0 + i * STEP) ?? 0) / total;
+      shares.push(s);
+      peak = Math.max(peak, s);
+    }
+    const bw = W / nb;
+    const bars = shares.map((s, i) => {
+      const sec = B0 + i * STEP;
+      const col = sec < -60 ? sem.early : sec < 60 ? sem.good : sec < 300 ? sem.warn : sem.bad;
+      const h = Math.max(s > 0 ? 1 : 0, (s / peak) * (H - 12));
+      return `<rect x="${(i * bw).toFixed(1)}" y="${(H - h).toFixed(1)}" width="${(bw - 0.6).toFixed(1)}" height="${h.toFixed(1)}" fill="${col}"><title>${sec >= 0 ? "+" : ""}${sec}s to ${sec + STEP >= 0 ? "+" : ""}${sec + STEP}s: ${(s * 100).toFixed(1)}% of events</title></rect>`;
+    }).join("");
+    const zeroX = ((0 - B0) / STEP) * bw;
+    const share5 = shares.slice(0, nb).reduce((a, s, i) => (B0 + i * STEP >= 300 ? a + s : a), 0);
+    return `<div class="dist-cell">
+      <div class="dist-label"><span class="dot" style="background:${cityColor(c)}"></span>${CITIES[c].name}
+        <span class="mono">${(share5 * 100).toFixed(1)}% beyond +5 min</span></div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${CITIES[c].name} delay distribution">
+        ${bars}<line x1="${zeroX}" x2="${zeroX}" y1="0" y2="${H}" stroke="${mutedCol}" stroke-width="0.8" stroke-dasharray="2 2"/>
+      </svg>
+    </div>`;
+  }).join("") + `<div class="footnote" style="grid-column:1/-1">Dashed line = exactly on schedule; blue early · green on time
+    · amber 1–5 min late · red beyond. Tails clamp at −5 and +15 minutes.</div>`;
+}
+
+// ---------- mode split table ----------
+async function renderModes() {
+  const [modes, summary] = await Promise.all([loadJSON("data/modes.json"), loadJSON("data/summary.json")]);
+  const MODES = ["metro", "rail", "tram", "bus", "ferry", "other"];
+  const byCity = {};
+  const seen = new Set();
+  for (const r of modes.rows) {
+    (byCity[r.city_key] ??= {})[r.mode] = { otp: +r.otp_pct, events: +r.events };
+    seen.add(r.mode);
+  }
+  const cols = MODES.filter((m) => seen.has(m));
+  const order = summary.standings.map((r) => r.city_key).filter((c) => byCity[c]);
+  const head = `<tr><th>city</th>${cols.map((m) => `<th class="num">${m}</th>`).join("")}</tr>`;
+  const rows = order.map((c) => {
+    const cells = cols.map((m) => {
+      const v = byCity[c][m];
+      return `<td class="num mono">${v ? `<span title="${fmt(v.events)} scored events">${v.otp.toFixed(1)}%</span>` : ""}</td>`;
+    }).join("");
+    return `<tr><td><span class="city-cell"><span class="dot" style="background:${cityColor(c)}"></span>${CITIES[c].name}</span></td>${cells}</tr>`;
+  }).join("");
+  $("modes-table").innerHTML = `<table class="data-table">${head}${rows}</table>` +
+    `<p class="footnote">Cells under 5,000 scored events are suppressed. Hover a cell for its evidence count.</p>`;
+}
+
+// ---------- best / worst routes ----------
+function routeTable(rows) {
+  const body = rows.map((r) => {
+    const what = r.long_name && r.long_name !== r.label ? esc(String(r.long_name).slice(0, 30).toLowerCase()) : r.mode;
+    const name = `${CITIES[r.city_key].name.toLowerCase()} · ${what}`;
+    return `<tr>
+      <td><span class="city-cell"><span class="dot" style="background:${cityColor(r.city_key)}"></span>
+        <span><b>${esc(r.label)}</b> <span class="route-name">${name}</span></span></span></td>
+      <td class="num mono">${fmt(r.events)}</td>
+      <td class="num mono">${Number(r.otp_pct).toFixed(1)}%</td>
+    </tr>`;
+  }).join("");
+  return `<table class="data-table"><tr><th>route</th><th class="num">events</th><th class="num">on-time</th></tr>${body}</table>`;
+}
+async function renderRoutes() {
+  const r = await loadJSON("data/routes.json");
+  $("routes-best").innerHTML = routeTable(r.best);
+  $("routes-worst").innerHTML = routeTable(r.worst);
 }
 
 // ---------- deck.gl maps ----------
@@ -343,11 +460,24 @@ function renderTabs() {
     b.addEventListener("click", () => renderCityMap(b.dataset.city, true)));
 }
 
+// ---------- reveal on scroll ----------
+function setupReveal() {
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) { e.target.classList.add("is-visible"); io.unobserve(e.target); }
+    }
+  }, { rootMargin: "0px 0px -40px 0px" });
+  document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+}
+
 // ---------- theme toggle + boot ----------
 function rethemeAll() {
   renderStandings();
-  renderHourlyLegend();
-  renderHourlyChart();
+  renderChartLegend();
+  renderLineCharts();
+  renderDist();
+  renderModes();
+  renderRoutes();
   renderHero();
   renderCityMap(activeCity, false);
 }
@@ -365,12 +495,16 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
 let resizeT = null;
 addEventListener("resize", () => {
   clearTimeout(resizeT);
-  resizeT = setTimeout(renderHourlyChart, 150);
+  resizeT = setTimeout(renderLineCharts, 150);
 });
 
 renderTiles();
 renderStandings();
-renderHourlyLegend().then(renderHourlyChart);
+renderChartLegend().then(renderLineCharts);
+renderDist();
+renderModes();
+renderRoutes();
 renderHero();
 renderTabs();
 renderCityMap("nyc", true);
+setupReveal();

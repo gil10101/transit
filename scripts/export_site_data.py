@@ -188,6 +188,54 @@ hourly = q("""
 """)
 dump("hourly.json", {"as_of": AS_OF, "rows": hourly})
 
+# --- dist.json: delay distribution, 30s buckets clamped to [-300, 900] ------
+dist = q("""
+    select city_key,
+           cast(floor(greatest(-300, least(900, delay_arr_sec)) / 30) * 30 as int)
+               as bucket_sec,
+           count(*) as n
+    from fct_stop_events
+    where otp_band is not null and delay_arr_sec is not null
+    group by 1, 2
+    order by 1, 2
+""")
+dump("dist.json", {"as_of": AS_OF, "rows": dist})
+
+# --- modes.json: on-time share by city x mode -------------------------------
+modes = q("""
+    select e.city_key, r.mode,
+           count(*) as events,
+           round(100 * avg(case when e.otp_band = 'on_time' then 1.0 else 0.0 end), 1)
+               as otp_pct
+    from fct_stop_events e
+    join dim_route r on r.route_key = e.route_key
+    where e.otp_band is not null and r.mode is not null
+    group by 1, 2
+    having count(*) >= 5000
+    order by 1, 2
+""")
+dump("modes.json", {"as_of": AS_OF, "rows": modes})
+
+# --- routes.json: most / least reliable routes (evidence-weighted) ----------
+ROUTE_AGG = """
+    select r.city_key, r.route_id,
+           max(coalesce(dr.route_short_name, r.route_id)) as label,
+           max(dr.route_long_name) as long_name,
+           max(r.mode) as mode,
+           sum(r.banded_events) as events,
+           round(100 * sum(r.otp_pct * r.banded_events)
+               / nullif(sum(case when r.otp_pct is not null then r.banded_events end), 0), 1)
+               as otp_pct
+    from fct_route_reliability_daily r
+    left join dim_route dr on dr.route_key = r.route_key
+    group by 1, 2
+    having sum(r.banded_events) >= 2000
+       and sum(case when r.otp_pct is not null then r.banded_events end) > 0
+"""
+best = q(f"select * from ({ROUTE_AGG}) order by otp_pct desc, events desc limit 8")
+worst = q(f"select * from ({ROUTE_AGG}) order by otp_pct asc, events desc limit 8")
+dump("routes.json", {"as_of": AS_OF, "best": best, "worst": worst})
+
 # --- maps/*.json -----------------------------------------------------------
 if "--skip-maps" in sys.argv:
     print("maps skipped", flush=True)
