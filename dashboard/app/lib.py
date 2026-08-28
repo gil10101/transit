@@ -128,6 +128,10 @@ def brand() -> None:
 html, body, [data-testid="stAppViewContainer"] * {
   font-family: 'Geist', system-ui, sans-serif;
 }
+/* the global font override must not eat Streamlit's icon ligatures */
+[data-testid="stIconMaterial"], .material-symbols-rounded {
+  font-family: 'Material Symbols Rounded' !important;
+}
 h1 { font-size: 36px !important; font-weight: 500 !important; letter-spacing: -0.02em; }
 h2, h3 {
   font-size: 14px !important; font-weight: 600 !important;

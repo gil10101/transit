@@ -54,7 +54,7 @@ w[0].metric("Trips observed", f"{int(trips.observed):,}")
 w[1].metric("Stop events scored", f"{census.stop_events / 1e6:.1f}M")
 w[2].metric("Cities in gold", f"{int(census.cities)}")
 w[3].metric("Service days", f"{int(census.service_days)}")
-w[4].metric("Latest service day", str(census.latest_day))
+w[4].metric("Latest service day", f"{census.latest_day:%b %d}")
 
 if scores.empty:
     st.subheader("Progress toward a scoreable month")
@@ -67,7 +67,7 @@ if scores.empty:
     for col, (key, meta) in zip(cols, CITIES.items(), strict=True):
         row = progress[progress.city_key == key]
         days = int(row.judged_days.iloc[0]) if not row.empty else 0
-        col.metric(meta["name"], f"{days} / {MIN_DAYS}", "judged days", delta_color="off")
+        col.metric(meta["name"], f"{days} / {MIN_DAYS}")
 
     st.subheader("Provisional metrics (service-weighted, closed judged days only)")
     st.caption(

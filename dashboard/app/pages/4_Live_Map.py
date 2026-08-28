@@ -60,8 +60,8 @@ lag["lag_min"] = ((now - lag.latest).dt.total_seconds() / 60).round().astype(int
 cols = st.columns(len(lag) if len(lag) else 1)
 for col, row in zip(cols, lag.itertuples(), strict=False):
     col.metric(
-        city_name(row.city_key),
-        f"{int(row.vehicles):,} vehicles",
+        f"{city_name(row.city_key)} vehicles",
+        f"{int(row.vehicles):,}",
         f"{row.lag_min} min lag",
         delta_color="off",
     )
