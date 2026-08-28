@@ -114,3 +114,6 @@ dashboard-smoke:
 # to Vercel. Data is committed so the deploy is a plain static publish.
 site-data:
 	uv run python scripts/export_site_data.py
+
+site-serve:
+	uv run python scripts/serve_site.py

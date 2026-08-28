@@ -290,10 +290,20 @@ h2 {
 /* ---------- hero ---------- */
 .hero { position: relative; height: min(74vh, 680px); min-height: 500px; }
 #hero-map { position: absolute; inset: 0; }
+/* overlays ride the same centered 1400px track as every section, so the
+   panel's left edge lines up with the cards at every viewport width */
+.hero-track {
+  position: absolute;
+  inset: 0;
+  max-width: 1400px;
+  margin: 0 auto;
+  pointer-events: none;
+}
+.hero-track > * { pointer-events: auto; }
 .hero-panel {
   position: absolute;
   top: 24px;
-  left: 24px;
+  left: 16px;
   z-index: 10;
   max-width: 460px;
   background: var(--panel);
@@ -313,7 +323,7 @@ h2 {
 .hero-legend {
   position: absolute;
   bottom: 22px;
-  left: 24px;
+  left: 16px;
   z-index: 10;
   display: flex;
   gap: 14px;

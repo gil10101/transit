@@ -11,7 +11,7 @@
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous"></script>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
 <script src="https://unpkg.com/deck.gl@9.0.36/dist.min.js" integrity="sha384-w/54/rLWDJgv9c3QdtRYUtL5h1sXLHGM4wH9frLq+CMEpTUpzCYAYpUsxtgPylpc" crossorigin="anonymous"></script>
-<link rel="stylesheet" href="styles.css?v=4">
+<link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
 
@@ -46,6 +46,7 @@
 <!-- ======================= hero ======================= -->
 <section class="hero">
   <div id="hero-map" aria-label="New York subway network drawn from the warehouse: every route, station delays, and the latest vehicle fixes"></div>
+  <div class="hero-track">
   <div class="hero-panel">
     <div class="eyebrow">TRANSIT PULSE</div>
     <h1>Which city runs the most reliable transit?</h1>
@@ -57,6 +58,7 @@
     <span id="as-of-hero" class="mono"></span>.</p>
   </div>
   <div class="hero-legend" id="hero-legend"></div>
+  </div>
 </section>
 
 <!-- ======================= standings ======================= -->
