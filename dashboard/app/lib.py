@@ -89,18 +89,27 @@ def q(sql: str, params: dict | None = None) -> pd.DataFrame:
     return df
 
 
+def _mix(a: tuple, b: tuple, t: float, alpha: int) -> list[int]:
+    return [int(a[i] + (b[i] - a[i]) * t) for i in range(3)] + [alpha]
+
+
+# gillu.me / skynyc light data palette: good #059669, warn #d97700, bad #cc0000,
+# early toward the data blue #2563eb. Same semantic hues as the portfolio site.
+_GOOD, _WARN, _BAD, _EARLY = (5, 150, 105), (217, 119, 0), (204, 0, 0), (37, 99, 235)
+
+
 def delay_color(delay_sec: float) -> list[int]:
-    """Shared color scale for delay maps: green at 0, amber at +150s, red at
+    """Shared color scale for delay maps: good at 0, warn at +150s, bad at
     +300s and beyond; early (negative) shades toward blue. Clamped so every city
     page reads on the same scale — the whole point of the comparison."""
     d = max(-120.0, min(600.0, float(delay_sec)))
-    if d <= 0:  # early: green at 0 -> blue at -120s, continuous with the late ramp
-        t = min(1.0, -d / 120.0)
-        return [int(46 + 54 * t), int(160 - 10 * t), int(67 + 188 * t), 160]
-    if d <= 300:  # 0..300s: green -> amber -> red
-        t = d / 300.0
-        return [int(46 + (219 - 46) * t), int(160 - 70 * t), int(67 - 40 * t), 170]
-    return [219, 50, 40, 200]
+    if d <= 0:  # early: good at 0 -> blue at -120s, continuous with the late ramp
+        return _mix(_GOOD, _EARLY, min(1.0, -d / 120.0), 160)
+    if d <= 150:
+        return _mix(_GOOD, _WARN, d / 150.0, 170)
+    if d <= 300:
+        return _mix(_WARN, _BAD, (d - 150) / 150.0, 170)
+    return [204, 0, 0, 200]
 
 
 def empty_state(msg: str) -> None:
