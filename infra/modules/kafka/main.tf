@@ -66,12 +66,23 @@ resource "aws_instance" "kafka" {
       -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT \
       -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
       -e KAFKA_AUTO_CREATE_TOPICS_ENABLE=true \
+      -e KAFKA_LOG_DIRS=/var/lib/kafka/data \
       -e KAFKA_LOG_RETENTION_HOURS=24 \
       -e KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS=300000 \
       apache/kafka:3.8.0
     # Retention is a DISK budget, not an archive: raw S3 is the archive and the
     # 2-hourly drains never read past a few hours back. 168h filled a 30GB disk
     # in 5.8 days and killed the broker (2026-08-28). 24h ≈ 5-6GB steady state.
+    #
+    # KAFKA_LOG_DIRS must be set explicitly: without it the apache/kafka image
+    # defaults log.dirs to /tmp/kafka-logs INSIDE the container, so the bind
+    # mount above sat empty and segments lived in the overlay layer — data
+    # survived restarts/reboots but not a container recreate. Discovered
+    # 2026-08-28 post-incident (host /var/kafka-data was 0 bytes while the
+    # broker held 9GB). Loss on recreate is tolerable for a 24h buffer, but the
+    # mount should do what it says. Live box still runs the old layout; this
+    # takes effect on next recreate (broker starts empty there — fine, pollers
+    # refill and raw S3 has everything).
   EOF
 
   tags = { Name = "${var.prefix}-kafka" }
