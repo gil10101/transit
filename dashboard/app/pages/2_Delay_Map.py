@@ -5,9 +5,10 @@ and someone else glowing red are readable at a glance as the same units."""
 
 import pydeck as pdk
 import streamlit as st
-from lib import CITIES, delay_color, empty_state, q
+from lib import brand, CITIES, delay_color, empty_state, q
 
 st.set_page_config(page_title="Delay map", page_icon="🗺️", layout="wide")
+brand()
 st.title("Where the delay lives")
 
 days = st.sidebar.slider("Closed days to include", 1, 30, 7)
@@ -32,10 +33,9 @@ hexes = q(
 )
 
 st.caption(
-    f"Mean arrival delay per hexagon over the last {days} days, scored events only "
-    "(no ADDED trips, no skipped stops, no stale echoes — same filters as OTP). "
-    "Hexes with under 20 events are dropped. One color scale for every city: "
-    "blue = early, green = on time, red = 5+ minutes late."
+    f"Mean arrival delay per H3 hexagon, last {days} closed days, scored events "
+    "only — same filters as OTP, hexes under 20 events dropped. One shared scale "
+    "for every city: blue early · green on time · red 5+ min late."
 )
 
 if hexes.empty:

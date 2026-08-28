@@ -5,9 +5,10 @@ VP; Swiss LA API is trip-updates only), so they are honestly absent here."""
 
 import pydeck as pdk
 import streamlit as st
-from lib import CITIES, city_name, empty_state, q
+from lib import brand, CITIES, city_name, empty_state, q
 
 st.set_page_config(page_title="Live map", page_icon="📍", layout="wide")
+brand()
 st.title("Vehicles on the road (last snapshot)")
 
 vp = q("""

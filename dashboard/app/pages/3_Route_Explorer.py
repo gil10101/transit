@@ -8,9 +8,10 @@ hour column of the heatmap."""
 import pandas as pd
 import pydeck as pdk
 import streamlit as st
-from lib import CITIES, city_name, delay_color, empty_state, q
+from lib import brand, CITIES, city_name, delay_color, empty_state, q
 
 st.set_page_config(page_title="Route explorer", page_icon="🚌", layout="wide")
+brand()
 st.title("Route explorer")
 
 city = st.sidebar.selectbox("City", list(CITIES.keys()), format_func=city_name)

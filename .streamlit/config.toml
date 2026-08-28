@@ -1,0 +1,8 @@
+# gillu.me design-system theme (light / Cursor palette). Fonts are injected as
+# CSS by lib.brand() — Streamlit's font option cannot load Geist.
+[theme]
+base = "light"
+primaryColor = "#0066cc"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f5f5f5"
+textColor = "#1a1a1a"

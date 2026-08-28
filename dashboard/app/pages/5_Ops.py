@@ -4,9 +4,10 @@ detector — a green chain with a stale gold is the failure mode this project ha
 actually had)."""
 
 import streamlit as st
-from lib import city_name, q
+from lib import brand, city_name, q
 
 st.set_page_config(page_title="Ops", page_icon="🔧", layout="wide")
+brand()
 st.title("Pipeline ops")
 
 st.subheader("Feed freshness (silver, minutes since last prediction)")

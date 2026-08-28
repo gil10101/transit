@@ -4,11 +4,16 @@ judged days, so until a city crosses that bar this page shows PROGRESS toward a
 score, clearly labeled provisional, rather than dressing 4 days up as a ranking."""
 
 import streamlit as st
-from lib import CITIES, city_name, empty_state, q
+from lib import brand, CITIES, city_name, empty_state, q
 
 st.set_page_config(page_title="Transit Pulse", page_icon="🚇", layout="wide")
+brand()
 
 st.title("Transit Pulse — city reliability scorecard")
+st.caption(
+    "Which cities run the most reliable public transit — measured, not asserted. "
+    "7 cities · 4 countries · live GTFS-RT scored against each agency's own schedule."
+)
 
 scores = q("""
     select city_key, month, score_0_100, s_wait, s_otp, s_cancel, s_bunch,

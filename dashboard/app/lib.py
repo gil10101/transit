@@ -105,3 +105,37 @@ def delay_color(delay_sec: float) -> list[int]:
 
 def empty_state(msg: str) -> None:
     st.info(msg, icon="🛰️")
+
+
+def brand() -> None:
+    """gillu.me design system, applied on top of .streamlit/config.toml colors:
+    Geist Sans everywhere, Geist Mono for numbers, 36px/500 page titles,
+    uppercase tracked section headings, hairline sidebar. Call once per page,
+    right after st.set_page_config."""
+    st.markdown(
+        """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
+html, body, [data-testid="stAppViewContainer"] * {
+  font-family: 'Geist', system-ui, sans-serif;
+}
+h1 { font-size: 36px !important; font-weight: 500 !important; letter-spacing: -0.02em; }
+h2, h3 {
+  font-size: 14px !important; font-weight: 600 !important;
+  letter-spacing: 0.14em; text-transform: uppercase; color: #666666 !important;
+}
+[data-testid="stCaptionContainer"], .stCaption { color: #666666; }
+[data-testid="stMetricValue"] {
+  font-family: 'Geist Mono', ui-monospace, monospace !important;
+  font-variant-numeric: tabular-nums; font-weight: 500;
+}
+[data-testid="stMetricLabel"] { color: #666666; }
+[data-testid="stSidebar"] {
+  background: #f5f5f5; border-right: 1px solid #e0e0e0;
+}
+[data-testid="stSidebarNav"] span { text-transform: lowercase; font-size: 14px; }
+[data-testid="stHeader"] { background: rgba(255,255,255,0.9); }
+</style>
+""",
+        unsafe_allow_html=True,
+    )
