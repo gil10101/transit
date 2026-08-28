@@ -109,3 +109,8 @@ dashboard:
 # so it is a make target like poll-*, never part of `make test`.
 dashboard-smoke:
 	uv run --group dashboard python scripts/smoke_dashboard.py
+
+# Static portfolio site (site/): re-snapshot warehouse data, then deploy site/
+# to Vercel. Data is committed so the deploy is a plain static publish.
+site-data:
+	uv run python scripts/export_site_data.py

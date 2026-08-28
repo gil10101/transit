@@ -1,0 +1,376 @@
+/* Transit Pulse static site. All data is build-time warehouse snapshots in
+   ./data; the two deck.gl maps and the charts re-render on theme change so the
+   validated light/dark series palettes both get used, never auto-flipped. */
+
+"use strict";
+
+// ---------- city registry (entity-fixed hues, validated light+dark) ----------
+const CITIES = {
+  boston:   { name: "Boston",        src: "MBTA · subway / bus / rail / ferry",  view: [42.34, -71.07, 11.2],  light: "#e34948", dark: "#e66767" },
+  nyc:      { name: "New York",      src: "MTA · 8 subway feeds",                view: [40.73, -73.96, 10.6],  light: "#2a78d6", dark: "#3987e5" },
+  zurich:   { name: "Zurich",        src: "opentransportdata.swiss · ZVV",       view: [47.38, 8.54, 11.0],    light: "#eb6834", dark: "#d95926" },
+  helsinki: { name: "Helsinki",      src: "HSL · bus / tram / metro / rail",     view: [60.20, 24.93, 10.8],   light: "#1baf7a", dark: "#199e70" },
+  dc:       { name: "Washington DC", src: "WMATA · rail + bus",                  view: [38.90, -77.03, 11.0],  light: "#eda100", dark: "#c98500" },
+  toronto:  { name: "Toronto",       src: "TTC · streetcar + bus + subway",      view: [43.72, -79.38, 11.15], light: "#e87ba4", dark: "#d55181" },
+  sf:       { name: "SF Bay Area",   src: "511.org · 30+ agencies",              view: [37.70, -122.30, 9.6],  light: "#008300", dark: "#008300" },
+};
+const VP_ABSENT = {
+  helsinki: "HSL publishes no vehicle positions on its core GTFS-RT feed, so Helsinki shows routes and stop delays only.",
+  zurich: "The Swiss LA API is trip-updates only — no vehicle positions — so Zurich shows routes and stop delays only.",
+};
+
+const MAP_STYLES = {
+  light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+  dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+};
+const SEMANTIC = {
+  light: { good: "#059669", warn: "#d97700", bad: "#cc0000", early: "#2563eb", veh: "26,26,26", glow: "37,99,235", routeAlpha: 95, heroAlpha: 175 },
+  dark:  { good: "#a3be8c", warn: "#ebc88d", bad: "#bf616a", early: "#85c1fc", veh: "216,222,233", glow: "133,193,252", routeAlpha: 80, heroAlpha: 150 },
+};
+
+// ---------- theme ----------
+function storedTheme() {
+  try { return localStorage.getItem("theme"); } catch { return null; }
+}
+function currentTheme() {
+  const t = document.documentElement.getAttribute("data-theme");
+  if (t) return t;
+  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+function applyStoredTheme() {
+  const t = storedTheme();
+  if (t) document.documentElement.setAttribute("data-theme", t);
+}
+function cityColor(key) { return CITIES[key][currentTheme()]; }
+
+// ---------- helpers ----------
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => {
+  n = Number(n);
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+  if (n >= 1e4) return Math.round(n / 1e3) + "k";
+  return n.toLocaleString("en-US");
+};
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const cache = new Map();
+async function loadJSON(path) {
+  if (!cache.has(path)) {
+    cache.set(path, fetch(path).then((r) => {
+      if (!r.ok) throw new Error(`${path}: ${r.status}`);
+      return r.json();
+    }));
+  }
+  return cache.get(path);
+}
+function tile(value, label) {
+  return `<div class="tile"><b>${value}</b><span>${label}</span></div>`;
+}
+
+// ---------- hero + pipeline tiles ----------
+async function renderTiles() {
+  const s = await loadJSON("data/summary.json");
+  const c = s.census;
+  $("as-of").textContent = s.as_of;
+  $("as-of-footer").textContent = s.as_of;
+  $("hero-tiles").innerHTML = [
+    tile(fmt(c.stop_events), "stop events scored"),
+    tile(fmt(s.trips.observed), "trips observed"),
+    tile("7 · 4", "cities · countries"),
+    tile(fmt(c.silver_rows), "rows in silver"),
+    tile(fmt(c.gold_rows), "rows in gold"),
+    tile(c.service_days, "service days live"),
+  ].join("");
+  $("pipeline-tiles").innerHTML = [
+    tile(fmt(c.silver_rows), "silver rows (iceberg)"),
+    tile(fmt(c.gold_rows), "gold rows (dbt marts)"),
+    tile("2h", "drain → dbt cadence"),
+    tile("30s", "poll floor per feed"),
+  ].join("");
+}
+
+// ---------- standings ----------
+function sparkline(points, color) {
+  if (points.length < 2) return `<span class="spark-empty">1 judged day</span>`;
+  const W = 140, H = 30, P = 3;
+  const ys = points.map((p) => p.otp_pct);
+  let lo = Math.min(...ys), hi = Math.max(...ys);
+  if (hi - lo < 4) { // don't let sub-point noise render as a full-amplitude swing
+    const mid = (hi + lo) / 2;
+    lo = mid - 2; hi = mid + 2;
+  }
+  const x = (i) => P + (i * (W - 2 * P)) / (points.length - 1);
+  const y = (v) => hi === lo ? H / 2 : P + ((hi - v) * (H - 2 * P)) / (hi - lo);
+  const d = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.otp_pct).toFixed(1)}`).join("");
+  const dots = points.map((p, i) =>
+    `<circle cx="${x(i).toFixed(1)}" cy="${y(p.otp_pct).toFixed(1)}" r="2.4" fill="${color}">` +
+    `<title>${esc(p.service_date)}: ${p.otp_pct}% on time</title></circle>`).join("");
+  return `<svg class="spark" width="${W}" height="${H}" role="img" aria-label="daily on-time trend">` +
+    `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"/>${dots}</svg>`;
+}
+
+async function renderStandings() {
+  const [s, daily] = await Promise.all([loadJSON("data/summary.json"), loadJSON("data/daily.json")]);
+  const byCity = {};
+  for (const r of daily.rows) (byCity[r.city_key] ??= []).push(r);
+  const head = `<div class="standing-row head"><span></span><span>city</span>` +
+    `<span class="optional">daily on-time</span><span class="num">on-time</span>` +
+    `<span class="num">excess wait</span><span class="num optional">bunching</span>` +
+    `<span class="num optional">cancelled</span><span class="num">judged</span></div>`;
+  const rows = s.standings.map((r, i) => {
+    const color = cityColor(r.city_key);
+    const name = CITIES[r.city_key]?.name ?? r.city_key;
+    return `<div class="standing-row">
+      <span class="rank mono">${i + 1}</span>
+      <span class="city"><span class="dot" style="background:${color}"></span>${name}</span>
+      <span class="optional">${sparkline(byCity[r.city_key] ?? [], color)}</span>
+      <span class="num mono otp">${r.otp_pct == null ? "—" : Number(r.otp_pct).toFixed(1) + "%"}</span>
+      <span class="num mono">${r.ewt_sec == null ? "—" : r.ewt_sec + "s"}</span>
+      <span class="num mono optional">${r.bunching_pct == null ? "—" : r.bunching_pct + "%"}</span>
+      <span class="num mono optional">${r.cancel_pct == null ? "—" : r.cancel_pct + "%"}</span>
+      <span class="num mono">${r.judged_days} / 20</span>
+    </div>`;
+  }).join("");
+  $("standings-rows").innerHTML = head + rows;
+}
+
+// ---------- hourly chart ----------
+const hidden = new Set();
+
+async function renderHourlyLegend() {
+  const s = await loadJSON("data/summary.json");
+  $("hourly-legend").innerHTML = s.standings.map((r) => {
+    const key = r.city_key;
+    return `<button class="chip" data-city="${key}" aria-pressed="${!hidden.has(key)}">` +
+      `<span class="dot" style="background:${cityColor(key)}"></span>${CITIES[key].name}</button>`;
+  }).join("");
+  $("hourly-legend").querySelectorAll(".chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const key = chip.dataset.city;
+      const visible = [...Object.keys(CITIES)].filter((c) => !hidden.has(c));
+      if (hidden.has(key)) hidden.delete(key);
+      else if (visible.length === 1 && visible[0] === key) Object.keys(CITIES).forEach((c) => hidden.delete(c)); // un-isolate
+      else if (visible.length > 1 && !hidden.size) { Object.keys(CITIES).forEach((c) => c !== key && hidden.add(c)); } // isolate
+      else hidden.add(key);
+      renderHourlyLegend();
+      renderHourlyChart();
+    });
+  });
+}
+
+async function renderHourlyChart() {
+  const data = await loadJSON("data/hourly.json");
+  const svg = $("hourly-chart");
+  const W = svg.clientWidth || 900, H = 340;
+  const M = { top: 14, right: 18, bottom: 30, left: 44 };
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+
+  const series = {};
+  for (const r of data.rows) (series[r.city_key] ??= [])[r.local_hour] = { otp: +r.otp_pct, events: +r.events };
+  const visible = Object.keys(CITIES).filter((c) => series[c] && !hidden.has(c));
+  const vals = visible.flatMap((c) => series[c].filter(Boolean).map((p) => p.otp));
+  const lo = Math.max(0, Math.floor((Math.min(...vals) - 5) / 10) * 10);
+  const hi = Math.min(100, Math.ceil((Math.max(...vals) + 3) / 10) * 10);
+  const x = (h) => M.left + (h * (W - M.left - M.right)) / 23;
+  const y = (v) => M.top + ((hi - v) * (H - M.top - M.bottom)) / (hi - lo);
+
+  const css = getComputedStyle(document.documentElement);
+  const gridCol = css.getPropertyValue("--grid-line").trim();
+  const mutedCol = css.getPropertyValue("--muted").trim();
+
+  let g = "";
+  for (let v = lo; v <= hi; v += 10) {
+    g += `<line x1="${M.left}" x2="${W - M.right}" y1="${y(v)}" y2="${y(v)}" stroke="${gridCol}" stroke-width="1"/>` +
+      `<text x="${M.left - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="${mutedCol}" font-family="Geist Mono,monospace">${v}%</text>`;
+  }
+  for (let h = 0; h <= 23; h += 3) {
+    g += `<text x="${x(h)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="${mutedCol}" font-family="Geist Mono,monospace">${String(h).padStart(2, "0")}</text>`;
+  }
+  for (const c of visible) {
+    let d = "", prev = false;
+    for (let h = 0; h < 24; h++) {
+      const p = series[c][h];
+      if (!p) { prev = false; continue; }
+      d += `${prev ? "L" : "M"}${x(h).toFixed(1)},${y(p.otp).toFixed(1)}`;
+      prev = true;
+    }
+    g += `<path d="${d}" fill="none" stroke="${cityColor(c)}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }
+  g += `<line id="crosshair" y1="${M.top}" y2="${H - M.bottom}" stroke="${mutedCol}" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>`;
+  g += `<g id="hover-dots"></g>`;
+  g += `<rect id="hit" x="${M.left}" y="${M.top}" width="${W - M.left - M.right}" height="${H - M.top - M.bottom}" fill="transparent"/>`;
+  svg.innerHTML = g;
+
+  const tip = $("hourly-tooltip");
+  const hit = svg.querySelector("#hit");
+  const cross = svg.querySelector("#crosshair");
+  const dotsG = svg.querySelector("#hover-dots");
+  const move = (ev) => {
+    const rect = svg.getBoundingClientRect();
+    const px = ((ev.clientX - rect.left) / rect.width) * W;
+    const h = Math.max(0, Math.min(23, Math.round(((px - M.left) * 23) / (W - M.left - M.right))));
+    cross.setAttribute("x1", x(h)); cross.setAttribute("x2", x(h));
+    cross.setAttribute("visibility", "visible");
+    const at = visible.map((c) => ({ c, p: series[c][h] })).filter((d) => d.p).sort((a, b) => b.p.otp - a.p.otp);
+    dotsG.innerHTML = at.map((d) =>
+      `<circle cx="${x(h)}" cy="${y(d.p.otp)}" r="4" fill="${cityColor(d.c)}" stroke="var(--bg)" stroke-width="2"/>`).join("");
+    tip.innerHTML = `<div class="t-title mono">${String(h).padStart(2, "0")}:00 local</div>` + at.map((d) =>
+      `<div class="t-row"><span class="dot" style="background:${cityColor(d.c)}"></span>${CITIES[d.c].name}<b class="mono">${d.p.otp.toFixed(1)}%</b></div>`).join("");
+    tip.hidden = false;
+    const wrap = svg.parentElement.getBoundingClientRect();
+    const tx = ev.clientX - wrap.left;
+    tip.style.left = Math.min(tx + 16, wrap.width - tip.offsetWidth - 8) + "px";
+    tip.style.top = Math.max(0, ev.clientY - wrap.top - tip.offsetHeight - 12) + "px";
+  };
+  hit.addEventListener("mousemove", move);
+  hit.addEventListener("mouseleave", () => {
+    tip.hidden = true;
+    cross.setAttribute("visibility", "hidden");
+    dotsG.innerHTML = "";
+  });
+}
+
+// ---------- deck.gl maps ----------
+const MODE_COLOR = { 0: [255, 184, 76], 1: [126, 166, 255], 2: [186, 134, 255], 3: [86, 156, 214], 4: [81, 207, 208], 5: [255, 140, 120], 7: [255, 140, 120], 11: [86, 156, 214], 12: [186, 134, 255] };
+const hex2rgb = (h) => {
+  if (!h) return null;
+  h = h.replace("#", "");
+  if (h.length < 6) return null;
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+};
+const parsePath = (s) => s.split(",").map((p) => { const a = p.split(" "); return [+a[0], +a[1]]; });
+
+function mapLayers(id, data, theme, hero) {
+  const sem = SEMANTIC[theme];
+  const OK = hex2rgb(sem.good), WARN = hex2rgb(sem.warn), BAD = hex2rgb(sem.bad), EARLY = hex2rgb(sem.early);
+  const delayColor = (d) => d == null ? [128, 128, 128] : d < -60 ? EARLY : d < 60 ? OK : d < 300 ? WARN : BAD;
+  const routeColor = (r) => {
+    const info = data.routes[r] || {};
+    return hex2rgb(info.route_color) || MODE_COLOR[+info.route_type] || [96, 140, 190];
+  };
+  const veh = sem.veh.split(",").map(Number), glow = sem.glow.split(",").map(Number);
+  const shapes = data.shapes.map((s) => ({ path: parsePath(s.path), color: routeColor(s.route_id) }));
+  return [
+    new deck.PathLayer({
+      id: id + "-routes", data: shapes, getPath: (d) => d.path,
+      getColor: (d) => [...d.color, hero ? sem.heroAlpha : sem.routeAlpha],
+      getWidth: hero ? 3.1 : 1.7, widthUnits: "pixels", capRounded: true, jointRounded: true,
+    }),
+    new deck.ScatterplotLayer({
+      id: id + "-stops", data: data.stops, getPosition: (d) => [+d.lon, +d.lat],
+      getFillColor: (d) => [...delayColor(d.delay == null ? null : +d.delay), 215],
+      getRadius: hero ? 3.9 : 2.4, radiusUnits: "pixels", pickable: !hero,
+    }),
+    new deck.ScatterplotLayer({
+      id: id + "-veh-glow", data: data.vehicles, getPosition: (d) => [+d.lon, +d.lat],
+      getFillColor: [...glow, 48], getRadius: 5.5, radiusUnits: "pixels",
+    }),
+    new deck.ScatterplotLayer({
+      id: id + "-veh", data: data.vehicles, getPosition: (d) => [+d.lon, +d.lat],
+      getFillColor: [...veh, 235], getRadius: 2.2, radiusUnits: "pixels",
+    }),
+  ];
+}
+
+function legendHTML(theme, vehicles) {
+  const sem = SEMANTIC[theme];
+  return `<span><span class="dot" style="background:${sem.early}"></span>early</span>
+    <span><span class="dot" style="background:${sem.good}"></span>on time</span>
+    <span><span class="dot" style="background:${sem.warn}"></span>1–5 min late</span>
+    <span><span class="dot" style="background:${sem.bad}"></span>&gt;5 min late</span>` +
+    (vehicles ? `<span><span class="dot" style="background:rgb(${sem.veh});box-shadow:0 0 5px rgb(${sem.glow})"></span>vehicle · latest fix</span>` : "");
+}
+
+let heroDeck = null, cityDeck = null, activeCity = "nyc";
+
+async function renderHero() {
+  const theme = currentTheme();
+  const data = await loadJSON("data/maps/nyc.json");
+  const props = {
+    mapStyle: MAP_STYLES[theme],
+    layers: mapLayers("hero", data, theme, true),
+    initialViewState: { latitude: 40.717, longitude: -73.925, zoom: 11.6, pitch: 52, bearing: -18 },
+    controller: false,
+  };
+  if (heroDeck) heroDeck.setProps(props);
+  else heroDeck = new deck.DeckGL({ container: "hero-map", mapLib: maplibregl, ...props });
+  $("hero-legend").innerHTML = legendHTML(theme, data.vehicles.length > 0);
+}
+
+async function renderCityMap(key, recenter) {
+  activeCity = key;
+  const theme = currentTheme();
+  const meta = CITIES[key];
+  const frame = document.querySelector(".map-frame");
+  let loading = frame.querySelector(".map-loading");
+  if (!cache.has(`data/maps/${key}.json`) && !loading) {
+    loading = document.createElement("div");
+    loading.className = "map-loading";
+    loading.textContent = "loading network…";
+    frame.appendChild(loading);
+  }
+  const [data, summary] = await Promise.all([loadJSON(`data/maps/${key}.json`), loadJSON("data/summary.json")]);
+  frame.querySelector(".map-loading")?.remove();
+  if (activeCity !== key) return; // a later tab click won the race
+  const [lat, lon, zoom] = meta.view;
+  const props = {
+    mapStyle: MAP_STYLES[theme],
+    layers: mapLayers("city", data, theme, false),
+    getTooltip: ({ layer, object }) =>
+      layer?.id === "city-stops" && object ? { text: `${object.delay}s mean delay` } : null,
+  };
+  if (recenter) props.initialViewState = { latitude: lat, longitude: lon, zoom, pitch: 0, bearing: 0 };
+  if (cityDeck) cityDeck.setProps(props);
+  else cityDeck = new deck.DeckGL({ container: "city-map", mapLib: maplibregl, controller: true, initialViewState: { latitude: lat, longitude: lon, zoom, pitch: 0, bearing: 0 }, ...props });
+
+  const st = summary.standings.find((r) => r.city_key === key) ?? {};
+  $("city-panel").innerHTML = `<h3>${meta.name}</h3><div class="src">${esc(meta.src)}</div>
+    <div class="tile-grid">
+      ${tile(st.otp_pct != null ? Number(st.otp_pct).toFixed(1) + "%" : "—", "on time")}
+      ${tile(fmt(st.events ?? 0), "stop events")}
+      ${tile(data.shapes.length, "route paths")}
+      ${tile(data.vehicles.length || "—", "vehicles · last fix")}
+    </div>`;
+  $("city-legend").innerHTML = legendHTML(theme, data.vehicles.length > 0);
+  $("city-note").textContent = VP_ABSENT[key] ?? "";
+  document.querySelectorAll("#city-tabs button").forEach((b) =>
+    b.setAttribute("aria-selected", String(b.dataset.city === key)));
+}
+
+function renderTabs() {
+  $("city-tabs").innerHTML = Object.entries(CITIES).map(([key, c]) =>
+    `<button role="tab" data-city="${key}" aria-selected="${key === activeCity}">${c.name.toLowerCase()}</button>`).join("");
+  $("city-tabs").querySelectorAll("button").forEach((b) =>
+    b.addEventListener("click", () => renderCityMap(b.dataset.city, true)));
+}
+
+// ---------- theme toggle + boot ----------
+function rethemeAll() {
+  renderStandings();
+  renderHourlyLegend();
+  renderHourlyChart();
+  renderHero();
+  renderCityMap(activeCity, false);
+}
+
+applyStoredTheme();
+$("theme-toggle").addEventListener("click", () => {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  try { localStorage.setItem("theme", next); } catch { /* private mode */ }
+  rethemeAll();
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if (!document.documentElement.getAttribute("data-theme")) rethemeAll();
+});
+let resizeT = null;
+addEventListener("resize", () => {
+  clearTimeout(resizeT);
+  resizeT = setTimeout(renderHourlyChart, 150);
+});
+
+renderTiles();
+renderStandings();
+renderHourlyLegend().then(renderHourlyChart);
+renderHero();
+renderTabs();
+renderCityMap("nyc", true);

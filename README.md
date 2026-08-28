@@ -33,6 +33,9 @@ dbt (dagster-dbt, 2-hourly chain: drain → refresh → build → test)
         ▼
 Streamlit + pydeck dashboard (scorecard · H3 delay hexmaps · route explorer ·
 live map · pipeline ops)          SNS alerting on chain failure
+        ▼
+site/ — static public page (deck.gl network maps · standings · hourly OTP),
+snapshot data via `make site-data`, deployed on Vercel
 ```
 
 Local dev is the same code against Redpanda + MinIO + duckdb (`make up`, dbt
@@ -112,7 +115,8 @@ architecture:
 | `spark_jobs/` | bronze/silver streaming, static GTFS parser, shared time semantics |
 | `dbt/transit/` | staging → intermediate → marts; macros; contract tests |
 | `orchestration/` | Dagster: 2-hourly chain, freshness tripwire, weather, failure alerting |
-| `dashboard/` | Streamlit + pydeck, five pages |
+| `dashboard/` | Streamlit + pydeck, five pages (internal) |
+| `site/` | Static public site for Vercel; data snapshots from `make site-data` |
 | `tests/` | fixture-decode + unit tests; no live calls |
 | `infra/` | Terraform: lake, network, kafka, EMR Serverless, services, monitoring, Snowflake |
 
