@@ -8,9 +8,9 @@ hour column of the heatmap."""
 import pandas as pd
 import pydeck as pdk
 import streamlit as st
-from lib import brand, CITIES, city_name, delay_color, empty_state, q
+from lib import CITIES, brand, city_name, delay_color, empty_state, q
 
-st.set_page_config(page_title="Route explorer", page_icon="🚌", layout="wide")
+st.set_page_config(page_title="Route explorer", layout="wide")
 brand()
 st.title("Route explorer")
 
@@ -76,6 +76,10 @@ with col_map:
     else:
         stops["fill"] = stops.mean_delay_sec.map(delay_color)
         path = [[[r.lon, r.lat] for r in stops.itertuples()]]
+        st.caption(
+            "Path drawn through ordered stops (shapes.txt not ingested); "
+            "dots colored by mean delay."
+        )
         st.pydeck_chart(
             pdk.Deck(
                 map_style=None,
@@ -101,11 +105,7 @@ with col_map:
                 ],
                 tooltip={"text": "{stop_name}\n{mean_delay_sec}s mean over {scored_events} events"},
             ),
-            height=420,
-        )
-        st.caption(
-            "Path drawn through ordered stops (shapes.txt not ingested); "
-            "dots colored by mean delay."
+            height=560,
         )
 
 with col_heat:

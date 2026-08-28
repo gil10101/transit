@@ -113,7 +113,7 @@ def delay_color(delay_sec: float) -> list[int]:
 
 
 def empty_state(msg: str) -> None:
-    st.info(msg, icon="🛰️")
+    st.info(msg)
 
 
 def brand() -> None:

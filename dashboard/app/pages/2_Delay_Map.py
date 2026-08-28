@@ -5,9 +5,9 @@ and someone else glowing red are readable at a glance as the same units."""
 
 import pydeck as pdk
 import streamlit as st
-from lib import brand, CITIES, delay_color, empty_state, q
+from lib import CITIES, brand, delay_color, empty_state, q
 
-st.set_page_config(page_title="Delay map", page_icon="🗺️", layout="wide")
+st.set_page_config(page_title="Delay map", layout="wide")
 brand()
 st.title("Where the delay lives")
 

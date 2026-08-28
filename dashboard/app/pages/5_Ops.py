@@ -6,7 +6,7 @@ actually had)."""
 import streamlit as st
 from lib import brand, city_name, q
 
-st.set_page_config(page_title="Ops", page_icon="🔧", layout="wide")
+st.set_page_config(page_title="Ops", layout="wide")
 brand()
 st.title("Pipeline ops")
 

@@ -1,22 +1,37 @@
-"""Page 4 — live-ish map. Latest vehicle position per vehicle from silver,
-labeled with its actual lag rather than pretending to be realtime. Helsinki and
-Zurich publish no vehicle-position product on the feeds we poll (HSL core has no
-VP; Swiss LA API is trip-updates only), so they are honestly absent here."""
+"""Page 4 — last-snapshot map. Latest vehicle position per vehicle from silver,
+labeled with its actual lag rather than pretending to be realtime. The Snowflake
+SILVER view only advances when the 2-hourly chain re-pins Iceberg metadata, so a
+15-minute freshness window is guaranteed-empty by design — the window here is 6h
+and the per-city lag is shown instead. Helsinki and Zurich publish no
+vehicle-position product on the feeds we poll (HSL core has no VP; Swiss LA API
+is trip-updates only), so they are honestly absent."""
 
+import pandas as pd
 import pydeck as pdk
 import streamlit as st
-from lib import brand, CITIES, city_name, empty_state, q
+from lib import CITIES, brand, city_name, empty_state, q
 
-st.set_page_config(page_title="Live map", page_icon="📍", layout="wide")
+st.set_page_config(page_title="Live map", layout="wide")
 brand()
-st.title("Vehicles on the road (last snapshot)")
+st.title("Vehicles on the road — last snapshot")
+st.caption(
+    "Latest fix per vehicle from the most recent drained window. Silver reaches "
+    "Snowflake when the 2-hourly chain re-pins Iceberg metadata, so up to ~2h of "
+    "lag is design, not outage — each city is labeled with its actual lag."
+)
 
 vp = q("""
-    select city as city_key, vehicle_id, lat, lon, fetched_at
-    from TRANSIT.SILVER.vehicle_positions
-    where fetched_at > dateadd(minute, -15, current_timestamp())
-      and lat is not null and lon is not null
-    qualify row_number() over (partition by city, vehicle_id order by fetched_at desc) = 1
+    with latest as (
+        select city as city_key, vehicle_id, lat, lon, fetched_at,
+               max(fetched_at) over (partition by city) as city_latest
+        from TRANSIT.SILVER.vehicle_positions
+        where fetched_at > dateadd(hour, -6, current_timestamp())
+          and lat is not null and lon is not null
+        qualify row_number() over (partition by city, vehicle_id order by fetched_at desc) = 1
+    )
+    select city_key, vehicle_id, lat, lon, fetched_at
+    from latest
+    where fetched_at > dateadd(minute, -10, city_latest)
 """)
 
 alerts = q("""
@@ -27,17 +42,20 @@ alerts = q("""
 """)
 
 if vp.empty:
-    empty_state("No vehicle positions in the last 15 minutes — check the ops page.")
+    empty_state(
+        "No vehicle positions in the last 6 hours — a chain or drain missed; check the ops page."
+    )
     st.stop()
 
-lag = q("""
-    select city as city_key,
-           round(datediff(second, max(fetched_at), current_timestamp()) / 60.0, 1) as lag_min,
-           count(distinct vehicle_id) as vehicles
-    from TRANSIT.SILVER.vehicle_positions
-    where fetched_at > dateadd(minute, -15, current_timestamp())
-    group by 1 order by 1
-""")
+now = pd.Timestamp.now(tz="UTC")
+lag = (
+    vp.assign(fetched_at=pd.to_datetime(vp.fetched_at, utc=True))
+    .groupby("city_key")
+    .agg(vehicles=("vehicle_id", "nunique"), latest=("fetched_at", "max"))
+    .reset_index()
+    .sort_values("city_key")
+)
+lag["lag_min"] = ((now - lag.latest).dt.total_seconds() / 60).round().astype(int)
 
 cols = st.columns(len(lag) if len(lag) else 1)
 for col, row in zip(cols, lag.itertuples(), strict=False):

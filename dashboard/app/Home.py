@@ -4,9 +4,9 @@ judged days, so until a city crosses that bar this page shows PROGRESS toward a
 score, clearly labeled provisional, rather than dressing 4 days up as a ranking."""
 
 import streamlit as st
-from lib import brand, CITIES, city_name, empty_state, q
+from lib import CITIES, brand, city_name, q
 
-st.set_page_config(page_title="Transit Pulse", page_icon="🚇", layout="wide")
+st.set_page_config(page_title="Transit Pulse", layout="wide")
 brand()
 
 st.title("Transit Pulse — city reliability scorecard")
@@ -35,23 +35,39 @@ progress = q("""
 
 MIN_DAYS = 20  # mirrors var('scorecard_min_judged_days'); the model is the authority
 
-if scores.empty:
-    empty_state(
-        f"No city is scored yet — a score requires {MIN_DAYS} closed judged service "
-        "days in a month and the warehouse is still accruing history. That is the "
-        "scorecard working, not failing: 4 days dressed up as a 0-100 would be "
-        "confident nonsense. Below is progress toward the bar, and provisional "
-        "metrics that are NOT scores."
-    )
+census = q("""
+    select count(*) as stop_events,
+           count(distinct service_date) as service_days,
+           count(distinct city_key) as cities,
+           max(service_date) as latest_day
+    from fct_stop_events
+    where otp_band is not null
+""").iloc[0]
+trips = q("""
+    select sum(trips_observed) as observed, sum(trips_scheduled) as scheduled
+    from fct_service_delivery_daily
+""").iloc[0]
 
+st.subheader("Warehouse")
+w = st.columns(5)
+w[0].metric("Trips observed", f"{int(trips.observed):,}")
+w[1].metric("Stop events scored", f"{census.stop_events / 1e6:.1f}M")
+w[2].metric("Cities in gold", f"{int(census.cities)}")
+w[3].metric("Service days", f"{int(census.service_days)}")
+w[4].metric("Latest service day", str(census.latest_day))
+
+if scores.empty:
     st.subheader("Progress toward a scoreable month")
+    st.caption(
+        f"A score requires {MIN_DAYS} closed judged days in a month — the scorecard "
+        "refuses to rank cities on less. Until then: progress, and provisional "
+        "metrics that are not scores."
+    )
     cols = st.columns(len(CITIES))
     for col, (key, meta) in zip(cols, CITIES.items(), strict=True):
         row = progress[progress.city_key == key]
         days = int(row.judged_days.iloc[0]) if not row.empty else 0
-        with col:
-            st.metric(meta["name"], f"{days} / {MIN_DAYS} days")
-            st.progress(min(1.0, days / MIN_DAYS))
+        col.metric(meta["name"], f"{days} / {MIN_DAYS}", "judged days", delta_color="off")
 
     st.subheader("Provisional metrics (service-weighted, closed judged days only)")
     st.caption(
