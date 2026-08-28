@@ -386,3 +386,28 @@ def alert_body(run_id: str, job_name: str, error: str | None) -> str:
     if len(detail) > ALERT_MAX_ERROR_CHARS:
         detail = detail[:ALERT_MAX_ERROR_CHARS] + "\n... (truncated)"
     return f"job: {job_name}\nrun: {run_id}\n\n{detail}"
+
+
+# --- broker reachability -------------------------------------------------------
+# The pollers dual-write raw S3 and Kafka, so a dead broker leaves the raw-feed
+# tripwire green while silver quietly stops (2026-08-28: the kafka box filled its
+# disk, the broker crash-looped for two hours, and the first signal was a failed
+# chain). A TCP connect to the bootstrap listener is enough to catch that mode.
+
+
+def kafka_listener_down(bootstrap: str, timeout_sec: float = 5.0) -> str | None:
+    """Return a reason string when the bootstrap listener is unreachable, else
+    None. Empty bootstrap (local dev without the env var) is not an error."""
+    import socket
+
+    bootstrap = bootstrap.strip()
+    if not bootstrap:
+        return None
+    host, _, port = bootstrap.rpartition(":")
+    if not host or not port.isdigit():
+        return f"malformed bootstrap {bootstrap!r}"
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout_sec):
+            return None
+    except OSError as exc:
+        return f"{bootstrap}: {exc}"

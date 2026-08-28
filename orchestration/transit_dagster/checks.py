@@ -19,7 +19,7 @@ from dagster import (
     define_asset_job,
 )
 
-from .lib import city_feed_endpoints, evaluate_feed_freshness, require_env
+from .lib import city_feed_endpoints, evaluate_feed_freshness, kafka_listener_down, require_env
 from .resources import SnowflakeResource
 
 
@@ -53,6 +53,14 @@ def raw_feed_freshness() -> MaterializeResult:
             description=f"raw feeds stale (>40 min or no objects): {', '.join(sorted(stale))}",
             metadata={"age_min": MetadataValue.json(age_min)},
         )
+    # Broker reachability rides along: the pollers dual-write raw S3 + Kafka, so
+    # a dead broker leaves every raw prefix fresh and this tripwire blind while
+    # silver quietly stops — exactly the 2026-08-28 disk-full outage, which no
+    # check saw until the 2h chain failed. A TCP connect to the bootstrap
+    # listener pages within one 15-min tick instead.
+    broker = kafka_listener_down(os.environ.get("KAFKA_BOOTSTRAP", ""))
+    if broker:
+        raise Failure(description=f"kafka bootstrap unreachable: {broker}")
     return MaterializeResult(metadata={"age_min": MetadataValue.json(age_min)})
 
 

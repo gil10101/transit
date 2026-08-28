@@ -273,3 +273,42 @@ def test_fallback_list_matches_register_script():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert list(FALLBACK_SILVER_TABLES) == list(module.TABLES)
+
+
+class TestKafkaListenerDown:
+    def test_empty_bootstrap_is_not_an_error(self):
+        from orchestration.transit_dagster.lib import kafka_listener_down
+
+        assert kafka_listener_down("") is None
+        assert kafka_listener_down("   ") is None
+
+    def test_malformed_bootstrap_reports(self):
+        from orchestration.transit_dagster.lib import kafka_listener_down
+
+        assert "malformed" in kafka_listener_down("no-port-here")
+
+    def test_reachable_listener_returns_none(self):
+        import socket
+
+        from orchestration.transit_dagster.lib import kafka_listener_down
+
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        port = srv.getsockname()[1]
+        try:
+            assert kafka_listener_down(f"127.0.0.1:{port}") is None
+        finally:
+            srv.close()
+
+    def test_dead_listener_reports_reason(self):
+        import socket
+
+        from orchestration.transit_dagster.lib import kafka_listener_down
+
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        port = srv.getsockname()[1]
+        srv.close()  # bound then closed: nothing listens here now
+        reason = kafka_listener_down(f"127.0.0.1:{port}", timeout_sec=2)
+        assert reason is not None and f"127.0.0.1:{port}" in reason

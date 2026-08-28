@@ -39,7 +39,10 @@ resource "aws_instance" "kafka" {
   iam_instance_profile   = aws_iam_instance_profile.kafka.name
 
   root_block_device {
-    volume_size = 30
+    # [rev 2026-08-28] 30GB filled to 100% after 5.8 days at the old 168h
+    # retention and took the broker down (both 16:05Z chain reds). 48 matches
+    # the live volume, grown online during the incident.
+    volume_size = 48
     volume_type = "gp3"
   }
 
@@ -63,8 +66,12 @@ resource "aws_instance" "kafka" {
       -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT \
       -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
       -e KAFKA_AUTO_CREATE_TOPICS_ENABLE=true \
-      -e KAFKA_LOG_RETENTION_HOURS=168 \
+      -e KAFKA_LOG_RETENTION_HOURS=24 \
+      -e KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS=300000 \
       apache/kafka:3.8.0
+    # Retention is a DISK budget, not an archive: raw S3 is the archive and the
+    # 2-hourly drains never read past a few hours back. 168h filled a 30GB disk
+    # in 5.8 days and killed the broker (2026-08-28). 24h ≈ 5-6GB steady state.
   EOF
 
   tags = { Name = "${var.prefix}-kafka" }

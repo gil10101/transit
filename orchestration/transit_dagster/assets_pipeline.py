@@ -14,8 +14,10 @@ from dagster import (
     AssetKey,
     AssetSelection,
     AssetSpec,
+    Backoff,
     DefaultScheduleStatus,
     MaterializeResult,
+    RetryPolicy,
     ScheduleDefinition,
     asset,
     define_asset_job,
@@ -33,8 +35,15 @@ from .resources import EmrResource, SnowflakeResource
 
 SILVER_TABLES = silver_tables()
 
+# Infra steps retry; the dbt step never does. An EMR admission blip, a Spark
+# eventlog collision, a Snowflake XX000 are transient and self-heal on resubmit
+# (each emr retry is a NEW job run id, so per-run scratch dirs start clean; the
+# EmrResource in-flight guard still prevents overlap). A dbt failure is a fact
+# about the data and must stay loud — retrying it only delays the page.
+INFRA_RETRY = RetryPolicy(max_retries=2, delay=120, backoff=Backoff.EXPONENTIAL)
 
-@asset(group_name="pipeline")
+
+@asset(group_name="pipeline", retry_policy=INFRA_RETRY)
 def emr_drain(emr: EmrResource) -> MaterializeResult:
     """One availableNow drain (Kafka -> bronze -> silver Iceberg), identical to what the
     hourly EventBridge Lambda submits. EventBridge stays; this run guarantees silver is
@@ -57,6 +66,7 @@ def emr_drain(emr: EmrResource) -> MaterializeResult:
 # DAG off this asset with no key remapping.
 @multi_asset(
     name="snowflake_iceberg_refresh",
+    retry_policy=INFRA_RETRY,
     specs=[
         AssetSpec(
             AssetKey(["silver", table]), deps=[emr_drain], skippable=True, group_name="pipeline"
