@@ -122,3 +122,12 @@ sf,VN:B,"Bus, operator VN intermittent publication: 23 silver trips on earlier d
 sf,VN:C,"Bus, operator VN partial publication: 14 of 48 scheduled trips published 2026-08-26, gold captured all 14. Shortfall upstream.",2026-08-27
 sf,WC:11,"Bus, operator WC partial publication: 5 of 18 scheduled published 2026-08-26, all captured. Shortfall upstream, same as WC:JX/JPX/Lynx.",2026-08-27
 sf,WC:15,"Bus, operator WC partial publication: 6 of 15 scheduled published 2026-08-26, all captured. Shortfall upstream.",2026-08-27
+nyc,W,"Subway. 187 trips scheduled every weekday 2026-08-24..28 and 1 realtime trip observed in four days, while siblings N/Q/R on the SAME nyct-nqrw feed publish normally (N: 1277 trips 2026-08-27..30). Realtime carries 26 of the 28 scheduled routes; W and Z are the only two absent. Gap is upstream, not a matching failure.",2026-08-30
+nyc,Z,"Subway. 12 trips scheduled every weekday 2026-08-24..28, 0 realtime rows ever, while sibling J on the SAME nyct-jz feed publishes normally (925 trips 2026-08-27..30). Same upstream absence as W.",2026-08-30
+sf,AF:Tib-AIF,"Ferry (operator AF, Tiburon-Angel Island). 68 trips scheduled across 7 judged days, 0 silver rows ever. Ferries are the systematic 511 hole already documented in docs/06.",2026-08-30
+sf,BA:BridgeA,"BART weekend bus bridge. 164 trips scheduled on its first judged day 2026-08-29 (Sat), 0 silver rows ever: BART realtime covers trains, the contracted bridge buses publish nothing to the 511 RG feed. Weekend-only, so it recurs every Sat/Sun.",2026-08-30
+sf,BA:BridgeB,"BART weekend bus bridge, same operator/evidence as BA:BridgeA: 181 trips scheduled 2026-08-29, 0 silver rows ever.",2026-08-30
+zurich,92-N46-j26-1,"Night bus N46. Both judged days 0.0% (26 trips scheduled), 0 realtime ever. Swiss RT does not cover the night-bus classes already seeded 2026-08-27.",2026-08-30
+zurich,92-N75-A-j26-1,"Night bus N75. Both judged days 0.0% (28 trips scheduled), 0 realtime ever. Same night-bus class as 92-N46-j26-1.",2026-08-30
+zurich,92-28R-j26-1,"Bus 28R. All 5 judged days 0.0% (53 trips scheduled), 0 realtime ever, while the regular 28 reports normally.",2026-08-30
+zurich,92-871-A-j26-1,"Bus 871, route_type 715 = demand-responsive (Rufbus). 5 judged days, mean 40%, below floor on 3: publication follows actual bookings, so scheduled trips that nobody books never appear in realtime.",2026-08-30
