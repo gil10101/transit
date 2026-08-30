@@ -114,6 +114,12 @@ Structural fixes:
   **BA:BridgeA/BridgeB** (BART weekend bus bridges, 0 silver rows ever, recurring
   every Sat/Sun); **zurich N46, N75, 28R** (0 realtime on every judged day) and
   **871** (route_type 715, demand-responsive — publication follows bookings).
-  Not seeded: six zurich routes that dipped below the floor only on 08-29 and
-  average 62-78%. They are real signal, not gaps, and hiding them is how a
-  warehouse ends up all-green and wrong.
+  Six further zurich routes (140/142/145/156/240/892) were held back until their
+  cause was proven, because a one-day dip on a route averaging 62-78% looks like
+  real signal. Measured: silver announced every scheduled trip, but only a
+  fraction carried any arrival payload, and gold scored EXACTLY the trips that
+  did (140: 75 announced, 31 with payload, 31 scored; 142: 73/25/25; 145:
+  76/27/27; 156: 75/26/26; 240: 28 announced, all single rows with no sequence,
+  no delay, no timestamp, 0 scored). Announced-but-empty entries are the same
+  upstream partial-publication class already seeded for HSL, so they are seeded
+  with that evidence. The pipeline was never losing them.

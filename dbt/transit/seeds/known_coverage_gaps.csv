@@ -131,3 +131,9 @@ zurich,92-N46-j26-1,"Night bus N46. Both judged days 0.0% (26 trips scheduled), 
 zurich,92-N75-A-j26-1,"Night bus N75. Both judged days 0.0% (28 trips scheduled), 0 realtime ever. Same night-bus class as 92-N46-j26-1.",2026-08-30
 zurich,92-28R-j26-1,"Bus 28R. All 5 judged days 0.0% (53 trips scheduled), 0 realtime ever, while the regular 28 reports normally.",2026-08-30
 zurich,92-871-A-j26-1,"Bus 871, route_type 715 = demand-responsive (Rufbus). 5 judged days, mean 40%, below floor on 3: publication follows actual bookings, so scheduled trips that nobody books never appear in realtime.",2026-08-30
+zurich,92-140-j26-1,"Bus 140, PARTIAL publication. 2026-08-29: 75 trips scheduled, all 75 announced in realtime but only 31 carried any arrival payload (delay or timestamp) - and gold scored exactly those 31. The shortfall is announced-but-empty trip entries upstream, not a matching failure.",2026-08-30
+zurich,92-142-j26-1,"Bus 142, PARTIAL publication, same evidence as 92-140: 73 scheduled/announced, 25 with payload, 25 scored.",2026-08-30
+zurich,92-145-j26-1,"Bus 145, PARTIAL publication, same evidence as 92-140: 76 scheduled/announced, 27 with payload, 27 scored.",2026-08-30
+zurich,92-156-j26-1,"Bus 156, PARTIAL publication, same evidence as 92-140: 75 scheduled/announced, 26 with payload, 26 scored.",2026-08-30
+zurich,96-180-5-j26-1,"Bus 240, ANNOUNCED-ONLY. 2026-08-29: 28 trips scheduled and 28 announced, every one of them a single row with no stop_sequence, no delay and no timestamp - nothing that can be placed at a stop. 0 usable rows, 0 scored.",2026-08-30
+zurich,92-892-j26-1,"Bus 892. 28 trips scheduled 2026-08-29 and 0 silver rows at all that day; 1 of 5 judged days below floor, mean 62%. Publication is intermittent upstream.",2026-08-30
