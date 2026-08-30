@@ -8,7 +8,17 @@ macro-paths: ["macros"]
 test-paths: ["tests"]
 
 vars:
-  lookback_hours: 48
+  # How far back every incremental rewrites (finalized -> fct_stop_events ->
+  # reliability/headways). This is not just a freshness knob: it is the window in
+  # which a day computed against a briefly-broken input can still self-heal.
+  # [rev 2026-08-30] 48 -> 72. At 48h, zurich 2026-08-27 aged out still holding 66%
+  # of its silver trips (the schedule join was failing during the checkpoint-replay
+  # incident) and froze wrong permanently, under a 50% floor that never fired.
+  # Its neighbours, computed identically, self-healed once the input recovered.
+  # 72h buys a third day of self-heal for ~50% more reprocessing per run, and
+  # assert_gold_reflects_silver_coverage keys its window off this same var, so
+  # detection and repairability stay defined by one number.
+  lookback_hours: 72
   freq_headway_threshold_sec: 600
   otp_bands: {early_max: -60, on_time_max: 299, late_max: 899}
   early_departure_grace_sec: 60

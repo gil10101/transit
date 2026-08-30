@@ -74,3 +74,46 @@ Data note: pollers were down 18:06–18:48Z, so that window was never captured �
 unlike the kafka incident's gap it is NOT replayable from raw. Both windows
 seeded in incident_days for 2026-08-28 (all 7 polled cities). Recovery chain
 a1858eca launched through the queue at 18:53Z.
+
+## 2026-08-30 · Zurich completeness collapse, and the frozen-day class behind it
+Chains went red from 00:05Z on `completeness_above_error_50pct` (331 route-days,
+all zurich/2026-08-29). The feed was never the problem: zurich raw and silver ran
+uninterrupted at ~4.2M rows and ~38k trips a day throughout, and its RT trips
+matched the static at 99% on every affected day.
+
+The loss was in `int_stop_events_finalized`. Zurich is delay-only, so its events
+exist only if the schedule join lands (actual = scheduled + stated delay). During
+the 2026-08-27 checkpoint-replay and 2026-08-28 kafka/box incidents that join was
+failing at compute time, so the model wrote a fraction of the day: gold held
+25,094 of 37,836 silver trips for 08-27, 10,907 of 38,140 for 08-28, 7,490 of
+31,785 for 08-29 — a decay that looked like a stale static and was not.
+
+Days inside the 48h window then healed themselves once the input
+recovered: by 08:05Z on 08-30 the 08-28 and 08-29 rows had been rewritten to
+37,794 and 31,438 trips (98-99% of silver) with no intervention. That is the
+system working. **08-27 did not heal — it had aged past the 48h lookback and no
+run will ever touch it again.** It sits at 66% coverage, and nothing detected it:
+the 50% completeness floor passes at 66%, so gold was wrong and green for three
+days. That is the failure class this entry is really about — not zurich.
+
+Structural fixes:
+- `lookback_hours` 48 -> 72 (dbt_project.yml). The lookback is the self-heal
+  window, not just a freshness knob; a third day covers a multi-day incident, and
+  the next chain repairs 08-27 as a side effect of the same mechanism that healed
+  its neighbours.
+- New test `assert_gold_reflects_silver_coverage`: gold trips per closed city-day
+  must be >= 90% of silver trips, scoped to the repairable window (keyed off the
+  same var) and excluding seeded incident days. Threshold is measured — every
+  healthy city-day 08-25..29 landed 0.950-0.998, the broken day 0.663. Validated
+  against prod before shipping: 7 rows, all >= 0.951, zero failures.
+- Seeded 9 confirmed agency gaps that surfaced once zurich's noise cleared, each
+  with evidence (`known_coverage_gaps.csv`): **nyc W and Z** — realtime carries 26
+  of the 28 scheduled routes and these are the only two absent, while siblings on
+  the same nqrw/jz feeds publish normally (N 1,277 trips, J 925); **sf
+  AF:Tib-AIF** (Angel Island ferry, 0 silver rows across 7 judged days) and
+  **BA:BridgeA/BridgeB** (BART weekend bus bridges, 0 silver rows ever, recurring
+  every Sat/Sun); **zurich N46, N75, 28R** (0 realtime on every judged day) and
+  **871** (route_type 715, demand-responsive — publication follows bookings).
+  Not seeded: six zurich routes that dipped below the floor only on 08-29 and
+  average 62-78%. They are real signal, not gaps, and hiding them is how a
+  warehouse ends up all-green and wrong.
