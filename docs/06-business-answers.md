@@ -1,8 +1,21 @@
 # 06 — What the warehouse currently answers
 
 Every number on this page came out of `analysis/business_questions.sql` run
-against `TRANSIT.GOLD` on **2026-08-26 04:40Z**, over the data collected since
+against `TRANSIT.GOLD` on **2026-08-31 22:30Z**, over the data collected since
 2026-08-22. Re-run that file rather than editing numbers here by hand.
+
+**This run is the first whose MEANS are trustworthy.** Two defects were fixed
+on 2026-08-31 and the whole history rebuilt behind them (docs/08):
+* ~520,000 stop events had been silently deleted — the origin stop of nearly
+  every trip, where GTFS publishes a departure and no arrival, discarded by a
+  NULL-swallowing filter. They are back, so event counts here are ~5% higher
+  than any earlier run and early-departure figures moved.
+* Delays are now bounded: feeds publish corrupt `arrival.delay` values (511
+  stated −16,245,480s on trips whose schedule and actual were two minutes
+  apart), and a delay that cannot be determined plausibly is now NULL rather
+  than a fabricated number. SF's mean arrival delay read −35,559s in the
+  2026-08-26 run and reads +194s here. Earlier editions of this page told you
+  to distrust the mean; you no longer have to.
 
 **Read the caveats before quoting anything.** This is 4–5 days of data, not a
 season. Cities onboarded on different days (`dim_city.metrics_from`), so the
@@ -37,44 +50,47 @@ more than 60s ahead; `very_late` is 15 min or worse.
 
 | City | Scored events | On time | Early | Late | Very late |
 |---|---:|---:|---:|---:|---:|
-| Zurich | 547,190 | **96.1%** | — | — | — |
-| Helsinki | 1,378,897 | **81.0%** | 12.7% | 6.0% | 0.3% |
-| New York | 604,145 | 67.5% | 22.4% | 9.0% | 1.2% |
-| SF Bay Area | 1,394,139 | 58.5% | 21.9% | 16.1% | 3.5% |
-| Boston | 874,422 | 57.9% | 17.3% | 21.8% | 3.1% |
-| Washington DC | 884,318 | 53.9% | 23.0% | 18.9% | 4.3% |
-| Toronto | 2,365,483 | 49.2% | **41.1%** | 7.9% | 1.8% |
+| Zurich | 3,138,724 | **96.1%** | 1.1% | 2.6% | 0.2% |
+| Helsinki | 4,651,789 | **80.9%** | 12.1% | 6.6% | 0.4% |
+| New York | 1,618,862 | 66.3% | 22.5% | 9.5% | 1.6% |
+| SF Bay Area | 5,549,574 | 59.7% | 20.5% | 16.0% | 3.8% |
+| Boston | 2,805,232 | 58.1% | 15.1% | 22.7% | 4.1% |
+| Washington DC | 3,639,796 | 54.9% | 22.5% | 18.6% | 4.0% |
+| Toronto | 7,799,665 | 50.4% | **38.1%** | 9.2% | 2.3% |
 
 Zurich's 96.1% on 547k events is the real number — and a lesson. Until
 2026-08-27 its whole network was silently reduced to ~3k events because the Swiss
 feed publishes delay-only predictions (no timestamps) and finalization demanded
 timestamps; the completeness gate caught it on Zurich's FIRST judged day and the
 delay_plus_schedule finalization method fixed it (docs/08). Swiss punctuality
-lives up to its reputation: first place, by fifteen points. Band splits pending
-the next full battery re-run.
+lives up to its reputation: first place, by fifteen points, and its band split
+is now measured rather than pending — only 1.1% early and 0.2% very late, the
+tightest distribution of any city here.
 
-**Toronto's 41% early is the finding here, not its 49.2% on-time.** Toronto is
+**Toronto's 38% early is the finding here, not its 50.4% on-time.** Toronto is
 not late — it is *ahead of schedule* four times out of ten. For a bus network
 that is a genuine service defect (a bus that leaves a timepoint early strands
 riders who arrived on time), which is exactly why the early band is tracked
 separately instead of being folded into "not late". It is also worth one more
-look before it goes in a scorecard: 41% is high enough to suspect the TTC
+look before it goes in a scorecard: 38% is high enough to suspect the TTC
 static's timepoints as well as TTC's driving.
 
 By local hour, the 8am and 5pm peaks (routes with ≥500 events in the hour):
 
 | City | 8am OTP | 5pm OTP |
 |---|---:|---:|
-| Helsinki | 78.7% | 74.5% |
-| New York | 62.6% | 67.4% |
-| Boston | 59.9% | 53.0% |
-| SF Bay Area | 58.1% | 53.7% |
-| Washington DC | 49.5% | 48.5% |
-| Toronto | 47.1% | 49.0% |
+| Zurich | 95.6% | 91.6% |
+| Helsinki | 79.9% | 75.5% |
+| New York | 62.1% | 67.9% |
+| Boston | 61.3% | 52.0% |
+| SF Bay Area | 59.4% | 53.9% |
+| Washington DC | 54.2% | 49.0% |
+| Toronto | 48.2% | 47.9% |
 
-Every US/CA city now has both peaks; Zurich has a single ≥500-event hour so
-far (11:00, 73.0%). The near-universal pattern: the evening peak is worse than
-the morning one everywhere except New York.
+Every city now has both peaks, Zurich included (it had only one ≥500-event hour
+in the 2026-08-26 run). The near-universal pattern holds: the evening peak is
+worse than the morning one everywhere except New York, and Zurich stays above
+91% in both.
 
 ## Q2 — Average delay
 
@@ -82,21 +98,28 @@ Signed seconds, positive = late.
 
 | City | Mean | Median | p90 | p99 |
 |---|---:|---:|---:|---:|
-| Toronto | −293 | **−24** | 293 | 1,214 |
-| Zurich | 47 | 0 | 216 | 1,872 |
-| New York | −320 | 5 | 288 | 938 |
-| Helsinki | 62 | 34 | 232 | 652 |
-| SF Bay Area | **−19,027** | 63 | 487 | 2,340 |
-| Washington DC | 166 | 88 | 559 | 1,752 |
-| Boston | 174 | 121 | 534 | 1,405 |
+| Toronto | −49 | **−10** | 338 | 1,355 |
+| New York | −209 | 1 | 306 | 1,116 |
+| Helsinki | 68 | 38 | 244 | 680 |
+| Zurich | 84 | 60 | 180 | 444 |
+| SF Bay Area | 194 | 62 | 493 | 2,562 |
+| Washington DC | 162 | 87 | 543 | 1,714 |
+| Boston | 202 | 128 | 580 | 1,706 |
 
-**Use the median, not the mean — SF just proved it in the extreme.** SF's mean
-of −19,027s against a median of +63s is a handful of predictions filed absurdly
-far ahead of a schedule, not a time-travelling bus; the delay-bounds test warns
-on exactly these rows and stores them for audit. Same story milder in New York
-and Toronto (schedule-computed delay with mismatched trips makes long negative
-tails). The median is robust to all of it; the mean is not. Boston's mean and
-median agree, which is what a well-behaved city looks like.
+**The means are now usable, and that is new.** The 2026-08-26 edition of this
+page reported SF at a mean of −19,027s against a median of +63s and told you to
+distrust the mean. That was the right reading of the data and the wrong response
+to it: the number was not a quirk of transit, it was corrupt feed values adopted
+over a correct computation (docs/08, 2026-08-31). With delays bounded, SF reads
++194s mean / +62s median, and every city's mean now sits on the same side of
+zero as its median.
+
+Still prefer the median when quoting a single figure — mean and median diverge
+honestly here, because a long right tail of genuinely late vehicles is real
+service, not an artifact. Toronto (−49 mean, −10 median) and New York (−209 /
++1) keep negative means from real early-running and prediction tails. Boston's
+mean and median agree most closely, which is what a well-behaved city looks
+like.
 
 ## Q3 — Service volume
 
@@ -132,12 +155,13 @@ Bunched = actual gap under half the scheduled gap; big gap = over double.
 
 | City | Gaps measured | Mean gap | Median gap | Bunched | Big gap |
 |---|---:|---:|---:|---:|---:|
-| Toronto | 2,296,324 | 903s | 690s | **11.9%** | 5.0% |
-| New York | 635,065 | 598s | 475s | 11.0% | 3.1% |
-| Boston | 885,090 | 1,528s | 1,146s | 10.8% | 2.4% |
-| Washington DC | 858,085 | 1,284s | 1,162s | 8.8% | 4.9% |
-| SF Bay Area | 1,339,430 | 1,439s | 1,125s | 7.5% | 5.1% |
-| Helsinki | 1,288,827 | 1,466s | 1,007s | **2.8%** | 1.8% |
+| Toronto | 7,358,651 | 1,041s | 696s | **12.6%** | 5.5% |
+| New York | 1,708,243 | 591s | 468s | 12.5% | 3.5% |
+| Boston | 2,796,811 | 1,577s | 1,166s | 11.5% | 2.9% |
+| Washington DC | 3,475,309 | 1,357s | 1,192s | 8.3% | 4.9% |
+| Zurich | 3,263,249 | 1,295s | 900s | 7.4% | 4.2% |
+| SF Bay Area | 3,724,011 | 1,804s | 1,420s | 5.3% | 5.7% |
+| Helsinki | 1,972,583 | 1,555s | 1,092s | **2.3%** | 2.5% |
 
 New York's bunching jumped from 7.7% to 11.0% with the 7-line repair — the
 recovered northbound trips were exactly the dense-headway service where
@@ -156,12 +180,13 @@ schedule promises.
 
 | City | Route-days | Mean EWT | Median EWT |
 |---|---:|---:|---:|
-| Helsinki | 203 | 83s | **20s** |
-| New York | 157 | 60s | 25s |
-| Toronto | 427 | 23s | 56s |
-| Boston | 129 | 58s | 62s |
-| SF Bay Area | 145 | 204s | 74s |
-| Washington DC | 96 | 170s | 85s |
+| Helsinki | 185 | 107s | **23s** |
+| New York | 362 | 56s | 28s |
+| Boston | 342 | 102s | 70s |
+| Zurich | 570 | 109s | 70s |
+| Toronto | 1,149 | 576s | 74s |
+| SF Bay Area | 217 | 194s | 78s |
+| Washington DC | 253 | 176s | 97s |
 
 Toronto's median EWT collapsed from the provisional 372s to 56s once the
 grain-and-evidence rewrite weighted route-days properly and more days closed —
@@ -176,23 +201,23 @@ inflates the cancel rate.
 
 | City | Mean cancel % | Scheduled trips |
 |---|---:|---:|
-| Boston | 2.615% | 84,466 |
-| Zurich | 2.263% | 25,905 |
-| SF Bay Area | 1.324% | 101,690 |
-| Helsinki | 0.092% | 149,479 |
-| Washington DC | 0.049% | 67,335 |
-| Toronto | 0.000% | 246,463 |
-| New York | 0.000% | 58,394 |
+| Boston | 3.606% | 257,552 |
+| SF Bay Area | 1.664% | 289,449 |
+| Zurich | 0.851% | 544,189 |
+| Helsinki | 0.303% | 156,461 |
+| Washington DC | 0.043% | 244,224 |
+| Toronto | 0.000% | 749,257 |
+| New York | 0.000% | 147,119 |
 
 | City | Alerts | Alert-hours | Routes alerted |
 |---|---:|---:|---:|
-| New York | 4,440 | 80,307 | 9 |
-| Zurich | 1,060 | 23,771 | 605 |
-| Boston | 828 | 11,842 | 135 |
-| SF Bay Area | 734 | 13,672 | 112 |
-| Toronto | 530 | 4,126 | 128 |
-| Washington DC | 183 | 820 | 76 |
-| Helsinki | 182 | 1,581 | 51 |
+| New York | 19,516 | 426,835 | 8 |
+| Boston | 2,426 | 33,685 | 162 |
+| SF Bay Area | 2,414 | 45,303 | 141 |
+| Toronto | 2,349 | 15,268 | 187 |
+| Zurich | 1,355 | 29,340 | 621 |
+| Helsinki | 799 | 12,471 | 98 |
+| Washington DC | 625 | 2,551 | 113 |
 | Washington DC | 96 | 461 | 63 |
 
 A zero cancel rate for Toronto and NYC means *their feeds never emit
@@ -233,10 +258,13 @@ Only closed local days at or after each city's `metrics_from` are judged.
 
 | City | Route-days judged | Mean completeness | Scheduled | Observed | Cancelled |
 |---|---:|---:|---:|---:|---:|
-| Toronto | 216 | 102.0% | 35,759 | 36,194 | 0 |
-| New York | 52 | 99.0% | 14,351 | 14,657 | 0 |
-| Helsinki | 874 | 96.0% | 47,544 | 45,707 | 81 |
-| Boston | 181 | 93.6% | 17,370 | 16,708 | 824 |
+| Toronto | 1,481 | 98.9% | 238,404 | 236,175 | 1 |
+| New York | 223 | 96.8% | 59,855 | 61,394 | 0 |
+| Helsinki | 2,674 | 94.2% | 56,768 | 141,967 | 155 |
+| Washington DC | 760 | 93.6% | 91,215 | 84,414 | 124 |
+| Boston | 1,198 | 91.7% | 110,971 | 105,780 | 5,647 |
+| Zurich | 2,283 | 90.0% | 180,266 | 168,266 | 3,013 |
+| SF Bay Area | 3,210 | 83.9% | 120,291 | 134,073 | 3,483 |
 
 **P3's "completeness ≥85%" acceptance criterion: PASSED by all four cities
 with closed judged days.** Toronto over 100% is ADDED service running beyond
