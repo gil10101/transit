@@ -45,7 +45,16 @@ schedule and actual are two minutes apart; TTC and MTA do the same (sf 4,297 /
 toronto 11,733 / nyc 1,780 events over 2026-08-25..31; zurich, helsinki, boston
 and dc emit none). A stop cannot be a day early or late, so such a value carries
 no information and is treated as ABSENT — the COALESCE then falls through to
-`actual − scheduled`, which is present and correct. Asserted by
+`actual − scheduled`.
+
+The bound applies to the RESULT as well: if neither branch yields a plausible
+number, `delay_pred_sec` is **NULL**. Bounding only the feed's input left the
+computed branch free to be equally impossible — 14,695 events (toronto 12,422,
+nyc 2,213, sf 60) carried |delay| > 1 day from an overnight trip matched to the
+wrong calendar day, both timestamps ordinary. A delay we cannot determine is
+unknown, and the honest value for unknown is NULL; the event still counts as
+service volume and simply leaves every delay/OTP aggregate, which is why docs/06
+divides by `count(delay_arr_sec)` and never `count(*)`. Asserted by
 `assert_delays_are_plausible`.
 
 ### A.3 VehiclePosition (→ `silver.vehicle_positions`)

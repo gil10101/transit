@@ -204,16 +204,26 @@ select
     -- through to actual - scheduled, which we already have and which is right.
     -- The bound is deliberately loose (a day, not an hour): the goal is to
     -- reject the impossible, not to second-guess a genuinely terrible day.
-    cast(coalesce(
-        case when abs(arr_delay_sec) <= {{ var('max_plausible_delay_sec') }}
-             then arr_delay_sec end,
-        {{ seconds_between('sched_arr_ts_utc', 'coalesce(arr_pred_ts_utc, dep_pred_ts_utc)') }}
-    ) as integer) as delay_arr_sec,
-    cast(coalesce(
-        case when abs(dep_delay_sec) <= {{ var('max_plausible_delay_sec') }}
-             then dep_delay_sec end,
-        {{ seconds_between('sched_dep_ts_utc', 'dep_pred_ts_utc') }}
-    ) as integer) as delay_dep_sec,
+    --
+    -- [rev 2026-08-31, second pass] The bound applies to the RESULT, not just to
+    -- the feed's input. Bounding only the stated delay left the computed branch
+    -- free to be just as impossible: 14,695 events survived with |delay| > 1 day
+    -- (toronto 12,422, nyc 2,213, sf 60) where BOTH timestamps are ordinary but
+    -- the actual lands a full day after the matched schedule row — an overnight
+    -- trip matched to the wrong calendar day, not a bus that is 24 hours late.
+    -- When neither branch yields a plausible number the delay is UNKNOWN, and
+    -- the honest value for unknown is NULL, not a fabricated one. The event
+    -- still counts as service volume; it just stops polluting every delay and
+    -- OTP aggregate (docs/06 divides by count(delay_arr_sec), never count(*)).
+    {% set arr_delay = "coalesce(case when abs(arr_delay_sec) <= " ~ var('max_plausible_delay_sec')
+        ~ " then arr_delay_sec end, " ~ seconds_between('sched_arr_ts_utc',
+            'coalesce(arr_pred_ts_utc, dep_pred_ts_utc)') ~ ")" %}
+    {% set dep_delay = "coalesce(case when abs(dep_delay_sec) <= " ~ var('max_plausible_delay_sec')
+        ~ " then dep_delay_sec end, " ~ seconds_between('sched_dep_ts_utc', 'dep_pred_ts_utc') ~ ")" %}
+    cast(case when abs({{ arr_delay }}) <= {{ var('max_plausible_delay_sec') }}
+              then {{ arr_delay }} end as integer) as delay_arr_sec,
+    cast(case when abs({{ dep_delay }}) <= {{ var('max_plausible_delay_sec') }}
+              then {{ dep_delay }} end as integer) as delay_dep_sec,
     schedule_relationship,
     (schedule_relationship = 'CANCELED') as cancelled_flag,
     (stu_schedule_relationship = 'SKIPPED') as skipped_flag,
