@@ -73,6 +73,31 @@ observed as (
 
 ),
 
+published as (
+
+    -- [rev 2026-08-31] The column this mart was missing. Until now it could say
+    -- how much scheduled service we SCORED, but not whether the shortfall was the
+    -- agency publishing nothing or us losing what it published — and that single
+    -- missing distinction is what forced every coverage question into a
+    -- hand-maintained seed list. trips_published counts the trips the feed
+    -- actually gave us something usable for (a delay or a timestamp; a row with
+    -- neither cannot be placed at a stop, so counting it would overstate what was
+    -- available). trips_observed / trips_published is then the capture rate: the
+    -- only one of these ratios that is about US.
+    select
+        city_key,
+        coalesce(route_id, '__unrouted__') as route_id,
+        service_date,
+        count(distinct trip_uid) as trips_published
+    from {{ ref('stg_gtfsrt__trip_updates') }}
+    where arr_delay_sec is not null
+       or dep_delay_sec is not null
+       or arr_pred_ts_utc is not null
+       or dep_pred_ts_utc is not null
+    group by city_key, route_id, service_date
+
+),
+
 cancelled as (
 
     -- [rev 2026-08-27] Two counts, two universes, kept apart BY CONSTRUCTION.
@@ -119,16 +144,20 @@ unioned as (
     select city_key, route_id, service_date,
            trips_scheduled, 0 as trips_observed, 0 as trips_added,
            0 as trips_observed_scheduled, 0 as trips_cancelled,
-           0 as trips_cancelled_unscheduled
+           0 as trips_cancelled_unscheduled, 0 as trips_published
     from scheduled
     union all
     select city_key, route_id, service_date,
-           0, trips_observed, trips_added, trips_observed_scheduled, 0, 0
+           0, trips_observed, trips_added, trips_observed_scheduled, 0, 0, 0
     from observed
     union all
     select city_key, route_id, service_date,
-           0, 0, 0, 0, trips_cancelled, trips_cancelled_unscheduled
+           0, 0, 0, 0, trips_cancelled, trips_cancelled_unscheduled, 0
     from cancelled
+    union all
+    select city_key, route_id, service_date,
+           0, 0, 0, 0, 0, 0, trips_published
+    from published
 
 ),
 
@@ -144,8 +173,14 @@ rolled as (
         sum(trips_added) as trips_added,
         sum(trips_cancelled) as trips_cancelled,
         sum(trips_cancelled_unscheduled) as trips_cancelled_unscheduled,
+        sum(trips_published) as trips_published,
         cast(sum(trips_observed_scheduled) as double)
-            / nullif(sum(trips_scheduled), 0) as completeness_pct
+            / nullif(sum(trips_scheduled), 0) as completeness_pct,
+        -- capture_rate answers the only question we can act on: of what the feed
+        -- published, how much did we finalize? completeness_pct mixes that with
+        -- how much the agency chose to publish at all.
+        cast(sum(trips_observed) as double)
+            / nullif(sum(trips_published), 0) as capture_rate
     from unioned
     group by city_key, route_id, service_date
 

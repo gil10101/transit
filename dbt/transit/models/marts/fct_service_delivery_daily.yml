@@ -53,6 +53,21 @@ models:
           version, service-change re-keys). Kept visible, never divided by
           trips_scheduled — the 2026-08-27 Zurich 91-E lesson.
         data_tests: [not_null]
+      - name: trips_published
+        description: >
+          distinct trips the FEED gave us something usable for that day (a delay
+          or a timestamp on either arrival or departure; a StopTimeUpdate with
+          neither cannot be placed at a stop). The agency's side of the ledger:
+          trips_scheduled is what should run, trips_published is what the feed
+          reported on, trips_observed is what we finalized.
+        data_tests: [not_null]
+      - name: capture_rate
+        description: >
+          trips_observed / trips_published — the only one of these ratios that
+          is about US rather than the agency. Low completeness_pct with a healthy
+          capture_rate is a feed that publishes little; low capture_rate is our
+          own loss and is what the error-severity tripwire fires on. NULL when
+          the feed published nothing for the route-day.
       - name: completeness_pct
         description: observed non-ADDED / scheduled; null when nothing scheduled
         data_tests:
@@ -97,6 +112,21 @@ models:
           # visible in completeness_pct, in the warn test, and in the scorecard's
           # own exclusion accounting; the error tripwire fires only when WE are
           # blind, which is the thing it can actually page anyone about.
+          #
+          # [rev 2026-08-31] The scope now says in SQL what the paragraph above
+          # always claimed: fire only when WE are blind. It could not before,
+          # because the mart had no way to tell "the agency published nothing"
+          # from "the agency published and we lost it" — so every route the feed
+          # simply does not cover had to be hand-listed in known_coverage_gaps to
+          # keep the chain green. That list can never be finished: it grew on
+          # zurich's first Saturday and again on its first Sunday (replacement
+          # and night services that only exist on those days), and a month of
+          # holidays would keep growing it. An error test whose green depends on
+          # a human enumerating an open-ended set is not a tripwire, it is a
+          # chore. capture_rate closes it: of the trips the feed actually gave us
+          # something usable for, how many did we finalize? NULL capture_rate
+          # means nothing was published at all, which is the agency's silence and
+          # not our blindness, so it reads as 1 and never fires.
           - value_within_range:
               name: completeness_above_error_50pct
               arguments: {min_value: 0.50}
@@ -107,4 +137,5 @@ models:
                   and trips_scheduled >= {{ var('completeness_min_trips') }}
                   and not known_coverage_gap
                   and not incident_day
-                  and trips_observed < trips_scheduled * 0.50"
+                  and trips_observed < trips_scheduled * 0.50
+                  and coalesce(capture_rate, 1) < 0.90"

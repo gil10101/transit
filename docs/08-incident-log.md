@@ -123,3 +123,48 @@ Structural fixes:
   no delay, no timestamp, 0 scored). Announced-but-empty entries are the same
   upstream partial-publication class already seeded for HSL, so they are seeded
   with that evidence. The pipeline was never losing them.
+
+## 2026-08-31 · The origin-stop deletion, and retiring the seed treadmill
+Chains kept going red on `completeness_above_error_50pct` after the 08-30 fix —
+5 rows, then 9, each batch a different set of Zurich routes. The routes changed
+because the DAY TYPE changed: Zurich went live on a Tuesday, so its first
+Saturday surfaced weekend-only routes and its first Sunday surfaced replacement
+(Ersatzverkehr) and night services, none of which the Swiss feed publishes
+realtime for. Every batch was "fixable" by adding rows to known_coverage_gaps,
+and that is exactly what made it worth stopping: an error test whose green
+depends on a human enumerating an open-ended set is a chore, not a tripwire, and
+a month of holidays would have kept feeding it.
+
+Root cause of the noise: the mart could not tell **the agency published nothing**
+from **the agency published and we lost it**. Both show up as low
+completeness_pct, only the second is ours, and only the second is worth paging
+on — which is what the error test's own comment had claimed since 2026-08-27
+("the error tripwire fires only when WE are blind") without the data to do it.
+
+Fixes:
+- `trips_published` and `capture_rate` are now columns on
+  fct_service_delivery_daily. trips_published counts trips the feed gave us
+  something usable for; capture_rate = trips_observed / trips_published is the
+  only ratio here that is about us. The error test's scope adds
+  `capture_rate < 0.90`, so agency silence (NULL capture_rate, read as 1) can no
+  longer reach an error-severity check. Measured on prod before shipping: the
+  08-30 failures drop from 9 to 1, and the survivor was a real defect —
+
+- **the origin-stop deletion.** fct_stop_events ended with a misdating guard
+  written as `where not (<dated condition>)`. An event with no ARRIVAL time has
+  a NULL condition, `not NULL` is NULL, and a WHERE keeps only TRUE — so every
+  such event was silently deleted. That is the first stop of nearly every trip
+  in every city, because GTFS publishes a departure and no arrival at a trip's
+  origin: **803,125 finalized events across six cities in six days** (toronto
+  194,135, zurich 224,327, sf 202,861, dc 81,471, boston 79,649, nyc 20,682),
+  roughly 134k a day, gone. It hid perfectly — the trips still appeared via
+  their other stops, so no completeness, coverage or capture ratio moved — and
+  it landed hardest on precisely the events `early_departure_flag` exists to
+  judge, since early departure is measured at origin timepoints. Fixed with
+  `coalesce(..., false)`: the guard drops only what it can prove misdated. It
+  still drops all 34,920 genuinely misdated rows; 376,422 origin-stop events
+  re-enter gold inside the current lookback.
+
+Consequence to expect: event counts rise ~5% and early-departure figures move.
+docs/06 numbers must be re-run from analysis/business_questions.sql, never
+hand-edited.

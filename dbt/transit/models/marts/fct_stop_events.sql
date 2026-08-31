@@ -156,7 +156,21 @@ from localized
 -- sf had 7,119 previous-day rows ALL arriving 09:00-20:00, while helsinki (34,282),
 -- nyc (4,980) and boston (14,128) cluster entirely in hours 0-4 and toronto had 2 in
 -- 97,445. Genuine overnight service does not run at 9am.
-where not (
+--
+-- [rev 2026-08-31] coalesce(..., false) is load-bearing, not defensive noise.
+-- Without it this guard silently deleted every event that has no ARRIVAL time:
+-- actual_arr_ts_local is NULL there, the comparison is NULL, `not NULL` is NULL,
+-- and a WHERE keeps only TRUE. That is the origin stop of nearly every trip in
+-- every city — GTFS publishes a departure and no arrival at a trip's first stop
+-- — so the fact table was missing 803,125 finalized events across six cities in
+-- six days (toronto 194,135, zurich 224,327, sf 202,861, dc 81,471, boston
+-- 79,649, nyc 20,682), about 134k a day. It hid well: the trips still appeared
+-- via their other stops, so no completeness or coverage ratio moved, and the
+-- loss landed hardest on exactly the events early_departure_flag exists to
+-- judge. Found 2026-08-31 by asking why 9 departure-only zurich trips reached
+-- int_stop_events_finalized and not this table. A guard must drop only what it
+-- can prove misdated; unknown is not a reason to delete.
+where not coalesce(
     datediff('day', service_date, cast(actual_arr_ts_local as date)) = 1
     and extract(hour from actual_arr_ts_local) >= 6
-)
+, false)
