@@ -33,7 +33,20 @@ Binary protobuf `FeedMessage`. One file = `header` + repeated `entity`, each ent
 | `vehicle.id`, `vehicle.label` | string | Vehicle serving trip | `vehicle_id` (activity counts) |
 | `timestamp` | uint64 | Per-trip measurement time | tie-breaker in finalization |
 
-**Canonical delay rule:** `delay_pred_sec = COALESCE(arrival.delay, arrival.time − scheduled_arrival_epoch)`.
+**Canonical delay rule:** `delay_pred_sec = COALESCE(arrival.delay, arrival.time − scheduled_arrival_epoch)`,
+where a stated `arrival.delay` counts only if `abs(delay) <= max_plausible_delay_sec`
+(var, 86400 = one day).
+
+[rev 2026-08-31] The bound is part of the rule, not an implementation detail.
+Preferring the operator's stated delay is right — it knows its own service — but
+preferring it *unconditionally* let a corrupt field beat a correct computation
+standing beside it. 511 publishes values like `-16,245,480` on SFMTA trips whose
+schedule and actual are two minutes apart; TTC and MTA do the same (sf 4,297 /
+toronto 11,733 / nyc 1,780 events over 2026-08-25..31; zurich, helsinki, boston
+and dc emit none). A stop cannot be a day early or late, so such a value carries
+no information and is treated as ABSENT — the COALESCE then falls through to
+`actual − scheduled`, which is present and correct. Asserted by
+`assert_delays_are_plausible`.
 
 ### A.3 VehiclePosition (→ `silver.vehicle_positions`)
 | Field | Type | Our use |

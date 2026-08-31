@@ -168,3 +168,26 @@ Fixes:
 Consequence to expect: event counts rise ~5% and early-departure figures move.
 docs/06 numbers must be re-run from analysis/business_questions.sql, never
 hand-edited.
+
+## 2026-08-31 (second) · Corrupt feed delays beat a correct computation
+Found while re-running analysis/business_questions.sql after the origin-stop
+fix: SF's mean arrival delay read **-35,559 seconds** against a median of +63.
+Not a rounding artifact — 511 publishes `arrival.delay` values like -16,245,480
+on SFMTA trips whose scheduled and actual times are two minutes apart, and the
+canonical COALESCE preferred the stated delay unconditionally, so a corrupt
+field beat a correct computation sitting right beside it.
+
+Scale, 2026-08-25..31: 17,810 scored events with |delay| > 1 day — sf 4,297,
+toronto 11,733, nyc 1,780. Zurich, Helsinki, Boston and DC emit none, so this is
+feed-specific corruption (511, TTC, MTA), not our arithmetic. At 0.08% of scored
+events it never moved a median and no test saw it, which is exactly why it
+survived: every published mean was wrong while every published median was fine.
+
+Fix: a stated delay is now honoured only when `abs(delay) <= var
+max_plausible_delay_sec` (86400, one day). Out of range is treated as ABSENT, so
+the canonical COALESCE falls through to `actual - scheduled` — which we already
+have and which is correct. The bound rejects the impossible rather than
+second-guessing a genuinely terrible day. Canonical rule amended in
+docs/01 §A.2 and CLAUDE.md; regression test `assert_delays_are_plausible`
+asserts the outcome (any |delay| > bound in gold) rather than the mechanism, so
+a feed inventing a new way to be wrong still trips it.

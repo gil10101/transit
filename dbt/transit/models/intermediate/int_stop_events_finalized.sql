@@ -186,12 +186,32 @@ select
     sched_dep_ts_utc,
     arr_eff_ts_utc as actual_arr_ts_utc,
     dep_eff_ts_utc as actual_dep_ts_utc,
+    -- Canonical rule, with the feed's own number held to a sanity bound.
+    --
+    -- [rev 2026-08-31] COALESCE prefers the agency's stated delay, which is
+    -- right: the operator knows its own service. But it was preferring it
+    -- UNCONDITIONALLY, so a corrupt field beat a correct computation sitting
+    -- right beside it. 511 publishes arrival.delay values like -16,245,480 on
+    -- SFMTA trips whose schedule and actual are two minutes apart; TTC and MTA
+    -- do it too (sf 4,297, toronto 11,733, nyc 1,780 events over 2026-08-25..31,
+    -- while zurich, helsinki, boston and dc emit none). At 0.08% of scored
+    -- events they never moved a median and no test saw them, but they wrecked
+    -- every mean: SF's mean arrival delay read -35,559 SECONDS against a median
+    -- of +63.
+    --
+    -- A stop event cannot be a day early or a day late; such a value carries no
+    -- information about delay, so it is treated as ABSENT and the COALESCE falls
+    -- through to actual - scheduled, which we already have and which is right.
+    -- The bound is deliberately loose (a day, not an hour): the goal is to
+    -- reject the impossible, not to second-guess a genuinely terrible day.
     cast(coalesce(
-        arr_delay_sec,
+        case when abs(arr_delay_sec) <= {{ var('max_plausible_delay_sec') }}
+             then arr_delay_sec end,
         {{ seconds_between('sched_arr_ts_utc', 'coalesce(arr_pred_ts_utc, dep_pred_ts_utc)') }}
     ) as integer) as delay_arr_sec,
     cast(coalesce(
-        dep_delay_sec,
+        case when abs(dep_delay_sec) <= {{ var('max_plausible_delay_sec') }}
+             then dep_delay_sec end,
         {{ seconds_between('sched_dep_ts_utc', 'dep_pred_ts_utc') }}
     ) as integer) as delay_dep_sec,
     schedule_relationship,

@@ -19,6 +19,10 @@ vars:
   # assert_gold_reflects_silver_coverage keys its window off this same var, so
   # detection and repairability stay defined by one number.
   lookback_hours: 72
+  # A feed-stated delay beyond this is a corrupt field, not a delay: it is
+  # treated as absent so the canonical COALESCE falls through to
+  # actual - scheduled. One day, chosen to reject only the impossible.
+  max_plausible_delay_sec: 86400
   freq_headway_threshold_sec: 600
   otp_bands: {early_max: -60, on_time_max: 299, late_max: 899}
   early_departure_grace_sec: 60
