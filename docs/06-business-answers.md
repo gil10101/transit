@@ -1,7 +1,7 @@
 # 06 — What the warehouse currently answers
 
 Every number on this page came out of `analysis/business_questions.sql` run
-against `TRANSIT.GOLD` on **2026-08-31 22:30Z**, over the data collected since
+against `TRANSIT.GOLD` on **2026-09-01 13:45Z**, over the data collected since
 2026-08-22. Re-run that file rather than editing numbers here by hand.
 
 **This run is the first whose MEANS are trustworthy.** Two defects were fixed
@@ -10,6 +10,10 @@ on 2026-08-31 and the whole history rebuilt behind them (docs/08):
   every trip, where GTFS publishes a departure and no arrival, discarded by a
   NULL-swallowing filter. They are back, so event counts here are ~5% higher
   than any earlier run and early-departure figures moved.
+* Trip ids re-keyed by a static refresh are recovered (2026-09-01): agencies
+  re-number trips when they publish a new timetable, which stranded 98,456 trips
+  across all cities — a third of Zurich's 08-31 alone — because the id no longer
+  matched anything the calendar ran. Matched now by route + origin departure.
 * Delays are now bounded: feeds publish corrupt `arrival.delay` values (511
   stated −16,245,480s on trips whose schedule and actual were two minutes
   apart), and a delay that cannot be determined plausibly is now NULL rather
@@ -50,13 +54,13 @@ more than 60s ahead; `very_late` is 15 min or worse.
 
 | City | Scored events | On time | Early | Late | Very late |
 |---|---:|---:|---:|---:|---:|
-| Zurich | 3,138,724 | **96.1%** | 1.1% | 2.6% | 0.2% |
-| Helsinki | 4,651,789 | **80.9%** | 12.1% | 6.6% | 0.4% |
-| New York | 1,618,862 | 66.3% | 22.5% | 9.5% | 1.6% |
-| SF Bay Area | 5,549,574 | 59.7% | 20.5% | 16.0% | 3.8% |
-| Boston | 2,805,232 | 58.1% | 15.1% | 22.7% | 4.1% |
-| Washington DC | 3,639,796 | 54.9% | 22.5% | 18.6% | 4.0% |
-| Toronto | 7,799,665 | 50.4% | **38.1%** | 9.2% | 2.3% |
+| Zurich | 3,330,056 | **96.1%** | 1.1% | 2.6% | 0.2% |
+| Helsinki | 4,778,765 | **81.0%** | 12.1% | 6.5% | 0.4% |
+| New York | 1,721,301 | 66.6% | 22.4% | 9.4% | 1.6% |
+| SF Bay Area | 6,073,410 | 59.6% | 20.8% | 15.9% | 3.8% |
+| Boston | 3,033,193 | 57.9% | 15.0% | 22.8% | 4.3% |
+| Washington DC | 3,967,643 | 54.8% | 22.4% | 18.7% | 4.1% |
+| Toronto | 8,313,311 | 50.3% | **38.4%** | 9.1% | 2.3% |
 
 Zurich's 96.1% on 547k events is the real number — and a lesson. Until
 2026-08-27 its whole network was silently reduced to ~3k events because the Swiss
@@ -98,13 +102,13 @@ Signed seconds, positive = late.
 
 | City | Mean | Median | p90 | p99 |
 |---|---:|---:|---:|---:|
-| Toronto | −49 | **−10** | 338 | 1,355 |
-| New York | −209 | 1 | 306 | 1,116 |
-| Helsinki | 68 | 38 | 244 | 680 |
-| Zurich | 84 | 60 | 180 | 444 |
-| SF Bay Area | 194 | 62 | 493 | 2,562 |
-| Washington DC | 162 | 87 | 543 | 1,714 |
-| Boston | 202 | 128 | 580 | 1,706 |
+| Toronto | −46 | **−12** | 333 | 1,335 |
+| New York | −193 | 1 | 302 | 1,122 |
+| Helsinki | 67 | 37 | 242 | 676 |
+| Zurich | 83 | 60 | 180 | 444 |
+| SF Bay Area | 193 | 61 | 490 | 2,559 |
+| Washington DC | 164 | 87 | 546 | 1,751 |
+| Boston | 206 | 130 | 591 | 1,740 |
 
 **The means are now usable, and that is new.** The 2026-08-26 edition of this
 page reported SF at a mean of −19,027s against a median of +63s and told you to
