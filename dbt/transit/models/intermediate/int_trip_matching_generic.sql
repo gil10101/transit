@@ -407,22 +407,29 @@ hsl as (
 
 )
 
-select city_key, service_date, trip_id, trip_uid, route_id,
-       static_trip_id, direction_id, match_confidence
-from exact
+-- [rev 2026-09-01, second pass] A re-key match OUTRANKS an exact match here,
+-- and the first version of this union had it backwards. `exact` matches on the
+-- id existing in the static, ignoring whether the calendar runs that trip today
+-- — which is the broken case itself. Suppressing re-keys wherever an exact
+-- match existed therefore filtered out precisely the rows being recovered:
+-- zurich 2026-08-31 got 442 re-keys instead of 12,563 and stayed at 0.68.
+-- `rekeyed` only exists for ids the calendar does NOT run today, so a
+-- calendar-active exact match can never be displaced by one.
+select e.city_key, e.service_date, e.trip_id, e.trip_uid, e.route_id,
+       e.static_trip_id, e.direction_id, e.match_confidence
+from exact e
+where not exists (
+    select 1 from rekeyed r
+    where r.pick = 1
+      and r.city_key = e.city_key
+      and r.service_date = e.service_date
+      and r.trip_uid = e.trip_uid
+)
 union all
--- re-key recovery: only for trip_uids the exact branch could not place on a
--- calendar-active trip, so this can never displace an exact match
 select r.city_key, r.service_date, r.trip_id, r.trip_uid, r.route_id,
        r.static_trip_id, r.direction_id, r.match_confidence
 from rekeyed r
 where r.pick = 1
-  and not exists (
-      select 1 from exact e
-      where e.city_key = r.city_key
-        and e.service_date = r.service_date
-        and e.trip_uid = r.trip_uid
-  )
 union all
 select city_key, service_date, trip_id, trip_uid, route_id,
        static_trip_id, direction_id, match_confidence
