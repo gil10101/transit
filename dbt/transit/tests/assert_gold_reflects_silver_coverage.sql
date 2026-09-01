@@ -23,9 +23,29 @@
 
 with silver as (
 
-    select city_key, service_date, count(distinct trip_uid) as silver_trips
-    from {{ ref('stg_gtfsrt__trip_updates') }}
-    group by city_key, service_date
+    -- [rev 2026-09-01] SCHEDULABLE trips only — those with a schedule row to be
+    -- finalized against. Counting every published trip asked an unanswerable
+    -- question: zurich 2026-08-31 read 0.68 because the Swiss feed declared
+    -- 12,711 trips with start_date=20260831 that its OWN static assigns to
+    -- Saturday/Sunday services, so no version of the schedule places them on a
+    -- Monday. A delay-only city cannot finalize a trip with no schedule, so
+    -- those trips were never ours to lose, and this test was repeating the very
+    -- mistake it was written to replace: blaming us for the agency's silence.
+    --
+    -- Crucially this keeps the teeth. The window is evaluated at test time, so
+    -- the 2026-08-27 freeze this test was built for STILL fires: the schedule
+    -- rows existed by then and gold was missing the trips anyway. Only trips
+    -- that genuinely have nowhere to land drop out.
+    select p.city_key, p.service_date, count(distinct p.trip_uid) as silver_trips
+    from {{ ref('stg_gtfsrt__trip_updates') }} p
+    where exists (
+        select 1
+        from {{ ref('int_gtfs_scheduled_stop_times') }} s
+        where s.city_key = p.city_key
+          and s.service_date = p.service_date
+          and s.trip_id = p.trip_id
+    )
+    group by p.city_key, p.service_date
 
 ),
 
