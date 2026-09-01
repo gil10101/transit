@@ -191,3 +191,37 @@ second-guessing a genuinely terrible day. Canonical rule amended in
 docs/01 §A.2 and CLAUDE.md; regression test `assert_delays_are_plausible`
 asserts the outcome (any |delay| > bound in gold) rather than the mechanism, so
 a feed inventing a new way to be wrong still trips it.
+
+## 2026-09-01 · Static version rotation re-keys trip ids (root cause + fix)
+The Sunday weekly static refresh landed `zurich-20260830-15afa2ba` and the next
+weekday broke: Monday 08-31 read 0.68 gold-vs-silver coverage while 08-28..30
+sat at 0.99. Caught by `assert_gold_reflects_silver_coverage` — the test doing
+exactly its job on its first real incident.
+
+Root cause: `int_trip_matching_generic`'s exact branch proved a trip id EXISTS
+in the static, never that the calendar places it on that service_date. Agencies
+re-key trip ids when publishing a new static version, so after the rotation
+38,518 of 39,108 RT trips still id-matched but only 26,397 had a schedule row.
+Zurich is delay-only — no schedule, no event — so a third of the day could not
+be finalized. Of the 12,711 orphans, only 2,437 were recoverable from the old
+version, so "pin the version current at publication time" was NOT the fix; and
+all of them carried an explicit feed `start_date` of 20260831, so it was not
+service_date misattribution either.
+
+What they were: the same runs under different ids. 12,563 of them (100% of
+those carrying route + start_time) match an ACTIVE static trip on the same route
+with the same first-stop departure second.
+
+Fix: a re-key recovery branch in the matcher. A trip whose id lands on nothing
+the calendar runs today is re-matched by (route, origin departure) against a
+trip it DOES run, at exact-second tolerance (recovering a re-keyed identity, not
+guessing at one), confidence 0.9. Purely additive — it only sees trip_uids the
+exact branch could not place on a calendar-active trip, so no existing match can
+be displaced, and an id match with no calendar row is still kept because ADDED
+trips legitimately look like that.
+
+Generalises beyond Zurich: every exact-match city (boston, dc, sf, toronto,
+zurich) gets the same recovery at every future static refresh, which is a weekly
+event. Provider-side contradictions are NOT deleted — the trips the agency
+declares for a date its own static contradicts stay visible in silver and in the
+coverage columns; only the measurement was corrected.

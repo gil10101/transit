@@ -111,6 +111,112 @@ exact as (
 
 ),
 
+-- [rev 2026-09-01] RE-KEY RECOVERY. `exact` proves a trip id exists in the
+-- static; it does NOT prove the calendar places that trip on this service_date.
+-- Agencies re-key trip ids when they publish a new static version, and the same
+-- id then resolves to a different service pattern. The Swiss 2026-08-30 refresh
+-- did exactly that: on Monday 08-31, 38,518 of 39,108 zurich RT trips id-matched
+-- but only 26,397 had a schedule row, so a third of the day could not be
+-- finalized (zurich is delay-only — no schedule, no event) and gold coverage
+-- read 0.68. The trips were not missing from the timetable, only from that id:
+-- 12,563 of them (91%) match an ACTIVE static trip on the same route with the
+-- same first-stop departure time.
+--
+-- So a trip whose id lands on nothing the calendar runs today is re-matched by
+-- (route, origin departure) against a trip the calendar DOES run today. This is
+-- the fuzzy branch's logic applied to a different failure, at exact tolerance —
+-- the origin time must match to the second, not within five minutes, because
+-- here we are recovering a re-keyed identity rather than guessing at one.
+-- Confidence 0.9: the run is certain, the id is not.
+--
+-- Left as a fallback rather than a replacement: an id match with no active
+-- calendar row is still kept (ADDED trips legitimately look like this), it just
+-- ranks below a match that a schedule can actually be joined to.
+static_active as (
+
+    select
+        t.city_key,
+        d.service_date,
+        t.trip_id,
+        t.route_id,
+        t.direction_id
+    from {{ ref('stg_gtfs__trips') }} t
+    join {{ ref('int_service_dates') }} d
+      on d.city_key = t.city_key
+     and d.service_id = t.service_id
+    where t.city_key in ('boston', 'dc', 'zurich', 'sf', 'toronto')
+
+),
+
+static_origin_seconds as (
+
+    select
+        city_key,
+        trip_id,
+        coalesce(departure_seconds, arrival_seconds) as origin_seconds,
+        row_number() over (
+            partition by city_key, trip_id
+            order by stop_sequence
+        ) as stop_rn
+    from {{ ref('stg_gtfs__stop_times') }}
+    where city_key in ('boston', 'dc', 'zurich', 'sf', 'toronto')
+
+),
+
+-- RT trips whose id matched but lands on no trip the calendar runs today
+rt_rekey as (
+
+    select
+        r.city_key,
+        r.service_date,
+        r.trip_id,
+        r.trip_uid,
+        r.route_id,
+        cast(split_part(r.start_time, ':', 1) as integer) * 3600
+      + cast(split_part(r.start_time, ':', 2) as integer) * 60
+      + cast(split_part(r.start_time, ':', 3) as integer) as start_seconds
+    from {{ ref('stg_gtfsrt__trip_updates') }} r
+    where r.city_key in ('boston', 'dc', 'zurich', 'sf', 'toronto')
+      and r.trip_id is not null
+      and r.route_id is not null
+      and r.start_time is not null
+      and not exists (
+          select 1 from static_active a
+          where a.city_key = r.city_key
+            and a.service_date = r.service_date
+            and a.trip_id = r.trip_id
+      )
+
+),
+
+rekeyed as (
+
+    select
+        r.city_key,
+        r.service_date,
+        r.trip_id,
+        r.trip_uid,
+        r.route_id,
+        a.trip_id as static_trip_id,
+        a.direction_id,
+        0.9 as match_confidence,
+        row_number() over (
+            partition by r.city_key, r.service_date, r.trip_uid
+            order by a.trip_id
+        ) as pick
+    from rt_rekey r
+    join static_active a
+      on a.city_key = r.city_key
+     and a.service_date = r.service_date
+     and a.route_id = r.route_id
+    join static_origin_seconds o
+      on o.city_key = a.city_key
+     and o.trip_id = a.trip_id
+     and o.stop_rn = 1
+     and o.origin_seconds = r.start_seconds
+
+),
+
 -- toronto: origin proxy = the earliest-stop_sequence arrival prediction
 rt_fuzzy_first_stu as (
 
@@ -304,6 +410,19 @@ hsl as (
 select city_key, service_date, trip_id, trip_uid, route_id,
        static_trip_id, direction_id, match_confidence
 from exact
+union all
+-- re-key recovery: only for trip_uids the exact branch could not place on a
+-- calendar-active trip, so this can never displace an exact match
+select r.city_key, r.service_date, r.trip_id, r.trip_uid, r.route_id,
+       r.static_trip_id, r.direction_id, r.match_confidence
+from rekeyed r
+where r.pick = 1
+  and not exists (
+      select 1 from exact e
+      where e.city_key = r.city_key
+        and e.service_date = r.service_date
+        and e.trip_uid = r.trip_uid
+  )
 union all
 select city_key, service_date, trip_id, trip_uid, route_id,
        static_trip_id, direction_id, match_confidence
