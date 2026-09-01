@@ -411,3 +411,30 @@ def kafka_listener_down(bootstrap: str, timeout_sec: float = 5.0) -> str | None:
             return None
     except OSError as exc:
         return f"{bootstrap}: {exc}"
+
+
+# Runs still STARTED this long after they began are unreachable zombies, not slow
+# work: run_monitoring's cap (dagster.yaml max_runtime_seconds, 10800s) has already
+# passed and failed to terminate them. The extra 30 min makes this a BACKSTOP for
+# the case run_monitoring cannot reach, never a competing policy.
+REAP_AFTER_SECONDS = 10800 + 1800
+
+
+def zombie_run_ids(records: list[tuple[str, float | None]], now: float) -> list[str]:
+    """Ids of runs to fail, from (run_id, start_time_epoch) pairs.
+
+    A run whose worker died with its host stays STARTED forever — terminating goes
+    through the run launcher and there is no worker left to terminate, so the
+    MonitoringDaemon just logs "Checking run <id>" every 120s (observed for six
+    hours across a reboot, 2026-09-01). With the chain serialized at limit 1, one
+    such run blocks every later chain: everything queues, nothing runs, and nothing
+    alerts, because a blocked queue is not a failure.
+
+    start_time None means the run has not recorded one yet — too young to judge, and
+    guessing would risk killing healthy work, so it is left alone.
+    """
+    return [
+        run_id
+        for run_id, started in records
+        if started is not None and (now - started) >= REAP_AFTER_SECONDS
+    ]

@@ -13,6 +13,7 @@ import pytest
 
 from orchestration.transit_dagster.lib import (
     NYC_FEED_ENDPOINTS,
+    REAP_AFTER_SECONDS,
     drain_job_request,
     evaluate_feed_freshness,
     hour_prefixes,
@@ -22,6 +23,7 @@ from orchestration.transit_dagster.lib import (
     static_job_request,
     weather_rows,
     year_chunks,
+    zombie_run_ids,
 )
 
 ENV = {
@@ -312,3 +314,34 @@ class TestKafkaListenerDown:
         srv.close()  # bound then closed: nothing listens here now
         reason = kafka_listener_down(f"127.0.0.1:{port}", timeout_sec=2)
         assert reason is not None and f"127.0.0.1:{port}" in reason
+
+
+class TestZombieRunIds:
+    """A run whose worker died with its host stays STARTED forever and blocks the
+    serialized chain queue — the pipeline then stops with no alert at all
+    (2026-09-01). These pin the reaper's decision boundary."""
+
+    def test_fresh_and_long_running_runs_survive(self):
+        now = 1_000_000.0
+        records = [
+            ("fresh", now - 600),  # 10 min
+            ("long_but_healthy", now - 2.9 * 3600),  # under run_monitoring's cap
+            ("just_past_cap", now - 3.1 * 3600),  # cap passed; still its job
+        ]
+        assert zombie_run_ids(records, now) == []
+
+    def test_reaps_run_past_the_backstop_margin(self):
+        now = 1_000_000.0
+        records = [("zombie", now - 6.5 * 3600), ("fresh", now - 60)]
+        assert zombie_run_ids(records, now) == ["zombie"]
+
+    def test_missing_start_time_is_never_reaped(self):
+        # No start_time yet = too young to judge; guessing risks killing live work.
+        now = 1_000_000.0
+        assert zombie_run_ids([("unstarted", None)], now) == []
+
+    def test_boundary_is_inclusive_at_the_margin(self):
+        now = 1_000_000.0
+        exactly = now - REAP_AFTER_SECONDS
+        assert zombie_run_ids([("at_edge", exactly)], now) == ["at_edge"]
+        assert zombie_run_ids([("just_under", exactly + 1)], now) == []

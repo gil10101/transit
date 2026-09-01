@@ -36,6 +36,7 @@ from .checks import (
     silver_predictions_fresh,
 )
 from .project import dbt_project_dir
+from .reaper import zombie_run_reaper
 from .resources import EmrResource, SnowflakeResource
 
 defs = Definitions(
@@ -54,7 +55,10 @@ defs = Definitions(
     # Alerting is the half of observability this pipeline lacked: it detected breakage
     # and told nobody. Default status RUNNING so a deploy cannot silently leave it off
     # (dagster sensors default to STOPPED — the same trap the schedules hit in P5).
-    sensors=[pipeline_failure_alert],
+    # zombie_run_reaper is the backstop for run_monitoring's blind spot: a run
+    # whose worker died with the box stays STARTED forever and blocks the
+    # serialized chain queue, stopping the pipeline with no alert at all.
+    sensors=[pipeline_failure_alert, zombie_run_reaper],
     resources={
         "emr": EmrResource(),
         "snowflake": SnowflakeResource(),

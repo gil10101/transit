@@ -268,8 +268,18 @@ tag_concurrency_limits limit=1 that single dead run blocks every subsequent
 chain — runs queue, nothing executes, and NOTHING ALERTS, because a blocked
 queue is not a failure. A silent stop is worse than a red chain.
 
-Cleared with `dagster run delete --force <run_id>` in the daemon container; the
-queued chain went STARTED within seconds. This now matters more, not less: the
-auto-reboot added above means every future wedge self-heals into exactly this
-state. If chains stop without failing, check for a STARTED run hours old with
-QUEUED runs behind it before looking anywhere else.
+Cleared by hand with `dagster run delete --force <run_id>`; the queued chain
+went STARTED within seconds. But a fix that needs a human is the same assumption
+that had just failed with the reboot, and the auto-reboot makes this state MORE
+likely — every future wedge now self-heals straight into it.
+
+So it is automated: sensor `zombie_run_reaper` (orchestration/transit_dagster/
+reaper.py, RUNNING by default, 120s interval) fails any run still STARTED 3.5h
+after it began — run_monitoring's 3h cap plus a 30-min margin, so it acts only
+where run_monitoring has already had its chance and could not reach. It reports
+the run FAILED rather than deleting it, which keeps the record and fires the
+run-failure sensor, so a reaped zombie arrives as an email instead of vanishing.
+Decision logic lives in lib.zombie_run_ids so it is unit-tested in the repo venv
+(which has no dagster), same convention as alert_body; boundary cases pinned in
+tests/test_dagster_lib.py — a 2.9h run and a 3.1h run both survive, a 6.5h one
+is reaped, and a run with no start_time is never touched.
