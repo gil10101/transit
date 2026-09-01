@@ -258,3 +258,18 @@ on a 4GB t4g.medium. The serialization tag IS present on all three runs and the
 queue demonstrably blocks now (22:36: one STARTED, one QUEUED), so why the 16:05
 run dequeued while 14:05 was live is unexplained. Next occurrence: capture the
 daemon's dequeue decision before rebooting.
+
+### Follow-on: the zombie that blocks the queue (same incident)
+After the reboot the interrupted 16:05Z chain stayed STARTED and the 22:36Z
+chain sat QUEUED behind it. MonitoringDaemon logged "Checking run
+2d3fe921..." every 120s and never cleared it: its run worker died with the box,
+so the max_runtime_seconds termination path has nothing to terminate. With
+tag_concurrency_limits limit=1 that single dead run blocks every subsequent
+chain — runs queue, nothing executes, and NOTHING ALERTS, because a blocked
+queue is not a failure. A silent stop is worse than a red chain.
+
+Cleared with `dagster run delete --force <run_id>` in the daemon container; the
+queued chain went STARTED within seconds. This now matters more, not less: the
+auto-reboot added above means every future wedge self-heals into exactly this
+state. If chains stop without failing, check for a STARTED run hours old with
+QUEUED runs behind it before looking anywhere else.
