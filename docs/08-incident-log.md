@@ -225,3 +225,36 @@ zurich) gets the same recovery at every future static refresh, which is a weekly
 event. Provider-side contradictions are NOT deleted — the trips the agency
 declares for a date its own static contradicts stay visible in silver and in the
 coverage columns; only the measurement was corrected.
+
+## 2026-09-01 · Second box wedge, and making it self-heal
+The services box wedged again at 16:07-16:10Z: InstanceStatus `impaired`,
+SystemStatus ok, SSM ConnectionLost, CPU pinned flat at ~52% for six hours,
+every poller stopped. Last raw S3 object for every city is 16:10Z — unlike a
+Kafka backlog this window was never written down, so **6.4 hours of feed data is
+permanently lost** (16:10-22:36Z). Recovered only when Jake ran reboot-instances
+at 22:31Z; containers came back clean, pollers writing within 30s, no OOM kill
+in dmesg and disk at 36%, so the trigger is still unidentified.
+
+The alarms worked exactly as designed — cpu-wedge fired 17:02Z, status-check
+21:21Z, both emailed. What did not work is the part that assumed a human reads
+the email: unattended, this box sits dead for as long as it takes someone to
+notice. That is the AFK-critical gap, not the detection.
+
+Fixes:
+- **Self-healing reboot**: new alarm `transit-pulse-services-autoreboot` on
+  StatusCheckFailed_Instance (2x5min) with EC2's built-in
+  `arn:aws:automate:...:ec2:reboot` action plus an SNS notify. The built-in
+  action needs no agent on the box, which is the entire point — it works when
+  the box cannot help itself. Both wedges would have self-cleared in ~10 min
+  instead of 6 hours.
+- **CPU alarm retuned** 55%/30min -> 75%/45min. It flapped four times in one
+  afternoon because steady state under a heavy drain plus rebuild measured
+  51-64% — the threshold sat inside normal operation. A flapping alarm is worse
+  than no alarm: it teaches the reader to ignore the channel.
+
+Open question, deliberately not guessed at: the wedge trigger. Both times two
+warehouse_chain runs were in flight (14:05 still draining when 16:05 started)
+on a 4GB t4g.medium. The serialization tag IS present on all three runs and the
+queue demonstrably blocks now (22:36: one STARTED, one QUEUED), so why the 16:05
+run dequeued while 14:05 was live is unexplained. Next occurrence: capture the
+daemon's dequeue decision before rebooting.
