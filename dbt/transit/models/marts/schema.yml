@@ -4,8 +4,16 @@ models:
   - name: fct_stop_events
     description: >
       Atomic fact. Grain: one finalized arrival per (city_key, service_date,
-      trip_uid, stop_sequence). v1 finalization_method is always last_prediction.
+      trip_uid, stop_sequence). finalization_method: last_prediction (default),
+      delay_plus_schedule (delay-only feeds — Zurich), odpt_stated (Tokyo rail,
+      operator-stated delay via int_odpt_stop_events; P4).
     columns:
+      - name: finalization_method
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [last_prediction, delay_plus_schedule, odpt_stated]
       - name: event_key
         description: md5 of the grain, for uniqueness enforcement
         data_tests: [unique, not_null]

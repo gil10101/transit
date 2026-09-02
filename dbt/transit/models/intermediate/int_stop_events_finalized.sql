@@ -237,3 +237,18 @@ select
     source_format
 from ranked
 where rn = 1
+
+-- Tokyo rail rides its own path: train-grain ODPT snapshots have no
+-- stop_time_updates, so the stop explosion + odpt_stated finalization live in
+-- int_odpt_stop_events (docs/03 priority 0 — the only Tokyo rail source, so no
+-- collision with the GTFS-RT branch above is possible; ToeiBus VP-only data
+-- never reaches stg_gtfsrt__trip_updates either).
+union all
+select
+    city_key, service_date, trip_uid, stop_sequence, trip_id_raw, static_trip_id,
+    route_id, direction_id, stop_id, vehicle_id, match_confidence,
+    gtfs_version_id, timepoint, sched_arr_ts_utc, sched_dep_ts_utc,
+    actual_arr_ts_utc, actual_dep_ts_utc, delay_arr_sec, delay_dep_sec,
+    schedule_relationship, cancelled_flag, skipped_flag, finalization_method,
+    prediction_count, first_seen_utc, last_seen_utc, source_format
+from {{ ref('int_odpt_stop_events') }}
