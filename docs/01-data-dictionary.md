@@ -100,7 +100,9 @@ divides by `count(delay_arr_sec)` and never `count(*)`. Asserted by
 
 **Key correction:** the Metro/Toei *rail* GTFS-RT datasets contain **Alerts only**. Real-time train state + delay comes from the **ODPT JSON API** — so the ODPT adapter is Tokyo's primary rail source, not a fallback. All endpoints ✅ 403 without key (auth wall confirmed); free developer registration → `acl:consumerKey` query param.
 
-### C.1 `odpt:Train` (GET `api.odpt.org/api/v4/odpt:Train?odpt:operator=odpt.Operator:TokyoMetro` / `:Toei`) → primary rail real-time
+**[AMENDED 2026-09-01 — key active, live-verified]** The permanent center serves `odpt:Train` for **Toei only** (98 trains live: Asakusa/Mita/Oedo/Shinjuku subway with `odpt:delay` on 100% of trains, plus the Arakawa tram with position but NO delay field; YokohamaMunicipal also present, out of scope). **Tokyo Metro publishes NO `odpt:Train` on this center** — its catalog org (`ckan.odpt.org/organization/tokyometro`) carries GTFS static, ODPT static types, `odpt:TrainInformation`, and an alerts-only GTFS-RT; nothing train-grain. The 2026-08-22 "403 both" check proved the auth wall, not Metro content. Consequences: per-train OTP for Tokyo rests on **Toei subway** (Toronto surface-modes precedent); Metro contributes line-status alerts only; the P4 acceptance check moves to a Toei line. The poller still requests both operators (comma OR-list, one call) so Metro flows the moment they publish.
+
+### C.1 `odpt:Train` (GET `api.odpt.org/api/v4/odpt:Train?odpt:operator=odpt.Operator:TokyoMetro,odpt.Operator:Toei` — comma = OR, one call covers both) → primary rail real-time
 | Field | Type | Meaning | Our use |
 |---|---|---|---|
 | `@id`, `owl:sameAs` | URN | Unique train object id | dedup |
@@ -110,14 +112,16 @@ divides by `count(delay_arr_sec)` and never `count(*)`. Asserted by
 | `odpt:trainNumber` | string | Train run number | `trip_uid` component |
 | `odpt:trainType` | URN (Local/Express/…) | Service class | attribute |
 | `odpt:delay` | int seconds | **Operator-stated delay** | `delay_arr_sec` directly; `finalization_method='odpt_stated'` |
-| `odpt:fromStation` / `odpt:toStation` | URN | Current position between stations (`toStation` null = stopped at station) | station passage events; arrival detection |
+| `odpt:fromStation` / `odpt:toStation` | URN | Current position between stations. **[AMENDED 2026-09-01]** `toStation` null nominally = stopped near `fromStation`, but the spec warns it may be NON-null when the moving/stopped state is unknown — and live it is null on ~3/4 of snapshots. Arrival detection must be **transition-based on `fromStation` changes across snapshots**, never a toStation-null test. | station passage events; arrival detection |
+| `dct:valid` | ISO ts | Data guarantee expiry (≈ `dc:date`+5min live) | staleness filter: snapshots past validity never finalize a stop |
+| `odpt:index` | int | Train order within line (optional) | not used |
 | `odpt:railDirection` | URN | Direction | `direction_id` via mapping |
 | `odpt:originStation[]` / `odpt:destinationStation[]` | URN | Endpoints | headsign-equivalent |
 | `odpt:carComposition` | int | Cars | optional attribute |
 
-### C.2 `odpt:TrainInformation` — per-line status text (delay/suspension notices) → `silver.alerts` equivalent. Fields: `odpt:railway`, `odpt:trainInformationStatus`, `odpt:trainInformationText`, `dc:date`.
+### C.2 `odpt:TrainInformation` — per-line status text (delay/suspension notices) → `silver.alerts` equivalent. Fields: `odpt:railway`, `odpt:trainInformationStatus`, `odpt:trainInformationText`, `dc:date`, `odpt:timeOfOrigin`, `odpt:resumeEstimate`. **[AMENDED 2026-09-01]** Covers all 16 Metro+Toei lines. Multilingual fields are `{ja, en}` OBJECTS and can be ja-only live — the adapter flattens (en, else ja). `trainInformationStatus` is **omitted during normal operation** ("平常どおり" text objects carry no status): only objects WITH a status become alert records.
 
-### C.3 GTFS-RT on the permanent center: rail Alerts (`…/gtfs/realtime/tokyometro_odpt_train_alert`, `toei_odpt_train_alert`) + **ToeiBus** full GTFS-RT (`…/gtfs/realtime/ToeiBus` ✅ exists) → decoded by the generic adapter.
+### C.3 GTFS-RT on the permanent center: rail Alerts (`…/gtfs/realtime/tokyometro_odpt_train_alert`, `toei_odpt_train_alert`; redundant with C.2, not ingested) + **ToeiBus** (`https://api.odpt.org/api/v4/gtfs/realtime/ToeiBus` ✅ 200 with key, verified 2026-09-01) → decoded by the generic adapter. **[AMENDED 2026-09-01]** ToeiBus is **VehiclePosition ONLY** (catalog dataset `b_bus_gtfs_rt-toei` lists a single VP resource; live decode: 532 VP, 0 TU, 0 alerts; trip_id+route_id set per VP). "Full GTFS-RT" was wrong. Ingested for service volume / live map; **no bus OTP** until a vp_passage finalizer exists. License CC BY 4.0 — credit "Bureau of Transportation, Tokyo Metropolitan Government / Association for Open Data of Public Transportation".
 
 ### C.4 Static: Tokyo Metro publishes GTFS static on the center; ODPT static types (`odpt:Station`, `odpt:Railway`, `odpt:StationTimetable`, `odpt:TrainTimetable`) provide the schedule for delay context and the **URN↔GTFS id mapping table** (`int_odpt_stop_map` — a required, tested model).
 

@@ -30,7 +30,13 @@ class FakeSession:
 @pytest.fixture
 def scrubbed_env(monkeypatch):
     """Real keys must never reach a test; every name resolves to a dummy."""
-    for name in ("WMATA_API_KEY", "BAY511_API_TOKEN", "SWISS_OTD_TOKEN", "SWISS_OTD_SA_TOKEN"):
+    for name in (
+        "WMATA_API_KEY",
+        "BAY511_API_TOKEN",
+        "SWISS_OTD_TOKEN",
+        "SWISS_OTD_SA_TOKEN",
+        "ODPT_CONSUMER_KEY",
+    ):
         monkeypatch.setenv(name, f"dummy-{name.lower()}")
     return monkeypatch
 
@@ -100,3 +106,26 @@ def test_keyless_batch1_city_unaffected(scrubbed_env):
     fetch_feed(session, cfg, cfg.endpoints["trip_updates"], endpoint="trip_updates")
     assert session.calls[0]["headers"] is None
     assert session.calls[0]["params"] is None
+
+
+def test_tokyo_query_auth_merges_with_operator_filter(scrubbed_env):
+    # ODPT: acl:consumerKey is a query param merged by requests with the
+    # odpt:operator OR-list already in the URL (same mechanism as 511's agency=RG).
+    cfg = load_city_config("tokyo")
+    assert set(cfg.endpoints) == {"trains", "train_information", "toeibus_vehicle_positions"}
+    # rail endpoints ride odpt_json; ToeiBus overrides to the generic gtfs_rt adapter
+    assert cfg.adapter_for("trains") == "odpt_json"
+    assert cfg.adapter_for("train_information") == "odpt_json"
+    assert cfg.adapter_for("toeibus_vehicle_positions") == "gtfs_rt"
+    session = FakeSession()
+    for name, url in cfg.endpoints.items():
+        fetch_feed(session, cfg, url, endpoint=name)
+        assert session.calls[-1]["params"] == {"acl:consumerKey": "dummy-odpt_consumer_key"}
+        assert session.calls[-1]["headers"] is None
+    prepared = requests.Request(
+        "GET", cfg.endpoints["trains"], params={"acl:consumerKey": "dummy"}
+    ).prepare()
+    assert "odpt.Operator%3ATokyoMetro%2Codpt.Operator%3AToei" in prepared.url or (
+        "odpt.Operator:TokyoMetro,odpt.Operator:Toei" in prepared.url
+    )
+    assert "acl%3AconsumerKey=dummy" in prepared.url or "acl:consumerKey=dummy" in prepared.url

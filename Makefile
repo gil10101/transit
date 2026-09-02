@@ -2,7 +2,7 @@ SHELL := /bin/bash
 export JAVA_HOME ?= /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 
 .PHONY: up down record-fixtures poll-nyc poll-boston poll-toronto poll-helsinki \
-	poll-dc poll-sf poll-zurich \
+	poll-dc poll-sf poll-zurich poll-tokyo \
 	spark-local gtfs-static dbt-build test lint dagster-deploy p5-backfill-weather
 
 up:
@@ -38,6 +38,9 @@ poll-sf:
 
 poll-zurich:
 	uv run python -m ingestion.poller zurich
+
+poll-tokyo:
+	uv run python -m ingestion.poller tokyo
 
 spark-local:
 	uv run python -m spark_jobs.run_local

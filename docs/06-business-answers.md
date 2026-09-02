@@ -368,7 +368,7 @@ stating explicitly wherever an SF number is quoted.
 | **511.org** (SF Bay) | Regional aggregated GTFS-RT, `agency=RG`, keyed | ~30 operators: bus, tram, metro, regional rail, ferry, **cable car** | Most, with real per-operator gaps | 60 req/hr cap → 200s cadence. Cable car (`route_type` 5) is unique to this feed. |
 | **opentransportdata.swiss** (Zurich) | National `/la/gtfs-rt`, keyed | Whole Swiss network — filtered to 615 Zurich routes: S-Bahn, tram, bus, boat, aerial lift, funicular | Bus, tram, S-Bahn observed (79/11/7 routes on day one); boats not yet | Live since 2026-08-25. National rail classes (TGV/ICE/IC/IR/RE/EXT) are excluded from the allow-list on purpose; S-Bahn (`route_type` 109) is kept. No VehiclePositions product on the Swiss LA API — trip updates only, like Helsinki. |
 | **CTA** (Chicago) | GTFS-RT, keyed | 'L' rail + bus | **Nothing** | Key issued, beta activation still returns `errCd 101`. |
-| **ODPT** (Tokyo) | `odpt:Train` JSON | Rail | **Nothing** | Not yet applied for. Its GTFS-RT is alerts-only, so the JSON API is the path. |
+| **ODPT** (Tokyo) | `odpt:Train` JSON + ToeiBus GTFS-RT (VP only) | Toei subway (4 lines, stated delay) + Arakawa tram (position only) + Toei bus (positions only) | **Nothing yet** (ingestion built 2026-09-01, poller not deployed) | Key active. Center serves **no Metro odpt:Train** — Metro is line-status text only, so Tokyo OTP will rest on Toei rail. Rail GTFS-RT is alerts-only, so the JSON API is the path. |
 | **Open-Meteo** | Hourly forecast JSON | n/a | Collected, unused | 1,776 rows in silver, no dbt model reads them. |
 
 Two feeds carry a mode nobody else does: 511's **cable car** and Zurich's

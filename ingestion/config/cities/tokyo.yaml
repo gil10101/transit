@@ -1,0 +1,34 @@
+# Tokyo via ODPT (Public Transportation Open Data Center). Auth is the acl:consumerKey
+# QUERY param on every endpoint (yaml carries the env var NAME only). Attribution
+# required (ATTRIBUTION.md; ToeiBus RT is CC BY 4.0, credit per its dataset page).
+#
+# Live-verified 2026-09-01 (key active, one fetch per endpoint — docs/01 §C amended):
+# - odpt:Train on the permanent center serves TOEI ONLY (4 subway lines, delay set on
+#   100% of subway trains, + Arakawa tram with position but no delay field).
+#   TOKYO METRO PUBLISHES NO odpt:Train HERE — its catalog org has statics, timetables,
+#   TrainInformation and an alerts-only GTFS-RT, nothing train-grain. The operator
+#   filter still names both operators: it costs nothing and Metro flows the moment
+#   they publish. Comma = OR-list, so one call covers both (docs/01 §C.1).
+# - odpt:TrainInformation covers ALL 16 Metro+Toei lines -> alerts (status text; the
+#   adapter drops "normal ops" objects, which carry no trainInformationStatus).
+# - ToeiBus GTFS-RT is VehiclePosition ONLY (catalog dataset b_bus_gtfs_rt-toei lists
+#   a single VP resource; live decode = 535 VP, 0 TU, 0 alerts). Ingested for service
+#   volume / live map; no bus OTP until a vp_passage finalizer exists.
+city: tokyo
+agency: ODPT
+timezone: Asia/Tokyo
+adapter: odpt_json
+poll_seconds: 30
+auth: {type: query, name: "acl:consumerKey", env: ODPT_CONSUMER_KEY}
+feed_groups:
+  trains:
+    url: "https://api.odpt.org/api/v4/odpt:Train?odpt:operator=odpt.Operator:TokyoMetro,odpt.Operator:Toei"
+    poll_seconds: 30
+  # Line-status text changes on disruption timescales, not train timescales.
+  train_information:
+    url: "https://api.odpt.org/api/v4/odpt:TrainInformation?odpt:operator=odpt.Operator:TokyoMetro,odpt.Operator:Toei"
+    poll_seconds: 60
+  toeibus_vehicle_positions:
+    url: https://api.odpt.org/api/v4/gtfs/realtime/ToeiBus
+    adapter: gtfs_rt
+    poll_seconds: 30

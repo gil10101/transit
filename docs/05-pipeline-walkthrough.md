@@ -146,7 +146,7 @@ ours cannot.
 | DC | ships **two** static zips (rail + bus); ~30% of stop updates are SKIPPED | multi-source static under one version; SKIPPED scores no band |
 | SF Bay | 511 regional feed, ~78k stop updates per poll; must request gzip; 60 req/hr cap | 200s cadence, `agency=RG`, size-aware chunking |
 | Zurich | endpoint serves the **whole Swiss network** | silver filters to a Zurich route allow-list; poller stays off until the list exists |
-| Tokyo *(P4)* | `odpt:delay` is operator-stated | that value is authoritative, `finalization_method='odpt_stated'` |
+| Tokyo *(P4)* | `odpt:delay` is operator-stated; center serves **Toei only** (no Metro odpt:Train; Arakawa tram has position but no delay); ToeiBus GTFS-RT is VP-only | stated delay is authoritative, `finalization_method='odpt_stated'`; OTP = Toei subway; Metro = TrainInformation alerts only |
 
 ### 4.2 Buffer — Kafka
 
@@ -508,7 +508,7 @@ Sequence: generate the allow-list from the parsed static, then start the poller.
 
 **Chicago.** CTA's GTFS-RT beta key is not active. Retested 2026-08-24: still `errCd 101`.
 
-**Tokyo.** ODPT account awaiting admin approval. The adapter is specified but unbuilt.
+**Tokyo.** ODPT key active (2026-09-01). Adapter built with fixtures (`odpt_json`: trains → `transit.odpt_trains`, TrainInformation → alerts; ToeiBus VP via generic adapter). Poller not yet deployed; silver/dbt models land with the rest of P4.
 
 ### Not built yet
 

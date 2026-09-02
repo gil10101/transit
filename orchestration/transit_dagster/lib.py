@@ -21,11 +21,12 @@ from zoneinfo import ZoneInfo
 # ---------------------------------------------------------------------------
 
 # Cities with a live ingestion pipeline. P3 batch 1 added the keyless GTFS-RT
-# trio; batch 2 (2026-08-23) adds the keyed dc/sf/zurich. Chicago appends here
-# when its CTA GTFS-RT beta key activates.
+# trio; batch 2 (2026-08-23) adds the keyed dc/sf/zurich. P4 (2026-09-01) adds
+# tokyo (ODPT key active). Chicago appends here when its CTA GTFS-RT beta key
+# activates.
 # The services-box compose (infra/modules/services/main.tf) runs one poller per
 # entry — keep the two lists in step.
-LIVE_CITIES = ("nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich")
+LIVE_CITIES = ("nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich", "tokyo")
 
 # Cities whose POLLER is actually deployed. Kept separate from LIVE_CITIES
 # because a city can be live for static/weather before its poller ships: zurich
@@ -34,7 +35,9 @@ LIVE_CITIES = ("nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich")
 # raw-feed tripwire asserted on prefixes nothing wrote to, failing every 15 min.
 # [rev 2026-08-25] Zurich's allow-list shipped, so its poller deploys and it
 # rejoins. Add a city here only once its poller is actually running.
-POLLED_CITIES = LIVE_CITIES
+# [rev 2026-09-01] tokyo is live (fixtures + silver work) but its poller ships
+# with the P4 deploy step — kept out until then, zurich precedent.
+POLLED_CITIES = tuple(c for c in LIVE_CITIES if c != "tokyo")
 
 # Centroid + tz per city, duplicated from the dim_city seed
 # (dbt/transit/seeds/dim_city.csv) on purpose: weather pulls must never wake
@@ -47,6 +50,7 @@ CITY_WEATHER = {
     "dc": {"lat": 38.9072, "lon": -77.0369, "tz": "America/New_York"},
     "sf": {"lat": 37.7749, "lon": -122.4194, "tz": "America/Los_Angeles"},
     "zurich": {"lat": 47.3769, "lon": 8.5417, "tz": "Europe/Zurich"},
+    "tokyo": {"lat": 35.6762, "lon": 139.6503, "tz": "Asia/Tokyo"},
 }
 
 

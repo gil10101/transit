@@ -19,10 +19,14 @@ from orchestration.transit_dagster.lib import (
 )
 
 
-def test_live_cities_is_p3_batch2():
-    # batch 1 keyless trio + batch 2 keyed dc/sf/zurich; chicago appends on
-    # CTA key activation (order: existing + dc, sf, zurich — locked)
-    assert LIVE_CITIES == ("nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich")
+def test_live_cities_is_p4():
+    # batch 1 keyless trio + batch 2 keyed dc/sf/zurich + P4 tokyo; chicago
+    # appends on CTA key activation (order: existing + tokyo — locked)
+    assert LIVE_CITIES == ("nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich", "tokyo")
+    # tokyo's poller ships with the P4 deploy step (zurich precedent): live for
+    # fixtures/static/weather, not yet polled — the tripwire must not assert on
+    # raw prefixes nothing writes to.
+    assert set(LIVE_CITIES) - set(POLLED_CITIES) == {"tokyo"}
 
 
 def test_city_weather_covers_every_live_city_with_real_tz():
@@ -37,6 +41,7 @@ def test_city_weather_covers_every_live_city_with_real_tz():
     assert CITY_WEATHER["dc"]["tz"] == "America/New_York"
     assert CITY_WEATHER["sf"]["tz"] == "America/Los_Angeles"
     assert CITY_WEATHER["zurich"]["tz"] == "Europe/Zurich"
+    assert CITY_WEATHER["tokyo"]["tz"] == "Asia/Tokyo"
 
 
 def test_repo_configs_discovered_only_live_cities():

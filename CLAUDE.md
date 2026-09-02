@@ -36,7 +36,7 @@ Helsinki KEPT (polled GTFS-RT, no key; MQTT is stretch-only) · Tokyo rail via *
 4. **CTA**: keyless request returns HTML, not protobuf → key required (`?key=`).
 5. **Zurich**: correct endpoint is `api.opentransportdata.swiss/la/gtfs-rt`; `gtfsrt2020` is dead. National feed → filter to Zurich allow-list in silver.
 6. **511**: 60 req/hr default → `agency=RG` + 90–120s cadence until limit increase granted.
-7. **Tokyo**: `odpt:delay` (seconds, operator-stated) is authoritative → `finalization_method='odpt_stated'`; URN↔GTFS id mapping (`int_odpt_stop_map`) is required and tested.
+7. **Tokyo**: `odpt:delay` (seconds, operator-stated) is authoritative → `finalization_method='odpt_stated'`; URN↔GTFS id mapping (`int_odpt_stop_map`) is required and tested. [rev 2026-09-01, key live-verified] The center serves odpt:Train for **Toei only** — Metro publishes none (status text + statics only), so Tokyo OTP is scored on Toei rail; ToeiBus GTFS-RT is VP-only. Arrival detection is transition-based on fromStation (toStation-null is unreliable). Details docs/01 §C.
 8. All feed URLs live in `docs/01-data-dictionary.md` §B–C. **Never invent or "remember" a URL** — if it's not in the dictionary, ask or verify first.
 
 ## Canonical rules (implement exactly once, in shared code/macros)
