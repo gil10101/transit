@@ -138,9 +138,12 @@ locals {
   # P3: city -> IANA tz map injected into Spark (EMR python has no yaml, so
   # session.py can't read the city configs — quirk 3 in docs/operations.md).
   # Keep in sync with scripts/submit_emr_drain.sh CITY_TZS and the city yamls.
-  city_tzs           = "nyc=America/New_York,boston=America/New_York,toronto=America/Toronto,helsinki=Europe/Helsinki,dc=America/New_York,sf=America/Los_Angeles,zurich=Europe/Zurich"
+  city_tzs           = "nyc=America/New_York,boston=America/New_York,toronto=America/Toronto,helsinki=Europe/Helsinki,dc=America/New_York,sf=America/Los_Angeles,zurich=Europe/Zurich,tokyo=Asia/Tokyo"
   entry_point        = "s3://${var.artifacts_bucket}/code/entry.py"
   static_entry_point = "s3://${var.artifacts_bucket}/code/gtfs_static_parse.py"
+  # P4: tokyo ODPT dump parse (uploaded by scripts/submit_emr_drain.sh alongside
+  # the gtfs parser; the Dagster odpt_static asset submits it weekly)
+  odpt_static_entry_point = "s3://${var.artifacts_bucket}/code/odpt_static_parse.py"
   log_uri            = "s3://${var.artifacts_bucket}/emr-logs/"
   jars = join(",", [
     "s3://${var.artifacts_bucket}/jars/spark-sql-kafka-0-10_2.12-3.5.4.jar",
@@ -332,5 +335,6 @@ output "application_id" { value = aws_emrserverless_application.streaming.id }
 output "execution_role_arn" { value = aws_iam_role.execution.arn }
 output "entry_point" { value = local.entry_point }
 output "static_entry_point" { value = local.static_entry_point }
+output "odpt_static_entry_point" { value = local.odpt_static_entry_point }
 output "spark_params" { value = local.spark_params }
 output "log_uri" { value = local.log_uri }

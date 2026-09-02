@@ -20,6 +20,7 @@ variable "emr_application_id" { type = string }
 variable "emr_execution_role_arn" { type = string }
 variable "emr_entry_point" { type = string }
 variable "emr_static_entry_point" { type = string }
+variable "emr_odpt_static_entry_point" { type = string }
 variable "emr_spark_params" { type = string }
 variable "emr_log_uri" { type = string }
 # SNS topic Dagster publishes run failures to (modules/monitoring). Without this the
@@ -52,6 +53,11 @@ variable "snowflake_role" {
 # value_wo never reverts an out-of-band value: the provider only re-sends on a
 # value_wo_version bump.
 variable "wmata_api_key" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+variable "odpt_consumer_key" {
   type      = string
   default   = ""
   sensitive = true
@@ -119,11 +125,12 @@ locals {
     bay511   = var.bay511_api_token
     swiss_rt = var.swiss_otd_token
     swiss_sa = var.swiss_otd_sa_token
+    odpt     = var.odpt_consumer_key
   }
 }
 
 resource "aws_ssm_parameter" "poller_key" {
-  for_each         = toset(["wmata", "bay511", "swiss_rt", "swiss_sa"])
+  for_each         = toset(["wmata", "bay511", "swiss_rt", "swiss_sa", "odpt"])
   name             = "/${var.prefix}/keys/${each.key}"
   type             = "SecureString"
   value_wo         = coalesce(local.poller_secret_values[each.key], "PLACEHOLDER")
@@ -276,6 +283,15 @@ locals {
         restart: always
         environment: *penv
         env_file: [/opt/transit/secrets.env]
+      # P4 tokyo: ODPT consumerKey via secrets.env (acl:consumerKey query auth).
+      # Deploy in lockstep with POLLED_CITIES += tokyo (orchestration lib.py) or
+      # the raw-feed tripwire asserts on prefixes nothing writes to.
+      poller-tokyo:
+        image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
+        command: ["tokyo"]
+        restart: always
+        environment: *penv
+        env_file: [/opt/transit/secrets.env]
       postgres:
         image: postgres:16-alpine
         restart: always
@@ -303,6 +319,7 @@ locals {
           EXEC_ROLE_ARN: ${var.emr_execution_role_arn}
           ENTRY_POINT: ${var.emr_entry_point}
           STATIC_ENTRY_POINT: ${var.emr_static_entry_point}
+          ODPT_STATIC_ENTRY_POINT: ${var.emr_odpt_static_entry_point}
           SPARK_PARAMS: '${var.emr_spark_params}'
           LOG_URI: ${var.emr_log_uri}
           PIPELINE_ALERTS_TOPIC_ARN: ${var.pipeline_alerts_topic_arn}
@@ -355,6 +372,7 @@ locals {
     fetch BAY511_API_TOKEN ${aws_ssm_parameter.poller_key["bay511"].name}
     fetch SWISS_OTD_TOKEN ${aws_ssm_parameter.poller_key["swiss_rt"].name}
     fetch SWISS_OTD_SA_TOKEN ${aws_ssm_parameter.poller_key["swiss_sa"].name}
+    fetch ODPT_CONSUMER_KEY ${aws_ssm_parameter.poller_key["odpt"].name}
     chmod 600 "$tmp"
     mv "$tmp" "$out"
   SCRIPT

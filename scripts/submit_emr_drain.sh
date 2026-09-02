@@ -40,6 +40,7 @@ aws s3 cp .jars/spark_jobs.zip "s3://${ARTIFACTS}/code/spark_jobs.zip" --region 
 aws s3 cp spark_jobs/run_local.py "s3://${ARTIFACTS}/code/entry.py" --region "$REGION"
 # standalone entry for the weekly static parse (Dagster STATIC_ENTRY_POINT)
 aws s3 cp spark_jobs/gtfs_static_parse.py "s3://${ARTIFACTS}/code/gtfs_static_parse.py" --region "$REGION"
+aws s3 cp spark_jobs/odpt_static_parse.py "s3://${ARTIFACTS}/code/odpt_static_parse.py" --region "$REGION"
 
 JARS=""
 for coord in "${KAFKA_JARS[@]}"; do

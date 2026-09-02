@@ -57,6 +57,7 @@ module "services" {
   emr_execution_role_arn = module.spark.execution_role_arn
   emr_entry_point        = module.spark.entry_point
   emr_static_entry_point = module.spark.static_entry_point
+  emr_odpt_static_entry_point = module.spark.odpt_static_entry_point
   emr_spark_params       = module.spark.spark_params
   emr_log_uri            = module.spark.log_uri
   # pipeline health alerting: Dagster's run-failure sensor publishes here

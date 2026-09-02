@@ -340,5 +340,30 @@ P5 landed: Dagster chain + checks, supplemented GTFS, headways/EWT + P5 marts, w
 To enable in prod: generate the DAGSTER_SVC key pair (procedure above), apply, deploy the
 dagster image. P3 batch 1 (boston/toronto/helsinki, keyless) and batch 2 (dc/sf/zurich,
 keyed) are built — rollout checklists above; each pending its 48h completeness gate.
-Next: chicago (batch 2b, once the CTA GTFS-RT beta key activates), P4 Tokyo,
-P6 scorecard/dashboard + SCD2 dims.
+## P4 tokyo rollout (built 2026-09-01 — poller NOT yet deployed)
+
+Everything through dbt is merged and fixture-verified; the cloud side goes live in
+this order (same shape as batch 2):
+
+1. `make deploy-images` — ingestion image picks up tokyo.yaml + the odpt adapter and
+   per-endpoint dispatch; dagster image bakes the 8-city LIVE_CITIES fan-out and the
+   new `odpt_static` asset. Push BEFORE applying.
+2. Export `TF_VAR_odpt_consumer_key="$ODPT_CONSUMER_KEY"` (after `set -a; source .env;
+   set +a`) → `make infra-plan` → review → `make infra-apply`. Creates the odpt SSM
+   SecureString, adds `poller-tokyo` + `ODPT_STATIC_ENTRY_POINT` to the services box,
+   and extends `TP_CITY_TZS` to 8 cities. `unset TF_VAR_odpt_consumer_key` after.
+3. Re-land user_data on the services box (compose + fetch script changed).
+4. `make emr-drain` once — re-stages `spark_jobs.zip` (odpt silver stream +
+   `odpt_static_parse.py` upload) so the drain sees `transit.odpt_trains`.
+5. Flip `POLLED_CITIES` to include tokyo (orchestration/transit_dagster/lib.py — one
+   line + `tests/test_dagster_cities.py`) IN THE SAME DEPLOY as the poller lands, or
+   the raw-feed tripwire asserts on prefixes nothing writes to (zurich precedent).
+   Then add the freshness SLA to the `odpt_trains` source (_sources.yml note).
+6. Materialize `odpt_static` once by hand (weekly schedule covers it after) and run
+   the snowflake register script so the 5 new odpt tables exist warehouse-side.
+7. Acceptance (docs/04 P4): during the next disruption, compare a Toei line's gold
+   delays + TrainInformation alert rows against Toei's own status page; then the
+   ≥85% completeness-over-48h gate before calling the city done.
+
+Next: chicago (batch 2b, once the CTA GTFS-RT beta key activates), P4 Tokyo deploy
+(checklist above), P6 scorecard/dashboard + SCD2 dims.
