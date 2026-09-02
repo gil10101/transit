@@ -163,6 +163,24 @@ static_origin_seconds as (
 
 ),
 
+-- Active static trips with their origin departure, so the anti-join below is a
+-- plain join rather than a correlated EXISTS — Snowflake rejects the latter here
+-- ("Unsupported subquery type cannot be evaluated") once it carries its own join.
+active_with_origin as (
+
+    select
+        a.city_key,
+        a.service_date,
+        a.trip_id,
+        o.origin_seconds
+    from static_active a
+    join static_origin_seconds o
+      on o.city_key = a.city_key
+     and o.trip_id = a.trip_id
+     and o.stop_rn = 1
+
+),
+
 -- RT trips whose id matched but lands on no trip the calendar runs today
 rt_rekey as (
 
@@ -176,6 +194,15 @@ rt_rekey as (
       + cast(split_part(r.start_time, ':', 2) as integer) * 60
       + cast(split_part(r.start_time, ':', 3) as integer) as start_seconds
     from {{ ref('stg_gtfsrt__trip_updates') }} r
+    left join active_with_origin a
+      on a.city_key = r.city_key
+     and a.service_date = r.service_date
+     and a.trip_id = r.trip_id
+     and abs(a.origin_seconds - (
+           cast(split_part(r.start_time, ':', 1) as integer) * 3600
+         + cast(split_part(r.start_time, ':', 2) as integer) * 60
+         + cast(split_part(r.start_time, ':', 3) as integer)
+     )) <= {{ var('rekey_origin_tolerance_sec') }}
     where r.city_key in ('boston', 'dc', 'zurich', 'sf', 'toronto')
       and r.trip_id is not null
       and r.route_id is not null
@@ -196,22 +223,9 @@ rt_rekey as (
       -- Measured blast radius: 0 trips on 2026-08-29 and 0 on 08-30, 2,103 on the
       -- day after the refresh — the change is inert except where a rotation actually
       -- broke identity.
-      and not exists (
-          select 1
-          from static_active a
-          join static_origin_seconds o
-            on o.city_key = a.city_key
-           and o.trip_id = a.trip_id
-           and o.stop_rn = 1
-          where a.city_key = r.city_key
-            and a.service_date = r.service_date
-            and a.trip_id = r.trip_id
-            and abs(o.origin_seconds - (
-                cast(split_part(r.start_time, ':', 1) as integer) * 3600
-              + cast(split_part(r.start_time, ':', 2) as integer) * 60
-              + cast(split_part(r.start_time, ':', 3) as integer)
-            )) <= {{ var('rekey_origin_tolerance_sec') }}
-      )
+      -- the anti-join: no calendar-active trip with this id that also departs when
+      -- the feed says this trip departed
+      and a.trip_id is null
 
 ),
 
