@@ -143,3 +143,18 @@ def test_empty_array_yields_no_envelopes():
         )
         == []
     )
+
+
+def test_adapter_record_matches_silver_schema():
+    # Pure-import parity check (no Spark session): every key the adapter emits is a
+    # field silver's from_json schema types, so nothing silently drops to null. The
+    # schema's extra shim fields (start_date/start_time/route_id/direction_id) exist
+    # only so with_common() reads them as NULL — the adapter must NOT emit them.
+    from spark_jobs.silver_normalize import ODPT_TRAIN_RECORD
+
+    objs = load_json("trains")
+    rec_keys = set(odpt.train_record(objs[0]))
+    schema_fields = {f.name for f in ODPT_TRAIN_RECORD.fields}
+    assert rec_keys <= schema_fields, rec_keys - schema_fields
+    shim = {"start_date", "start_time", "route_id", "direction_id"}
+    assert schema_fields - rec_keys == shim

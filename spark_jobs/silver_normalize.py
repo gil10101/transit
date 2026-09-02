@@ -109,6 +109,38 @@ ALERT_RECORD = T.StructType(
 )
 
 
+# Train-grain ODPT snapshots (Tokyo, docs/01 §C.1). The last four fields never occur
+# in odpt_json payloads and stay NULL — they exist so with_common() can read
+# rec.start_date / rec.trip_id / rec.route_id / rec.direction_id / rec.start_time
+# unchanged: one trip_uid implementation, no odpt fork. trip_id is the owl:sameAs
+# tail (Operator.Line.TrainNumber), so the canonical COALESCE hashes that.
+ODPT_TRAIN_RECORD = T.StructType(
+    [
+        T.StructField("entity_id", T.StringType()),
+        T.StructField("trip_id", T.StringType()),
+        T.StructField("train_number", T.StringType()),
+        T.StructField("operator", T.StringType()),
+        T.StructField("railway", T.StringType()),
+        T.StructField("rail_direction", T.StringType()),
+        T.StructField("train_type", T.StringType()),
+        T.StructField("delay_sec", T.IntegerType()),
+        T.StructField("from_station", T.StringType()),
+        T.StructField("to_station", T.StringType()),
+        T.StructField("origin_stations", T.ArrayType(T.StringType())),
+        T.StructField("destination_stations", T.ArrayType(T.StringType())),
+        T.StructField("car_composition", T.IntegerType()),
+        T.StructField("train_index", T.IntegerType()),
+        T.StructField("timestamp", T.LongType()),
+        T.StructField("valid_until", T.LongType()),
+        T.StructField("frequency_sec", T.IntegerType()),
+        T.StructField("start_date", T.StringType()),
+        T.StructField("start_time", T.StringType()),
+        T.StructField("route_id", T.StringType()),
+        T.StructField("direction_id", T.IntegerType()),
+    ]
+)
+
+
 def envelope_schema(record: T.StructType) -> T.StructType:
     return T.StructType(
         [
@@ -341,6 +373,42 @@ def vehicle_positions(spark: SparkSession) -> DataFrame:
     )
 
 
+def odpt_trains(spark: SparkSession) -> DataFrame:
+    """Tokyo odpt:Train snapshots, train grain (docs/02 silver.odpt_trains).
+
+    No stop explosion here: that needs odpt:TrainTimetable, a static asset a
+    streaming job must not depend on — dbt's int_odpt_stop_events does it.
+    service_date always takes the fallback cutover (ODPT has no start_date;
+    tokyo pins 3h in timeutils — the 01:30-04:30 JST dead window's midpoint).
+    """
+    df = read_topic(spark, "transit.odpt_trains", ODPT_TRAIN_RECORD)
+    df = df.select("*", F.explode_outer("payload").alias("rec")).drop("payload")
+    df = with_common(df)
+    out = df.select(
+        *meta_cols(),
+        F.col("rec.trip_id").alias("trip_id"),
+        F.col("rec.train_number").alias("train_number"),
+        F.col("rec.operator").alias("operator"),
+        F.col("rec.railway").alias("railway"),
+        F.col("rec.rail_direction").alias("rail_direction"),
+        F.col("rec.train_type").alias("train_type"),
+        F.col("rec.delay_sec").alias("delay_sec"),
+        F.col("rec.from_station").alias("from_station"),
+        F.col("rec.to_station").alias("to_station"),
+        F.to_json(F.col("rec.origin_stations")).alias("origin_stations_json"),
+        F.to_json(F.col("rec.destination_stations")).alias("destination_stations_json"),
+        F.col("rec.car_composition").alias("car_composition"),
+        F.col("rec.train_index").alias("train_index"),
+        F.coalesce(F.to_timestamp(F.col("rec.timestamp")), F.col("fetched_at")).alias("ts_utc"),
+        F.to_timestamp(F.col("rec.valid_until")).alias("valid_until_ts_utc"),
+    )
+    # A train re-polled with unchanged position AND delay is the same observation;
+    # ts_utc moves only when the operator updates the object, so it anchors dedup.
+    return out.withWatermark("fetched_at", "2 hours").dropDuplicatesWithinWatermark(
+        ["city", "trip_uid", "from_station", "to_station", "delay_sec", "ts_utc"]
+    )
+
+
 def national_alert_filter(df: DataFrame) -> DataFrame:
     """Keep a national-feed city's alerts only when they name an allow-listed route.
 
@@ -457,10 +525,22 @@ ALERTS_DDL = """
     active_periods_json string, informed_entities_json string, content_hash string
 """
 
+ODPT_TRAINS_DDL = """
+    city string, agency string, endpoint string, source_format string, schema_version int,
+    feed_ts bigint, fetched_at timestamp, service_date date, trip_uid string,
+    trip_id string, train_number string, operator string, railway string,
+    rail_direction string, train_type string, delay_sec int,
+    from_station string, to_station string,
+    origin_stations_json string, destination_stations_json string,
+    car_composition int, train_index int,
+    ts_utc timestamp, valid_until_ts_utc timestamp
+"""
+
 TABLES = {
     "lake.silver.stop_time_predictions": (stop_time_predictions, PREDICTIONS_DDL),
     "lake.silver.vehicle_positions": (vehicle_positions, POSITIONS_DDL),
     "lake.silver.alerts": (alerts, ALERTS_DDL),
+    "lake.silver.odpt_trains": (odpt_trains, ODPT_TRAINS_DDL),
 }
 
 

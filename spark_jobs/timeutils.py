@@ -44,7 +44,14 @@ UTC = timezone.utc  # noqa: UP017 — EMR Serverless runs py3.9; datetime.UTC ne
 #
 # The cutover only ever applies when the feed omits start_date, so adding a city here
 # cannot move the 96.8% of sf rows that do set it.
-CITY_FALLBACK_CUTOVER_HOURS = {"toronto": 4, "sf": 4}
+#
+# [rev 2026-09-01] tokyo added. ODPT odpt:Train has no start_date at all, so 100% of
+# tokyo rows take this fallback. With the -12h default every snapshot fetched
+# 04:30-12:00 JST (the entire morning rush) would be misdated a day early — toronto's
+# exact failure mode. The Toei network is dead ~01:30-04:30 JST; 3h puts the boundary
+# at 03:00 JST, the dead window's midpoint, with ~1.5h margin to the last and first
+# trains. Recorded in docs/01 §C / §F.
+CITY_FALLBACK_CUTOVER_HOURS = {"toronto": 4, "sf": 4, "tokyo": 3}
 DEFAULT_FALLBACK_CUTOVER_HOURS = 12
 
 

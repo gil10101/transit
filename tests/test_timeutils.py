@@ -122,3 +122,17 @@ def test_the_spark_jobs_share_one_service_date_implementation():
     ]
     offenders = [line.strip() for line in code if "INTERVAL 12 HOURS" in line]
     assert not offenders, f"a hardcoded cutover reappeared: {offenders}"
+
+
+def test_tokyo_cutover_covers_the_dead_window():
+    # ODPT has no start_date, so 100% of tokyo rows take the fallback. Boundary is
+    # 03:00 JST (Toei network dead ~01:30-04:30): a 01:00 JST snapshot belongs to
+    # the previous service day, a 05:00 JST one to its own.
+    from spark_jobs.timeutils import cutover_hours_for, service_date_of
+
+    TOKYO = "Asia/Tokyo"
+    late_night = datetime(2026, 8, 31, 16, 0, tzinfo=UTC)  # 01:00 JST Sep 1
+    assert service_date_of(late_night, TOKYO, "tokyo") == date(2026, 8, 31)
+    first_train = datetime(2026, 8, 31, 20, 0, tzinfo=UTC)  # 05:00 JST Sep 1
+    assert service_date_of(first_train, TOKYO, "tokyo") == date(2026, 9, 1)
+    assert cutover_hours_for("tokyo") == 3

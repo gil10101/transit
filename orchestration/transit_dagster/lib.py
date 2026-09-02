@@ -314,6 +314,7 @@ FALLBACK_SILVER_TABLES = [
     "stop_time_predictions",
     "vehicle_positions",
     "alerts",
+    "odpt_trains",
     "gtfs_static_routes",
     "gtfs_static_trips",
     "gtfs_static_stops",
