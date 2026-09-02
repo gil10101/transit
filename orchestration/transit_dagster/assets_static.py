@@ -79,6 +79,98 @@ def stage_static_zip(city: str) -> str | None:
     return version_id
 
 
+ODPT_DUMP_TYPES = ("Station", "Railway", "TrainTimetable", "Calendar")
+ODPT_DUMP_URL = "https://api.odpt.org/api/v4/odpt:{rdf_type}.json"
+
+
+def stage_odpt_dumps() -> str:
+    """Download the four ODPT static dumps and archive them to
+    raw/static/tokyo/<version_id>/odpt/<Type>.json; returns the version_id the
+    EMR parse reads back.
+
+    Dump API only (retrieval API caps static types at 1000 entries); it
+    301-redirects to the dump file and requests follows by default. The
+    TrainTimetable dump is ~63 MB (every center operator) — streamed to a temp
+    file like the zips; the parse filters to TokyoMetro/Toei. Runs on the box:
+    EMR base Python has no requests, and the consumerKey stays out of EMR env.
+    """
+    import tempfile
+
+    import boto3
+    import requests
+
+    key = require_env(os.environ, "ODPT_CONSUMER_KEY")
+    s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-2"))
+    bucket = require_env(os.environ, "RAW_BUCKET")
+    digest = hashlib.sha256()
+    staged = []
+    try:
+        for rdf_type in ODPT_DUMP_TYPES:
+            with requests.get(
+                ODPT_DUMP_URL.format(rdf_type=rdf_type),
+                params={"acl:consumerKey": key},
+                timeout=300,
+                stream=True,
+            ) as resp:
+                resp.raise_for_status()
+                tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+                with tmp:
+                    for chunk in resp.iter_content(chunk_size=1 << 20):
+                        digest.update(chunk)
+                        tmp.write(chunk)
+            staged.append((rdf_type, tmp.name))
+        version_id = f"tokyo-odpt-{datetime.now(UTC):%Y%m%d}-{digest.hexdigest()[:8]}"
+        for rdf_type, path in staged:
+            s3.upload_file(path, bucket, f"static/tokyo/{version_id}/odpt/{rdf_type}.json")
+    finally:
+        for _, path in staged:
+            os.unlink(path)
+    return version_id
+
+
+@asset(group_name="static")
+def odpt_static(
+    emr: EmrResource, snowflake: SnowflakeResource, dbt: DbtCliResource
+) -> MaterializeResult:
+    """Weekly refresh of the tokyo ODPT JSON statics (docs/01 §C.4): stage the
+    four dumps, EMR runs spark_jobs/odpt_static_parse.py, re-pin the odpt_*
+    Iceberg tables, dbt build of stg_odpt__*+ (a no-op until those models land).
+    Separate from gtfs_static because the source is the dump API, not zips —
+    tokyo's GTFS zips still refresh through gtfs_static like every other city.
+    """
+    version_id = stage_odpt_dumps()
+    run_id = emr.run_odpt_static(version_id)
+
+    import boto3
+
+    s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-2"))
+    bucket = require_env(os.environ, "LAKE_BUCKET")
+    pins: list[tuple[str, str]] = []
+    refreshed: list[str] = []
+    for table in silver_tables():
+        if not table.startswith("odpt_") or table == "odpt_trains":
+            continue  # odpt_trains is the streaming table; the 2h chain re-pins it
+        meta = latest_metadata_path(s3, bucket, table)
+        if meta is None:
+            continue
+        pins.append((table, meta))
+        refreshed.append(table)
+    rebound: list[str] = []
+    if pins:
+        outcomes = snowflake.refresh_iceberg(pins)
+        rebound = [t for t, how in outcomes.items() if how != "refreshed"]
+    dbt.cli(["build", "--select", "stg_odpt__*+"]).wait()
+
+    return MaterializeResult(
+        metadata={
+            "emr_job_run_id": run_id,
+            "odpt_version_id": version_id,
+            "refreshed": ", ".join(refreshed) or "(none)",
+            "rebound_new_uuid": ", ".join(rebound) or "(none)",
+        }
+    )
+
+
 @asset(group_name="static")
 def gtfs_static(
     emr: EmrResource, snowflake: SnowflakeResource, dbt: DbtCliResource
@@ -156,8 +248,11 @@ def gtfs_static(
 
 static_job = define_asset_job(
     "gtfs_static_refresh",
-    selection=AssetSelection.assets(gtfs_static),
-    description="weekly static GTFS: EMR parse per city -> iceberg refresh -> dbt stg_gtfs__*+",
+    selection=AssetSelection.assets(gtfs_static, odpt_static),
+    description=(
+        "weekly statics: GTFS zips per city + tokyo ODPT dumps -> EMR parse -> "
+        "iceberg refresh -> dbt staging"
+    ),
 )
 
 static_schedule = ScheduleDefinition(

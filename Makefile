@@ -48,6 +48,9 @@ spark-local:
 gtfs-static:
 	uv run python -m spark_jobs.gtfs_static_parse nyc
 
+odpt-static:
+	uv run python -m spark_jobs.odpt_static_parse
+
 dbt-build:
 	cd dbt/transit && uv run dbt build --profiles-dir .
 

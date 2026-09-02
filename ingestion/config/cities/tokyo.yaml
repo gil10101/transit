@@ -20,6 +20,20 @@ timezone: Asia/Tokyo
 adapter: odpt_json
 poll_seconds: 30
 auth: {type: query, name: "acl:consumerKey", env: ODPT_CONSUMER_KEY}
+# Static GTFS verified 2026-09-01 (GET; the files API 404s on HEAD, same class of
+# gateway quirk as WMATA's): Toei rail 0.8 MB + ToeiBus 7.5 MB on the public host
+# (no auth). Two zips, ONE gtfs_version_id (dc precedent). Metro's rail zip is
+# verified but DELIBERATELY absent: its stop_ids/route_ids collide with Toei
+# rail's (both number stops from "101") and the multi-source parse unions without
+# a source column; Metro has no RT trains to match, and its stations reach the
+# stop map via the ODPT dumps instead — docs/01 §D. ODPT JSON statics
+# (Station/Railway/TrainTimetable/Calendar dumps for the odpt_stated path) are a
+# separate weekly asset — not GTFS: orchestration assets_static.py `odpt_static`.
+static_gtfs:
+  toei_rail:
+    url: https://api-public.odpt.org/api/v4/files/Toei/data/Toei-Train-GTFS.zip
+  toei_bus:
+    url: https://api-public.odpt.org/api/v4/files/Toei/data/ToeiBus-GTFS.zip
 feed_groups:
   trains:
     url: "https://api.odpt.org/api/v4/odpt:Train?odpt:operator=odpt.Operator:TokyoMetro,odpt.Operator:Toei"

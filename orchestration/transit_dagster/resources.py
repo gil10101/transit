@@ -19,6 +19,7 @@ from .lib import (
     EMR_ACTIVE_STATES,
     EXTERNAL_VOLUME,
     drain_job_request,
+    odpt_static_job_request,
     require_env,
     static_job_request,
 )
@@ -44,6 +45,12 @@ class EmrResource(ConfigurableResource):
     def run_static(self, city: str, version_id: str) -> str:
         return self._run(
             static_job_request(os.environ, city=city, version_id=version_id),
+            timeout_minutes=self.static_timeout_minutes,
+        )
+
+    def run_odpt_static(self, version_id: str) -> str:
+        return self._run(
+            odpt_static_job_request(os.environ, version_id=version_id),
             timeout_minutes=self.static_timeout_minutes,
         )
 

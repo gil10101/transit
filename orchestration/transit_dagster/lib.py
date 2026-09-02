@@ -206,6 +206,33 @@ def static_job_request(
     return request
 
 
+def odpt_static_job_request(
+    env: Mapping[str, str],
+    version_id: str,
+    client_token: str | None = None,
+) -> dict:
+    """StartJobRun kwargs for the weekly ODPT JSON static parse (tokyo only).
+
+    Same shape as static_job_request with the entryPoint swapped to
+    odpt_static_parse.py. version_id points at the four dumps the asset already
+    archived under static/tokyo/<version_id>/odpt/ — the download (which needs
+    requests + the consumerKey) happens on the box, never on EMR, so the job
+    env carries no key.
+    """
+    request = drain_job_request(env, client_token)
+    params = request["jobDriver"]["sparkSubmit"]["sparkSubmitParameters"]
+    raw_bucket = require_env(env, "RAW_BUCKET")
+    request["name"] = "transit-odpt-static"
+    request["jobDriver"]["sparkSubmit"] = {
+        "entryPoint": require_env(env, "ODPT_STATIC_ENTRY_POINT"),
+        "entryPointArguments": ["tokyo", version_id],
+        "sparkSubmitParameters": (
+            f"{params} --conf spark.emr-serverless.driverEnv.RAW_BUCKET={raw_bucket}"
+        ),
+    }
+    return request
+
+
 # ---------------------------------------------------------------------------
 # Open-meteo -> TRANSIT.SILVER.WEATHER_HOURLY rows
 # ---------------------------------------------------------------------------
@@ -315,6 +342,10 @@ FALLBACK_SILVER_TABLES = [
     "vehicle_positions",
     "alerts",
     "odpt_trains",
+    "odpt_station",
+    "odpt_railway",
+    "odpt_train_timetable",
+    "odpt_calendar",
     "gtfs_static_routes",
     "gtfs_static_trips",
     "gtfs_static_stops",
