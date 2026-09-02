@@ -403,6 +403,22 @@ resource "aws_instance" "services" {
   user_data = <<-EOF
     #!/bin/bash
     set -euo pipefail
+    # Swap before anything else starts. This box wedged twice (2026-08-28,
+    # 2026-09-01) with NO OOM kill recorded either time — the kernel never got to
+    # kill a process, the machine simply thrashed until it stopped answering SSM
+    # and every poller died, costing 7.1 hours of unrecoverable feeds. 4 GB of
+    # swap turns that cliff into a slowdown. swappiness 10 keeps it a safety net
+    # rather than routine paging: prefer RAM, spill only under real pressure.
+    if [ ! -f /swapfile ]; then
+      fallocate -l 4G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=4096
+      chmod 600 /swapfile
+      mkswap /swapfile
+      swapon /swapfile
+      echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      echo 'vm.swappiness=10' > /etc/sysctl.d/99-transit-swap.conf
+      sysctl -w vm.swappiness=10
+    fi
+
     dnf install -y docker
     # Cap container json logs before dockerd first starts; nothing rotated
     # them before 2026-08-28 and a month unattended would grow them unbounded.

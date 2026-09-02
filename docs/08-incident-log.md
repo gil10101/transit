@@ -283,3 +283,19 @@ Decision logic lives in lib.zombie_run_ids so it is unit-tested in the repo venv
 (which has no dagster), same convention as alert_body; boundary cases pinned in
 tests/test_dagster_lib.py — a 2.9h run and a 3.1h run both survive, a 6.5h one
 is reaped, and a run with no start_time is never touched.
+
+### Swap added to the services box (2026-09-02)
+Both wedges (08-28, 09-01) recorded **no OOM kill** — the kernel never got to
+kill a process, the machine simply thrashed until SSM and every poller died.
+That is the signature of memory pressure with nowhere to spill, and it cost 7.1
+hours of unrecoverable feeds across the two events.
+
+4 GB swapfile added, `vm.swappiness=10` (safety net, not routine paging),
+persisted in /etc/fstab so it survives the new auto-reboot, and mirrored into the
+services user_data so a rebuilt box gets it before Docker starts. Live values:
+4095 MB swap, 0 used, free RAM 909 MB with a rebuild running.
+
+This is deliberately the cheap half of the fix — it converts a cliff into a
+slowdown, it does not add capacity. Sizing to 8 GB remains available and costs
+about $24/month gross (currently credit-absorbed). Done ahead of Tokyo's poller,
+which adds an eighth container to this box.
