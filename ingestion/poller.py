@@ -12,8 +12,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 from dotenv import load_dotenv
 
-from ingestion.adapters import gtfs_rt
+from ingestion.adapters import ADAPTERS
 from ingestion.adapters.base import (
+    TOPICS,
     CityConfig,
     KafkaEmitter,
     RawArchiver,
@@ -25,10 +26,11 @@ from ingestion.adapters.base import (
 
 
 def poll_endpoint(session, cfg: CityConfig, archiver: RawArchiver, name: str, url: str):
+    adapter = ADAPTERS[cfg.adapter_for(name)]
     fetched_at = utcnow()
     raw = fetch_feed(session, cfg, url, endpoint=name)
-    archiver.archive(cfg.city, name, fetched_at, raw)
-    envelopes = gtfs_rt.envelopes_for_feed(
+    archiver.archive(cfg.city, name, fetched_at, raw, ext=adapter.EXTENSION)
+    envelopes = adapter.envelopes_for_feed(
         city=cfg.city, agency=cfg.agency, endpoint=name, raw=raw, fetched_at=fetched_at
     )
     return name, len(raw), envelopes
@@ -41,7 +43,7 @@ def run_cycle(session, cfg, emitter, archiver, pool, due=None) -> None:
         pool.submit(poll_endpoint, session, cfg, archiver, name, cfg.endpoints[name]): name
         for name in names
     }
-    counts = {"trip_updates": 0, "vehicle_positions": 0, "alerts": 0}
+    counts = dict.fromkeys(TOPICS, 0)
     total_bytes, failures = 0, []
     for fut, name in futures.items():
         try:
@@ -55,7 +57,7 @@ def run_cycle(session, cfg, emitter, archiver, pool, due=None) -> None:
     emitter.flush()
     status = (
         f"tu={counts['trip_updates']} vp={counts['vehicle_positions']} "
-        f"al={counts['alerts']} bytes={total_bytes}"
+        f"al={counts['alerts']} od={counts['odpt_trains']} bytes={total_bytes}"
     )
     if len(names) < len(cfg.endpoints):
         status += f" polled={','.join(sorted(names))}"
@@ -68,8 +70,9 @@ def main() -> None:
     load_dotenv()
     city = sys.argv[1] if len(sys.argv) > 1 else "nyc"
     cfg = load_city_config(city)
-    if cfg.adapter != "gtfs_rt":
-        raise SystemExit(f"adapter {cfg.adapter} not implemented yet")
+    unknown = {a for a in (cfg.adapter_for(name) for name in cfg.endpoints) if a not in ADAPTERS}
+    if unknown:
+        raise SystemExit(f"unregistered adapter(s) for {city}: {sorted(unknown)}")
     session = build_session(cfg)
     emitter = KafkaEmitter()
     emitter.ensure_topics()

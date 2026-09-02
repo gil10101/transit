@@ -15,6 +15,7 @@ from google.transit import gtfs_realtime_pb2
 from ingestion.adapters.base import build_envelope
 
 SOURCE_FORMAT = "gtfs_rt"
+EXTENSION = "pb"  # raw-archive object extension for this wire format
 
 
 def parse_feed(raw: bytes) -> gtfs_realtime_pb2.FeedMessage:

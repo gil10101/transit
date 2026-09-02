@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from google.transit import gtfs_realtime_pb2 as rt
 
 from ingestion.adapters import gtfs_rt
-from ingestion.adapters.base import TOPICS, load_city_config
+from ingestion.adapters.base import CONFIG_DIR, TOPICS, RawArchiver, load_city_config
 
 
 def synthetic_feed() -> bytes:
@@ -66,4 +66,38 @@ def test_nyc_config_loads():
     assert len(cfg.endpoints) == 8
     assert cfg.effective_poll_seconds >= 30
     assert all(url.startswith("https://api-endpoint.mta.info/") for url in cfg.endpoints.values())
-    assert set(TOPICS) == {"trip_updates", "vehicle_positions", "alerts"}
+    assert set(TOPICS) == {"trip_updates", "vehicle_positions", "alerts", "odpt_trains"}
+
+
+def test_adapter_registry_and_per_endpoint_override():
+    from ingestion.adapters import ADAPTERS
+
+    assert ADAPTERS["gtfs_rt"] is gtfs_rt
+    assert gtfs_rt.EXTENSION == "pb"
+    # every existing city resolves every endpoint to a registered adapter
+    for path in sorted(CONFIG_DIR.glob("*.yaml")):
+        cfg = load_city_config(path.stem)
+        for name in cfg.endpoints:
+            assert cfg.adapter_for(name) in ADAPTERS, f"{path.stem}:{name}"
+    # per-endpoint override falls back to city-level adapter
+    cfg = load_city_config("nyc")
+    assert cfg.adapter_for("ace") == "gtfs_rt"
+    cfg.endpoint_adapter["ace"] = "other"
+    assert cfg.adapter_for("ace") == "other"
+    assert cfg.adapter_for("bdfm") == "gtfs_rt"
+
+
+def test_raw_archiver_extension(monkeypatch):
+    monkeypatch.setenv("MINIO_ENDPOINT", "http://localhost:1")  # never contacted
+
+    class _Client:
+        def put_object(self, Bucket, Key, Body):  # noqa: N803 — boto3 kwargs
+            self.key = Key
+
+    archiver = RawArchiver()
+    archiver.client = _Client()
+    at = datetime(2026, 9, 1, 3, 4, 5, tzinfo=UTC)
+    assert archiver.archive("nyc", "ace", at, b"x").endswith("20260901T030405Z.pb")
+    assert archiver.archive("tokyo", "trains", at, b"x", ext="json").endswith(
+        "20260901T030405Z.json"
+    )

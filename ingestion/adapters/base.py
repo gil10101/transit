@@ -1,8 +1,8 @@
 """Shared ingestion plumbing: city config, HTTP fetch, Kafka emit, raw-byte archive.
 
-Every adapter emits the canonical envelope (docs/01-data-dictionary.md §F) to the three
-transit.* topics, keyed by city, and archives the exact fetched bytes to the raw bucket
-under hourly prefixes for replay.
+Every adapter emits the canonical envelope (docs/01-data-dictionary.md §F) to the
+transit.* topics (one per feed type, TOPICS below), keyed by city, and archives the
+exact fetched bytes to the raw bucket under hourly prefixes for replay.
 """
 
 from __future__ import annotations
@@ -33,6 +33,9 @@ TOPICS = {
     "trip_updates": "transit.trip_updates",
     "vehicle_positions": "transit.vehicle_positions",
     "alerts": "transit.alerts",
+    # Train-grain ODPT snapshots (Tokyo rail, docs/01 §C.1). Separate topic because the
+    # record shape shares nothing with GTFS-RT trip updates; lands in silver.odpt_trains.
+    "odpt_trains": "transit.odpt_trains",
 }
 
 
@@ -64,6 +67,9 @@ class CityConfig:
     # duplicate objects — more than the entire raw bucket, daily, against a
     # <$100/mo budget. Trip updates still need a fast cadence; alerts do not.
     endpoint_poll_seconds: dict[str, int] = field(default_factory=dict)
+    # Per-endpoint adapter override, falling back to city-level `adapter`. Tokyo mixes
+    # sources in one city: rail via odpt_json, ToeiBus via plain gtfs_rt.
+    endpoint_adapter: dict[str, str] = field(default_factory=dict)
 
     @property
     def effective_poll_seconds(self) -> int:
@@ -80,6 +86,9 @@ class CityConfig:
     def auth_for(self, endpoint: str | None) -> dict:
         return self.endpoint_auth.get(endpoint) or self.auth
 
+    def adapter_for(self, endpoint: str | None) -> str:
+        return self.endpoint_adapter.get(endpoint, self.adapter)
+
     @property
     def static_sources(self) -> list[StaticSource]:
         return static_sources(self.static_gtfs)
@@ -94,6 +103,7 @@ def load_city_config(city: str) -> CityConfig:
     endpoints: dict[str, str] = {}
     endpoint_auth: dict[str, dict] = {}
     endpoint_poll_seconds: dict[str, int] = {}
+    endpoint_adapter: dict[str, str] = {}
     for name, value in dict(groups).items():
         if isinstance(value, dict):
             endpoints[name] = value["url"]
@@ -101,6 +111,8 @@ def load_city_config(city: str) -> CityConfig:
                 endpoint_auth[name] = dict(value["auth"])
             if value.get("poll_seconds") is not None:
                 endpoint_poll_seconds[name] = int(value["poll_seconds"])
+            if value.get("adapter"):
+                endpoint_adapter[name] = str(value["adapter"])
         else:
             endpoints[name] = value
     return CityConfig(
@@ -114,6 +126,7 @@ def load_city_config(city: str) -> CityConfig:
         auth=raw.get("auth") or {},
         endpoint_auth=endpoint_auth,
         endpoint_poll_seconds=endpoint_poll_seconds,
+        endpoint_adapter=endpoint_adapter,
     )
 
 
@@ -247,16 +260,22 @@ def s3_client():
 
 
 class RawArchiver:
-    """Writes fetched bytes to s3://$RAW_BUCKET/<city>/<endpoint>/<date>/<hour>/<ts>.pb."""
+    """Writes fetched bytes to s3://$RAW_BUCKET/<city>/<endpoint>/<date>/<hour>/<ts>.<ext>.
+
+    Extension follows the adapter's wire format (gtfs_rt -> pb, odpt_json -> json);
+    replay and the freshness tripwire are prefix-based and never look at it.
+    """
 
     def __init__(self):
         self.bucket = os.environ.get("RAW_BUCKET", "raw")
         self.client = s3_client()
 
-    def archive(self, city: str, endpoint: str, fetched_at: datetime, raw: bytes) -> str:
+    def archive(
+        self, city: str, endpoint: str, fetched_at: datetime, raw: bytes, ext: str = "pb"
+    ) -> str:
         key = (
             f"{city}/{endpoint}/{fetched_at:%Y-%m-%d}/{fetched_at:%H}/"
-            f"{fetched_at:%Y%m%dT%H%M%S}Z.pb"
+            f"{fetched_at:%Y%m%dT%H%M%S}Z.{ext}"
         )
         self.client.put_object(Bucket=self.bucket, Key=key, Body=raw)
         return key
