@@ -53,7 +53,7 @@ seeds:
           - not_null
           - accepted_values:
               arguments:
-                values: [computed, feed, mixed]
+                values: [computed, feed, mixed, odpt_stated]
       - name: crowding_usable
         description: >
           Whether occupancy_status from the city's vehicle positions is a real

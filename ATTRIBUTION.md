@@ -16,7 +16,9 @@ Active sources:
 - **Zurich**: Data from opentransportdata.swiss (Open Data Platform Mobility Switzerland).
 - **Open-Meteo**: Weather data by Open-Meteo.com (CC BY 4.0).
 
-Reserved for later phases (required notices per plan):
-
 - **Tokyo (ODPT)**: Data from the Public Transportation Open Data Center. Accuracy and timeliness
-  are not guaranteed by the operators or the Center.
+  are not guaranteed by the operators or the Center. ToeiBus realtime data is CC BY 4.0 —
+  Bureau of Transportation, Tokyo Metropolitan Government / Association for Open Data of
+  Public Transportation.
+
+Reserved for later phases (required notices per plan):

@@ -61,6 +61,11 @@ CANONICAL = {
     },
     "stops": {
         "stop_id": "string",
+        # [rev P4] stop_code added for tokyo: it is the verified ODPT URN<->GTFS
+        # join key (odpt:stationCode = stop_code, 149/149 Toei — docs/01 §C.4).
+        # write_table's drift path recreates the table on first parse with the
+        # new column; the weekly run re-parses every city in the same run.
+        "stop_code": "string",
         "stop_name": "string",
         "stop_lat": "double",
         "stop_lon": "double",
@@ -204,11 +209,22 @@ def write_table(spark: SparkSession, df: DataFrame, name: str) -> None:
     table = f"lake.silver.gtfs_static_{name}"
     if spark.catalog.tableExists(table):
         existing = set(spark.table(table).columns)
-        if existing != set(df.columns):
+        added, removed = set(df.columns) - existing, existing - set(df.columns)
+        if added and not removed:
+            # [rev P4] purely additive drift (stop_code) EVOLVES the schema instead
+            # of recreating: a drop would erase every historical gtfs_version_id,
+            # and the SCD2 dims mint *_key from (city, id, version_date) — losing
+            # history orphans the keys already stored on the incremental facts
+            # (31,960 dangling fct_stop_events rows measured when a recreate ran).
+            for col in sorted(added):
+                dtype = dict(CANONICAL[name])[col]
+                spark.sql(f"alter table {table} add column {col} {dtype}")
+                print(f"{table}: added column {col} {dtype} (history preserved)")
+        elif removed:
             # pre-canonical table (schema fixed by whichever city loaded first);
             # rebuild on the canonical projection — versioned partitions mean
             # every city repopulates on its next parse run
-            print(f"{table}: schema drift {sorted(existing ^ set(df.columns))}; recreating")
+            print(f"{table}: schema drift {sorted(added | removed)}; recreating")
             spark.sql(f"drop table {table}")
     writer = df.writeTo(table).partitionedBy("city", "gtfs_version_id")
     if spark.catalog.tableExists(table):

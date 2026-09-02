@@ -8,6 +8,7 @@ select
     s.city as city_key,
     s.gtfs_version_id,
     s.stop_id,
+    s.stop_code,
     s.stop_name,
     s.stop_lat,
     s.stop_lon,

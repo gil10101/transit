@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: int_odpt_stop_map
+    description: >
+      ODPT URN <-> tokyo GTFS id map (Toei rail only — Metro's GTFS is not
+      ingested, docs/01 §D). Join key odpt:stationCode = GTFS stop_code,
+      verified 149/149 live 2026-09-01. Tested both ways per docs/03: every map
+      row must resolve to a real ODPT station AND a real tokyo GTFS stop, and
+      the keys are unique so the map can never fan out a join through it.
+      route_id is the railway's GTFS route (title join), nullable only until
+      the tokyo statics land.
+    columns:
+      - name: station_urn
+        data_tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments:
+                to: ref('stg_odpt__station')
+                field: station_urn
+      - name: stop_id
+        data_tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments:
+                to: ref('stg_gtfs__stops')
+                field: stop_id
+      - name: station_code
+        data_tests: [not_null]
+      - name: railway_urn
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_odpt__railway')
+                field: railway_urn

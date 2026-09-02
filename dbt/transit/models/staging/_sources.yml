@@ -21,6 +21,14 @@ sources:
           warn_after: {count: 30, period: minute}
           error_after: {count: 2, period: hour}
       - name: alerts
+      # Tokyo ODPT (docs/01 §C): train-grain RT snapshots + weekly JSON statics.
+      # No freshness SLA on odpt_trains until the tokyo poller deploys (P4
+      # deploy step) — add the predictions SLA then.
+      - name: odpt_trains
+      - name: odpt_station
+      - name: odpt_railway
+      - name: odpt_train_timetable
+      - name: odpt_calendar
       - name: gtfs_static_routes
       - name: gtfs_static_trips
       - name: gtfs_static_stops

@@ -1,0 +1,20 @@
+version: 2
+
+seeds:
+  - name: mlit_tokyo_benchmark
+    description: >
+      MLIT delay-certificate benchmark for Tokyo railways (docs/01 §C.5), filled
+      manually each quarter from the MLIT publication (source_url per row).
+      Skeleton until P4's PR7 — fct_benchmark_mlit_monthly reads it and an empty
+      seed produces an empty fact, which is the honest state.
+    config:
+      column_types:
+        month: varchar
+        delay_certificate_days: integer
+        avg_delay_minutes: double
+    columns:
+      - name: odpt_railway_urn
+        data_tests: [not_null]
+      - name: month
+        description: "YYYY-MM"
+        data_tests: [not_null]
