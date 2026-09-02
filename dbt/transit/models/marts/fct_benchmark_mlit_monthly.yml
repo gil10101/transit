@@ -1,0 +1,17 @@
+version: 2
+
+models:
+  - name: fct_benchmark_mlit_monthly
+    description: >
+      MLIT delay-certificate benchmark vs measured tokyo delays, grain
+      (odpt_railway_urn, month). Rows exist only for months the manual seed
+      carries; measured columns are null until our data overlaps them. This is
+      a validation table, not a scoring input — the scorecard never reads it.
+    columns:
+      - name: benchmark_key
+        description: odpt_railway_urn | month — grain enforcement
+        data_tests: [unique, not_null]
+      - name: odpt_railway_urn
+        data_tests: [not_null]
+      - name: month
+        data_tests: [not_null]
