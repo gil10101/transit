@@ -209,10 +209,16 @@ one per endpoint.
 Key issued, beta activation never completed; the endpoint still returns `errCd 101`.
 Nothing we can do from here.
 
-### Tokyo — ODPT (not started)
-Needs a developer key we have not applied for. Its GTFS-RT is alerts-only, so the path
-is their `odpt:Train` JSON API, where the operator states the delay directly rather than
-us computing it.
+### Tokyo — ODPT (built 2026-09-01, poller not yet deployed)
+Key active. Its GTFS-RT is alerts-only, so the path is the `odpt:Train` JSON API, where
+the operator states the delay directly rather than us computing it. Live verification
+narrowed the story: the open data center serves train data for **Toei only** — Tokyo
+Metro publishes schedules and line-status text but no per-train positions or delays —
+so Tokyo's punctuality is scored on Toei's four subway lines (the same "score what the
+feed actually shows" call as Toronto). ToeiBus turns out to be vehicle-positions-only.
+Ingestion, silver, the URN-to-GTFS stop map and the odpt_stated finalization path are
+merged and fixture-tested; the cloud poller ships with the P4 deploy checklist in
+docs/operations.md.
 
 ### Weather — Open-Meteo
 Collected hourly for every city since P5. **Nothing reads it yet.** It is banking
@@ -718,7 +724,7 @@ Nearest first:
    completeness against the ≥85% target.
 2. Watch Zurich's first full day, and confirm the allow-list holds as the network wakes up.
 3. Decide the raw-archive retention question.
-4. Chase Chicago's key and apply for Tokyo's.
+4. Chase Chicago's key; deploy the Tokyo poller (docs/operations.md P4 rollout).
 5. ~~Build the scorecard~~ — built, see §17.
 
 ## 17. The scorecard, the history books, and the dashboard (built 2026-08-26)
