@@ -84,17 +84,35 @@ published as (
     -- neither cannot be placed at a stop, so counting it would overstate what was
     -- available). trips_observed / trips_published is then the capture rate: the
     -- only one of these ratios that is about US.
+    -- [rev 2026-09-02] "Published" must also mean SCHEDULABLE. capture_rate exists
+    -- to answer the one question that is about us — of what we could have
+    -- finalized, how much did we? — and a trip with no schedule row on that date
+    -- could never be finalized at all, least of all for a delay-only city whose
+    -- events are schedule + stated delay. Counting those inflated the denominator
+    -- and blamed us for the agency contradicting its own timetable: zurich route
+    -- 92-454-A on 2026-08-31 published 41 trips, 10 of them id-matched to services
+    -- the calendar does not run that day with no active trip on the route at that
+    -- departure time to re-key onto. Reading 0.71 there was measuring the wrong
+    -- thing. This keeps its teeth: a trip that HAS a schedule and still misses gold
+    -- (the origin-stop deletion, a stalled finalizer) still counts against us.
     select
-        city_key,
-        coalesce(route_id, '__unrouted__') as route_id,
-        service_date,
-        count(distinct trip_uid) as trips_published
-    from {{ ref('stg_gtfsrt__trip_updates') }}
-    where arr_delay_sec is not null
-       or dep_delay_sec is not null
-       or arr_pred_ts_utc is not null
-       or dep_pred_ts_utc is not null
-    group by city_key, route_id, service_date
+        p.city_key,
+        coalesce(p.route_id, '__unrouted__') as route_id,
+        p.service_date,
+        count(distinct p.trip_uid) as trips_published
+    from {{ ref('stg_gtfsrt__trip_updates') }} p
+    where (p.arr_delay_sec is not null
+        or p.dep_delay_sec is not null
+        or p.arr_pred_ts_utc is not null
+        or p.dep_pred_ts_utc is not null)
+      and exists (
+          select 1
+          from {{ ref('int_gtfs_scheduled_stop_times') }} s
+          where s.city_key = p.city_key
+            and s.service_date = p.service_date
+            and s.trip_id = p.trip_id
+      )
+    group by p.city_key, p.route_id, p.service_date
 
 ),
 

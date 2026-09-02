@@ -180,11 +180,37 @@ rt_rekey as (
       and r.trip_id is not null
       and r.route_id is not null
       and r.start_time is not null
+      -- [rev 2026-09-02] Two ways an id stops meaning what it meant. It can VANISH
+      -- from the calendar (the original case), or it can SURVIVE and be reused for
+      -- a different service — which is worse, because the id still looks valid and
+      -- the exact branch happily matches it. Zurich 2026-08-31 had 2,103 trips
+      -- id-matched to a static trip departing more than half an hour from the time
+      -- the feed said they started; one route's were matched to a 06:27 service
+      -- while the feed still published them at 17:24, and the finalizer correctly
+      -- refused predictions eleven hours staler than their own schedule. Correct,
+      -- and still a loss.
+      --
+      -- So: an id match is only trusted when the matched trip actually departs when
+      -- the feed says the trip departed. Where they disagree, identity falls back to
+      -- (route, origin departure), which does not depend on ids surviving a refresh.
+      -- Measured blast radius: 0 trips on 2026-08-29 and 0 on 08-30, 2,103 on the
+      -- day after the refresh — the change is inert except where a rotation actually
+      -- broke identity.
       and not exists (
-          select 1 from static_active a
+          select 1
+          from static_active a
+          join static_origin_seconds o
+            on o.city_key = a.city_key
+           and o.trip_id = a.trip_id
+           and o.stop_rn = 1
           where a.city_key = r.city_key
             and a.service_date = r.service_date
             and a.trip_id = r.trip_id
+            and abs(o.origin_seconds - (
+                cast(split_part(r.start_time, ':', 1) as integer) * 3600
+              + cast(split_part(r.start_time, ':', 2) as integer) * 60
+              + cast(split_part(r.start_time, ':', 3) as integer)
+            )) <= {{ var('rekey_origin_tolerance_sec') }}
       )
 
 ),

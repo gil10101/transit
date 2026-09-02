@@ -23,6 +23,12 @@ vars:
   # treated as absent so the canonical COALESCE falls through to
   # actual - scheduled. One day, chosen to reject only the impossible.
   max_plausible_delay_sec: 86400
+  # How far a static trip's origin departure may sit from the start_time the feed
+  # states before the id match is distrusted and identity falls back to
+  # (route, origin departure). 30 min absorbs ordinary origin delay; measured on
+  # 2026-08-29..31 it flags nothing on normal days and only the rotation day's
+  # re-keyed trips.
+  rekey_origin_tolerance_sec: 1800
   freq_headway_threshold_sec: 600
   otp_bands: {early_max: -60, on_time_max: 299, late_max: 899}
   early_departure_grace_sec: 60
