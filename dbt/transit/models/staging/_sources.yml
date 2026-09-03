@@ -22,9 +22,16 @@ sources:
           error_after: {count: 2, period: hour}
       - name: alerts
       # Tokyo ODPT (docs/01 §C): train-grain RT snapshots + weekly JSON statics.
-      # No freshness SLA on odpt_trains until the tokyo poller deploys (P4
-      # deploy step) — add the predictions SLA then.
+      # [rev 2026-09-03] Poller deployed, so odpt_trains now carries the same SLA
+      # as the GTFS-RT predictions it stands in for. The statics stay bare — they
+      # refresh weekly, so a fetch-age check on them would fire every week by
+      # design. Measured cadence when healthy: 30s poll, ~633 cycles in the first
+      # 5h21m with the largest gap 120s.
       - name: odpt_trains
+        loaded_at_field: fetched_at
+        freshness:
+          warn_after: {count: 30, period: minute}
+          error_after: {count: 2, period: hour}
       - name: odpt_station
       - name: odpt_railway
       - name: odpt_train_timetable
