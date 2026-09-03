@@ -27,6 +27,9 @@ sys.path.insert(0, str(REPO))  # scripts/ invocation: make `ingestion` importabl
 FIXTURES = REPO / "tests" / "fixtures"
 RAW_BUCKET = "transit-pulse-622221238588-raw"
 REGION = "us-east-2"
+# GTFS-RT cities only: this audit decodes protobuf fixtures field by field.
+# Tokyo is deliberately absent — its rail source is odpt:Train JSON, so it needs
+# a separate decode path rather than a name in this tuple (docs/01 §C).
 CITIES = ("nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich")
 
 

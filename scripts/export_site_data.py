@@ -30,7 +30,12 @@ from cryptography.hazmat.primitives import serialization
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "site" / "data"
-CITIES = ["nyc", "boston", "dc", "sf", "toronto", "helsinki", "zurich"]
+# [rev 2026-09-03] tokyo added — its poller is live and it reaches every gold
+# mart. Chicago stays out until CTA activates the beta key (docs/04). Note when
+# reading tokyo's standings: its delay is operator-stated and rounded to whole
+# minutes, so its OTP is not measured the same way as the other seven
+# (docs/06 "Tokyo's punctuality number"). The site must say so wherever it ranks.
+CITIES = ["nyc", "boston", "dc", "sf", "toronto", "helsinki", "zurich", "tokyo"]
 
 
 def connect() -> snowflake.connector.SnowflakeConnection:

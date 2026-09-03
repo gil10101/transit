@@ -40,6 +40,12 @@ CITIES: dict[str, dict] = {
     "toronto": {"name": "Toronto", "color": [171, 71, 188], "center": (43.70, -79.40), "zoom": 10},
     "helsinki": {"name": "Helsinki", "color": [0, 172, 193], "center": (60.20, 24.94), "zoom": 10},
     "zurich": {"name": "Zurich", "color": [255, 112, 67], "center": (47.38, 8.54), "zoom": 11},
+    # [rev 2026-09-03] tokyo reached gold. Magenta is the one hue left that no
+    # other city holds — the seven above run blue/red/yellow/green/purple/cyan/
+    # orange, and a reader tracks a city between charts by its colour alone.
+    # Centred on Tokyo station at z11: the scored network is Toei's four subway
+    # lines, which sit inside the 23 wards, not the whole metro area.
+    "tokyo": {"name": "Tokyo", "color": [230, 74, 162], "center": (35.68, 139.76), "zoom": 11},
 }
 
 
