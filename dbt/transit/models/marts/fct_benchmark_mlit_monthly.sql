@@ -11,7 +11,12 @@ with measured as (
         {{ dbt.date_trunc('month', 'e.service_date') }} as month_start,
         count(distinct e.service_date) as observed_days,
         count(e.delay_arr_sec) as scored_events,
-        {{ dbt.safe_cast('median(e.delay_arr_sec)', 'double') }} / 60.0
+        -- plain cast, not dbt.safe_cast: that renders TRY_CAST, and Snowflake's
+        -- TRY_CAST only accepts a string source. median() over an integer
+        -- returns NUMBER(38,3), so it raised "Function TRY_CAST cannot be used
+        -- with arguments of types NUMBER(38,3) and FLOAT" and took the whole
+        -- warehouse chain red (2026-09-03). Numeric->float never fails anyway.
+        cast(median(e.delay_arr_sec) as {{ dbt.type_float() }}) / 60.0
             as our_measured_p50_delay_min
     from {{ ref('fct_stop_events') }} e
     join (
@@ -35,4 +40,4 @@ select
 from {{ ref('mlit_tokyo_benchmark') }} b
 left join measured m
   on m.odpt_railway_urn = b.odpt_railway_urn
- and {{ dbt.safe_cast('m.month_start', 'varchar') }} like b.month || '%'
+ and cast(m.month_start as {{ dbt.type_string() }}) like b.month || '%'
