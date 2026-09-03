@@ -368,8 +368,28 @@ stating explicitly wherever an SF number is quoted.
 | **511.org** (SF Bay) | Regional aggregated GTFS-RT, `agency=RG`, keyed | ~30 operators: bus, tram, metro, regional rail, ferry, **cable car** | Most, with real per-operator gaps | 60 req/hr cap → 200s cadence. Cable car (`route_type` 5) is unique to this feed. |
 | **opentransportdata.swiss** (Zurich) | National `/la/gtfs-rt`, keyed | Whole Swiss network — filtered to 615 Zurich routes: S-Bahn, tram, bus, boat, aerial lift, funicular | Bus, tram, S-Bahn observed (79/11/7 routes on day one); boats not yet | Live since 2026-08-25. National rail classes (TGV/ICE/IC/IR/RE/EXT) are excluded from the allow-list on purpose; S-Bahn (`route_type` 109) is kept. No VehiclePositions product on the Swiss LA API — trip updates only, like Helsinki. |
 | **CTA** (Chicago) | GTFS-RT, keyed | 'L' rail + bus | **Nothing** | Key issued, beta activation still returns `errCd 101`. |
-| **ODPT** (Tokyo) | `odpt:Train` JSON + ToeiBus GTFS-RT (VP only) | Toei subway (4 lines, stated delay) + Arakawa tram (position only) + Toei bus (positions only) | **Nothing yet** (ingestion built 2026-09-01, poller not deployed) | Key active. Center serves **no Metro odpt:Train** — Metro is line-status text only, so Tokyo OTP will rest on Toei rail. Rail GTFS-RT is alerts-only, so the JSON API is the path. |
+| **ODPT** (Tokyo) | `odpt:Train` JSON + ToeiBus GTFS-RT (VP only) | Toei subway (4 lines, stated delay) + Arakawa tram (position only) + Toei bus (positions only) | Live since 2026-09-03: 4 subway lines scored, Arakawa tram volume-only, Toei bus positions. NipporiToneri publishes no realtime at all. | Key active. Center serves **no Metro odpt:Train** — Metro is line-status text only, so Tokyo OTP rests on Toei rail. Rail GTFS-RT is alerts-only, so the JSON API is the path. **`odpt:delay` is minute-quantized** (see caveat below). |
 | **Open-Meteo** | Hourly forecast JSON | n/a | Collected, unused | 1,776 rows in silver, no dbt model reads them. |
+
+### Tokyo's punctuality number is not measured the way everyone else's is
+
+[added 2026-09-03, measured on the first day of live Toei data] Seven of the
+eight cities get their delay from the canonical COALESCE — a feed-stated delay
+where one exists, otherwise the arrival timestamp minus the static schedule —
+and both sides of that resolve to the second. Tokyo does not. Toei states its
+own delay in `odpt:delay`, and **every value it has ever published to us is a
+whole minute**: 0 (13,506 events), 60 (284), 120 (69), 180 (20), 240 (12), 300
+(2). 97.2% are exactly zero, because anything under a minute rounds to zero at
+the source.
+
+So a Tokyo on-time rate near 100% is partly a real fact about Toei and partly an
+artifact of a coarser ruler. Any ranking that puts Tokyo against NYC or Helsinki
+has to say so. Two rules follow, and both are already implemented rather than
+just intended: the tram (`Toei.Arakawa`) publishes position but never a delay,
+so its 2,710 events count as service volume and are excluded from OTP — the
+denominators use `count(delay_arr_sec)`; and any chart or sentence that ranks
+Tokyo alongside the others carries the operator-stated, minute-rounded caveat
+inline, not in a footnote.
 
 Two feeds carry a mode nobody else does: 511's **cable car** and Zurich's
 **funicular/aerial lift**. Two modes are systematically missing everywhere they
