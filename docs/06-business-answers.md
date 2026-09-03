@@ -236,8 +236,14 @@ MBTA and 511 raise many short route-level ones.
 **LIVE as of 2026-08-26.** `dim_weather` (WMO code → condition bucket) +
 `stg_weather__hourly` + `fct_weather_hourly` join `fct_stop_events` on exactly
 (city_key, local_date, local_hour); the 2-year backfill ran the same night
-(124,738 hourly rows, 2024-08-19 → today, all seven cities), so the moment a
-snowy day happens, the comparison exists.
+(124,738 hourly rows, 2024-08-19 → today, all seven cities live at the time), so
+the moment a snowy day happens, the comparison exists. **[rev 2026-09-03]** Tokyo
+joined after that backfill and therefore has only the forward-filled hours (216
+at the time of writing). That is not a gap: Tokyo's transit data starts
+2026-09-03, and weather is only ever joined to days we actually scored, so its
+weather covers its whole scoreable history. Re-running the 2-year backfill just
+to square the row counts would spend 8 cities' worth of Open-Meteo calls to
+populate hours no fact table can reach.
 
 First reading — OTP by condition (cells under 200 scored events suppressed):
 

@@ -12,7 +12,9 @@ brand()
 st.title("Transit Pulse — city reliability scorecard")
 st.caption(
     "Which cities run the most reliable public transit — measured, not asserted. "
-    "7 cities · 4 countries · live GTFS-RT scored against each agency's own schedule."
+    "8 cities · 5 countries · live agency feeds scored against each agency's own "
+    "schedule. Tokyo's delay is operator-stated and rounded to the minute — its "
+    "on-time rate is not measured the same way as the other seven (docs/06)."
 )
 
 scores = q("""

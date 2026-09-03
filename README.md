@@ -3,10 +3,12 @@
 A multi-city transit reliability warehouse. One question: **which cities run the most
 reliable public transit — and what makes them reliable?**
 
-**Live now: seven cities** (NYC, Boston, DC, SF Bay, Toronto, Helsinki, Zurich) polled
-around the clock into one lakehouse, scored by one methodology. Chicago and Tokyo join
-when their API keys clear. Full plan, verified per-feed facts, and the business answers
-live in [`docs/`](docs/).
+**Live now: eight cities** (NYC, Boston, DC, SF Bay, Toronto, Helsinki, Zurich, Tokyo)
+polled around the clock into one lakehouse, scored by one methodology. Chicago joins when
+CTA activates its GTFS-RT beta key. Tokyo's rail source is the ODPT JSON API rather than
+GTFS-RT, and its delay is operator-stated and rounded to the minute — read its on-time
+rate with that caveat (docs/06). Full plan, verified per-feed facts, and the business
+answers live in [`docs/`](docs/).
 
 **Status: Phase 6 — scorecard + dashboard.** Phases 0–5 (NYC slice, cloud deploy,
 7-city fan-out, metrics marts) are done and verified; the pipeline has run unattended
