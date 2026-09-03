@@ -464,6 +464,19 @@ resource "aws_instance" "services" {
     systemctl enable --now transit.service
   EOF
 
+  # [rev 2026-09-02] The AMI is whatever this instance launched with; upgrading it
+  # must be a deliberate act. data.aws_ssm_parameter.al2023_arm tracks the LATEST
+  # Amazon Linux image, so each time AWS publishes one, terraform sees ami drift
+  # and `ami` forces replacement: a plan to add a single poller came back "2 to
+  # destroy", which would have taken the Dagster run history in postgres, the
+  # Kafka buffer and the public IP with it, and handed both boxes new instance
+  # ids that every CloudWatch alarm names explicitly. The data source still
+  # supplies the image for a genuinely new box; it no longer rebuilds a running
+  # one as a side effect of an unrelated change.
+  lifecycle {
+    ignore_changes = [ami]
+  }
+
   tags = { Name = "${var.prefix}-services" }
 }
 

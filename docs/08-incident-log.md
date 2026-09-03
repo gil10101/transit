@@ -299,3 +299,25 @@ This is deliberately the cheap half of the fix — it converts a cliff into a
 slowdown, it does not add capacity. Sizing to 8 GB remains available and costs
 about $24/month gross (currently credit-absorbed). Done ahead of Tokyo's poller,
 which adds an eighth container to this box.
+
+## 2026-09-02 · The plan that would have destroyed both boxes
+Running `terraform plan` for the Tokyo rollout returned **"7 to add, 2 to change,
+2 to destroy"**, with both instance ids going to `(known after apply)`. Cause:
+`data.aws_ssm_parameter.al2023_arm` resolves the LATEST Amazon Linux AMI, AWS had
+published a new one since the boxes launched on 08-22, and `ami` forces
+replacement on aws_instance.
+
+Applying it to add one poller would have destroyed and recreated both EC2 boxes:
+the Dagster postgres (every run record and the queue state), the Kafka buffer,
+the services box public IP, and both instance ids — which the CloudWatch alarms
+name explicitly, so the watchdog would have been left watching machines that no
+longer existed. Two weeks before the deliverable.
+
+Fix: `lifecycle { ignore_changes = [ami] }` on both instances. The data source
+still supplies an image for a genuinely new box; it no longer rebuilds a running
+one as a side effect of an unrelated upstream release. Upgrading the AMI is now a
+deliberate act, which is what it should always have been. Re-plan after the pin:
+**5 to add, 4 to change, 0 to destroy**.
+
+Generalisable: any long-lived stack that resolves "latest" anything into a
+ForceNew attribute will eventually rebuild itself on someone else's schedule.
