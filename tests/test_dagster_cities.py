@@ -23,10 +23,13 @@ def test_live_cities_is_p4():
     # batch 1 keyless trio + batch 2 keyed dc/sf/zurich + P4 tokyo; chicago
     # appends on CTA key activation (order: existing + tokyo — locked)
     assert LIVE_CITIES == ("nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich", "tokyo")
-    # tokyo's poller ships with the P4 deploy step (zurich precedent): live for
-    # fixtures/static/weather, not yet polled — the tripwire must not assert on
-    # raw prefixes nothing writes to.
-    assert set(LIVE_CITIES) - set(POLLED_CITIES) == {"tokyo"}
+    # [rev 2026-09-03] tokyo's poller is deployed and archiving all three ODPT
+    # endpoints, so it joins POLLED_CITIES and the raw-feed tripwire now asserts
+    # on it. The split itself stays load-bearing: a city is live for
+    # static/weather before its poller ships, and asserting on raw prefixes
+    # nothing writes to failed the tripwire every 15 minutes when zurich was
+    # added early (b708622). The next city repeats that gap.
+    assert set(LIVE_CITIES) - set(POLLED_CITIES) == set()
 
 
 def test_city_weather_covers_every_live_city_with_real_tz():
@@ -66,7 +69,17 @@ def test_repo_configs_discovered_only_live_cities():
     )
     assert endpoints["sf"] == ("trip_updates", "vehicle_positions", "alerts")
     assert endpoints["zurich"] == ("trip_updates", "alerts")
-    assert sum(len(v) for v in endpoints.values()) == 27
+    # [rev 2026-09-03] tokyo is ODPT JSON, not GTFS-RT, so its endpoint names are
+    # its own: train-grain snapshots, line-status text on a slower cadence, and
+    # Toei's bus VehiclePositions. The poller requests BOTH TokyoMetro and Toei
+    # for trains — Metro publishes no odpt:Train today, so it contributes nothing
+    # and starts flowing the moment they do, without a config change.
+    assert endpoints["tokyo"] == (
+        "trains",
+        "train_information",
+        "toeibus_vehicle_positions",
+    )
+    assert sum(len(v) for v in endpoints.values()) == 30
     # POLLED_CITIES, never LIVE_CITIES: a city can be live for static/weather
     # before its poller ships, and the tripwire must not assert on prefixes
     # nothing writes to (zurich did exactly that until its allow-list landed)

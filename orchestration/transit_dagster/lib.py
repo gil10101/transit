@@ -37,7 +37,12 @@ LIVE_CITIES = ("nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich", "to
 # rejoins. Add a city here only once its poller is actually running.
 # [rev 2026-09-01] tokyo is live (fixtures + silver work) but its poller ships
 # with the P4 deploy step — kept out until then, zurich precedent.
-POLLED_CITIES = tuple(c for c in LIVE_CITIES if c != "tokyo")
+# [rev 2026-09-03] tokyo joins: its poller is deployed and archiving all three
+# ODPT endpoints (trains, train_information, toeibus_vehicle_positions). It was
+# held out of POLLED_CITIES while only its static was needed — asserting on raw
+# prefixes nothing writes to is what failed the tripwire every 15 minutes when
+# zurich was added early (b708622).
+POLLED_CITIES = LIVE_CITIES
 
 # Centroid + tz per city, duplicated from the dim_city seed
 # (dbt/transit/seeds/dim_city.csv) on purpose: weather pulls must never wake
