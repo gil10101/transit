@@ -321,3 +321,91 @@ deliberate act, which is what it should always have been. Re-plan after the pin:
 
 Generalisable: any long-lived stack that resolves "latest" anything into a
 ForceNew attribute will eventually rebuild itself on someone else's schedule.
+
+## 2026-09-03 · A TRY_CAST Snowflake would not take (3 red chains)
+Chains `20aaaa8d`, `cf217c47` and `5c9c99d9` all died on the same node:
+
+```
+194 of 267 ERROR creating sql table model GOLD.fct_benchmark_mlit_monthly
+  001065 (22023): SQL compilation error:
+  Function TRY_CAST cannot be used with arguments of types NUMBER(38,3) and FLOAT
+```
+
+`fct_benchmark_mlit_monthly` (shipped with the P4 Tokyo work) used
+`{{ dbt.safe_cast('median(e.delay_arr_sec)', 'double') }}`. On Snowflake
+`safe_cast` renders `TRY_CAST`, and **Snowflake's TRY_CAST accepts a string
+source only**; `median()` over an integer is `NUMBER(38,3)`. duckdb's `TRY_CAST`
+takes anything, so the model was green in dev and failed the first time
+production reached it. A second `safe_cast` in the same model (date → varchar)
+would have failed next for the same reason.
+
+Fix: plain `cast(... as {{ dbt.type_float() }})` and
+`cast(... as {{ dbt.type_string() }})`. A number to a float cannot fail, so the
+safe cast was defending against nothing.
+
+**No data was lost.** dbt does not stop at a failed leaf, so the 193 models ahead
+of it built normally and Tokyo landed in gold on schedule through all three red
+chains. What was lost was the green signal — a red chain that is actually fine
+trains you to ignore red chains.
+
+Same class as the 2026-08-26 7-train regex: **dev is duckdb, production is
+Snowflake, and the gaps are not exotic.** Standing rule from here: every new or
+changed model gets its compiled Snowflake SQL executed against the warehouse
+before merge. This fix was verified that way in under a minute, rather than 40
+minutes later when the chain reached it.
+
+## 2026-09-06 · Every Sunday an agency deletes its own history
+Found while checking judged-day counts. Agencies publish a static timetable whose
+`calendar.txt` **begins at the day it was published**, and
+`fct_service_delivery_daily` is a full-refresh table: every chain recomputes all
+of history against whatever static is current (`stg_gtfs__*` all pin
+`max(gtfs_version_id)`). So each Sunday refresh silently zeroes `trips_scheduled`
+for every service date the new calendar does not reach back to, which nulls
+`completeness_pct` and makes those days unjudgeable.
+
+Measured after the 2026-09-06 refresh — "judged days" = closed, at-or-after
+`metrics_from`, completeness ≥ 0.50:
+
+| City | Current calendar starts | Days with events | Judged days |
+|---|---|---|---|
+| toronto | 2026-09-06 (that day) | 15 | **0** |
+| tokyo | n/a — see below | 4 | **0** |
+| helsinki | 2026-09-04 | 15 | 2 |
+| boston | 2026-08-30 | 15 | 7 |
+| zurich | 2025-12-14 | 13 | 11 |
+| dc | 2026-06-21 | 14 | 12 |
+| sf | 2021-06-22 | 15 | 12 |
+| nyc | 2026-05-26 | 16 | 14 |
+
+TTC started a new board period on the 6th, so **Toronto's whole history became
+unjudgeable in one refresh** — 13.8M stop events and a 49.9% OTP that no
+scorecard may use. Re-running `scripts/export_site_data.py` the same day dropped
+the public standings from 7 cities to 6: Toronto and Tokyo both fell out.
+
+The stop events themselves are safe (`fct_stop_events` is incremental and keeps
+what it computed). What is destroyed is the denominator that lets a city be
+scored at all.
+
+**Tokyo is 0 for an unrelated reason** and needs its own fix: `active_trips` in
+the delivery mart joins `stg_gtfs__trips` to `int_service_dates`, and
+`int_service_dates` derives its dates from `stg_gtfsrt__trip_updates` — Tokyo has
+no GTFS-RT rail stream, so it contributes no service dates and no scheduled
+trips. Its events, OTP, alerts and vehicle activity are all correct; only
+`trips_scheduled` is missing, so it cannot reach the scorecard either.
+
+Fix (proposed, NOT yet applied — needs Jake's go-ahead, it touches every
+schedule-side model): **point-in-time statics** — resolve calendar, trips and
+stop times per service date from the version current on that date rather than
+from the newest. Every old version is still in silver with its own trips and
+calendar, so this recovers Toronto and Boston completely and Helsinki back to
+2026-08-20. Plus a Tokyo branch feeding `trips_scheduled` from
+`odpt:TrainTimetable`.
+
+Correction to the 2026-09-03 note on this: Helsinki's August was called
+unrecoverable on the strength of a 31% service_id overlap. That measurement
+paired the OLD calendar with the NEW trips file; point-in-time pairs each
+calendar with its own trips, so the overlap is not the constraint.
+
+Generalisable: **a full-refresh fact computed against a mutable reference is not
+reproducible — it is a snapshot of the reference, not of the day.** Either the
+reference must be versioned point-in-time or the fact must be frozen.
