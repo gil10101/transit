@@ -20,6 +20,13 @@
 -- static calendar says runs, up to the city's local today. Both the scheduled
 -- denominator and the cancelled numerator draw from THIS set, which is what
 -- makes cancelled <= scheduled an invariant instead of a hope.
+-- [rev 2026-09-09] Trips now come from int_gtfs_trips_for_date — the static that
+-- was LIVE on each service date — rather than stg_gtfs__trips, which is pinned to
+-- the newest version. With int_service_dates also resolved point-in-time, both
+-- halves of this join read the same version, so an agency publishing a calendar
+-- that starts at its publication date can no longer erase its own past every
+-- Sunday (docs/08, 2026-09-06). The matchers and the delay path deliberately
+-- still use the newest version; only this denominator needs history.
 with active_trips as (
 
     select
@@ -27,10 +34,11 @@ with active_trips as (
         t.route_id,
         d.service_date,
         t.trip_id
-    from {{ ref('stg_gtfs__trips') }} t
-    join {{ ref('int_service_dates') }} d
+    from {{ ref('int_gtfs_trips_for_date') }} t
+    join {{ ref('int_service_dates_pit') }} d
       on d.city_key = t.city_key
      and d.service_id = t.service_id
+     and d.service_date = t.service_date
     join {{ ref('dim_city') }} dc
       on dc.city_key = t.city_key
     where d.service_date <= cast({{ to_local('current_timestamp', 'dc.iana_tz') }} as date)
@@ -155,6 +163,12 @@ cancelled as (
         -- of which only 90 were calendar-active — a service change cancelling
         -- other days' ids). Numerator drawn from the denominator's own set:
         -- cancelled <= scheduled by construction.
+        -- [rev 2026-09-09] active_trips is now point-in-time while int_trip_matching
+        -- stays newest-pinned, so on historical days whose static has since been
+        -- replaced a cancel may fail to line up and land in the _unscheduled
+        -- bucket instead. Deliberate: those days' stop events are frozen too, so
+        -- the whole row is a contemporaneous record either way, and the invariant
+        -- that matters — cancelled <= scheduled — still holds by construction.
         count(distinct a.trip_id) as trips_cancelled,
         count(distinct case when a.trip_id is null then c.trip_uid end)
             as trips_cancelled_unscheduled
