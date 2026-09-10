@@ -13,6 +13,9 @@ const CITIES = {
   dc:       { name: "Washington DC", src: "WMATA · rail + bus",                  view: [38.90, -77.03, 11.0],  light: "#eda100", dark: "#c98500" },
   toronto:  { name: "Toronto",       src: "TTC · streetcar + bus + subway",      view: [43.72, -79.38, 11.15], light: "#e87ba4", dark: "#d55181" },
   sf:       { name: "SF Bay Area",   src: "511.org · 30+ agencies",              view: [37.70, -122.30, 9.6],  light: "#008300", dark: "#008300" },
+  // operator-stated, minute-rounded delay — every surface that ranks tokyo says so.
+  // Violet: the one hue the seven above leave free (toronto owns pink here).
+  tokyo:    { name: "Tokyo",         src: "ODPT · Toei subway + tram + bus",     view: [35.68, 139.76, 10.8],  light: "#8a56d6", dark: "#9a6ee0" },
 };
 const VP_ABSENT = {
   helsinki: "HSL publishes no vehicle positions on its core GTFS-RT feed, so Helsinki shows routes and stop delays only.",
