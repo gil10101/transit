@@ -8,6 +8,7 @@ from streamlit.testing.v1 import AppTest
 
 PAGES = [
     "Home.py",
+    "pages/1_Patterns.py",
     "pages/2_Delay_Map.py",
     "pages/3_Route_Explorer.py",
     "pages/4_Live_Map.py",
