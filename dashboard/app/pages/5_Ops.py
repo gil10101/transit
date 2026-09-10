@@ -16,13 +16,13 @@ fresh = q("""
            round(datediff(second, max(fetched_at), current_timestamp()) / 60.0, 1) as pred_lag_min,
            count(*) as rows_last_hour
     from TRANSIT.SILVER.stop_time_predictions
-    where fetched_at > dateadd(hour, -4, current_timestamp())
+    where fetched_at > dateadd(hour, -13, current_timestamp())
     group by 1 order by 1
 """)
 fresh["city"] = fresh.city_key.map(city_name)
 st.caption(
-    "This measures the SNOWFLAKE VIEW of silver, which advances when the 2-hourly "
-    "chain re-pins the Iceberg metadata — so up to ~2h of lag here is design, not "
+    "This measures the SNOWFLAKE VIEW of silver, which advances when the twice-daily "
+    "chain re-pins the Iceberg metadata — so up to ~12h of lag here is design, not "
     "outage (physical drains land hourly; the raw-side tripwire alarms at 40 min "
     "independently). Investigate at 150+ min: that means a chain or drain actually "
     "missed. Chasing 80-minute 'staleness' here cost a 25-minute ghost hunt on "

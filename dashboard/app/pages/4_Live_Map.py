@@ -1,7 +1,7 @@
 """Page 4 — last-snapshot map. Latest vehicle position per vehicle from silver,
 labeled with its actual lag rather than pretending to be realtime. The Snowflake
-SILVER view only advances when the 2-hourly chain re-pins Iceberg metadata, so a
-15-minute freshness window is guaranteed-empty by design — the window here is 6h
+SILVER view only advances when the twice-daily chain re-pins Iceberg metadata, so a
+15-minute freshness window is guaranteed-empty by design — the window here is 13h
 and the per-city lag is shown instead. Helsinki and Zurich publish no
 vehicle-position product on the feeds we poll (HSL core has no VP; Swiss LA API
 is trip-updates only), so they are honestly absent."""
@@ -16,7 +16,7 @@ brand()
 st.title("Vehicles on the road — last snapshot")
 st.caption(
     "Latest fix per vehicle from the most recent drained window. Silver reaches "
-    "Snowflake when the 2-hourly chain re-pins Iceberg metadata, so up to ~2h of "
+    "Snowflake when the twice-daily chain re-pins Iceberg metadata, so up to ~12h of "
     "lag is design, not outage — each city is labeled with its actual lag."
 )
 
@@ -25,7 +25,7 @@ vp = q("""
         select city as city_key, vehicle_id, lat, lon, fetched_at,
                max(fetched_at) over (partition by city) as city_latest
         from TRANSIT.SILVER.vehicle_positions
-        where fetched_at > dateadd(hour, -6, current_timestamp())
+        where fetched_at > dateadd(hour, -13, current_timestamp())
           and lat is not null and lon is not null
         qualify row_number() over (partition by city, vehicle_id order by fetched_at desc) = 1
     )
