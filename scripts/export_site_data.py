@@ -289,21 +289,25 @@ weekday_weekend = q(ELIGIBLE + """
 """)
 
 # locked rule: bus departing a scheduled timepoint > 60s early = failure. Only
-# cities whose statics carry timepoint (see fct_stop_events header) can appear.
+# cities whose statics carry timepoint can appear. The flag is the fact's; the
+# timepoint column never reached the prod relation, so the denominator joins the
+# finalized int table at the same grain; mode joins dim_route (modes.json's join).
 early_departures = q(ELIGIBLE + """
     select f.city_key,
            round(100 * count(case when f.early_departure_flag then 1 end)
-               / nullif(count(case when f.mode = 'bus' and f.timepoint = 1
-                                    and f.delay_dep_sec is not null then 1 end), 0), 1)
-               as early_dep_pct,
-           count(case when f.mode = 'bus' and f.timepoint = 1
-                       and f.delay_dep_sec is not null then 1 end) as measured
+               / count(*), 1) as early_dep_pct,
+           count(*) as measured
     from fct_stop_events f
+    join dim_route dr on dr.route_key = f.route_key
+    join int_stop_events_finalized i
+      on i.city_key = f.city_key and i.service_date = f.service_date
+     and i.trip_uid = f.trip_uid and i.stop_sequence = f.stop_sequence
     join eligible e
       on e.city_key = f.city_key and e.route_id = f.route_id
      and e.service_date = f.service_date
+    where dr.mode = 'bus' and i.timepoint = 1 and f.delay_dep_sec is not null
     group by 1
-    having measured >= 1000
+    having count(*) >= 1000
     order by early_dep_pct desc
 """)
 

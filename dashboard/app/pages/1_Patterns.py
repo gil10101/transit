@@ -121,18 +121,21 @@ with col_dow:
 with col_mode:
     st.subheader("By mode")
     st.caption("Modes a city actually publishes realtime for — coverage gaps in docs/06.")
+    # mode lives on dim_route, not the fact (fct_stop_events header: model-only
+    # columns never reached the prod relation) — same join modes.json uses
     modes = q(
         ELIGIBLE
         + """
-        select f.city_key, f.mode,
+        select f.city_key, dr.mode,
                round(100 * count(case when f.otp_band = 'on_time' then 1 end)
                    / nullif(count(f.otp_band), 0), 1) as otp_pct,
                count(f.otp_band) as scored
         from fct_stop_events f
+        join dim_route dr on dr.route_key = f.route_key
         join eligible e
           on e.city_key = f.city_key and e.route_id = f.route_id
          and e.service_date = f.service_date
-        where f.otp_band is not null and f.mode is not null
+        where f.otp_band is not null and dr.mode is not null
         group by 1, 2
         having count(f.otp_band) >= 1000
     """
@@ -156,22 +159,27 @@ st.caption(
     "cities whose statics carry timepoints appear; the share is of bus timepoint "
     "departures with a measured departure delay."
 )
+# timepoint never reached the prod fact relation; it lives on the finalized
+# int table at the same grain, so the denominator joins through it while the
+# flag itself stays the fact's (single authority for the locked rule)
 early = q(
     ELIGIBLE
     + """
     select f.city_key,
            round(100 * count(case when f.early_departure_flag then 1 end)
-               / nullif(count(case when f.mode = 'bus' and f.timepoint = 1
-                                    and f.delay_dep_sec is not null then 1 end), 0), 1)
-               as early_dep_pct,
-           count(case when f.mode = 'bus' and f.timepoint = 1
-                       and f.delay_dep_sec is not null then 1 end) as measured
+               / count(*), 1) as early_dep_pct,
+           count(*) as measured
     from fct_stop_events f
+    join dim_route dr on dr.route_key = f.route_key
+    join int_stop_events_finalized i
+      on i.city_key = f.city_key and i.service_date = f.service_date
+     and i.trip_uid = f.trip_uid and i.stop_sequence = f.stop_sequence
     join eligible e
       on e.city_key = f.city_key and e.route_id = f.route_id
      and e.service_date = f.service_date
+    where dr.mode = 'bus' and i.timepoint = 1 and f.delay_dep_sec is not null
     group by 1
-    having measured >= 1000
+    having count(*) >= 1000
     order by early_dep_pct desc
 """
 )
