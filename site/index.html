@@ -126,6 +126,40 @@
   </div>
 </section>
 
+<!-- ======================= measured answers ======================= -->
+<section class="section reveal" id="answers">
+  <div class="section-head">
+    <div class="eyebrow">FINDINGS · SHARPER QUESTIONS</div>
+    <h2>Four more questions, measured</h2>
+    <p class="section-note">Same eligibility gate as the standings — closed judged days,
+    routes at or above the completeness floor. Where a feed cannot express something
+    (a network that never emits a cancellation, a schedule without timepoints), the table
+    says so instead of printing a flattering zero.</p>
+  </div>
+  <div class="card-grid two">
+    <div class="card">
+      <h3>Does the weekend run better?</h3>
+      <div class="sub">On-time share, weekday vs weekend, sorted by the weekend edge</div>
+      <div id="answers-wkend"></div>
+    </div>
+    <div class="card">
+      <h3>Does the rush hour break the system?</h3>
+      <div class="sub">Each city's own seeded peak windows, local time</div>
+      <div id="answers-peak"></div>
+    </div>
+    <div class="card">
+      <h3>Who leaves early?</h3>
+      <div class="sub">Bus departures from scheduled timepoints more than 60s ahead — the rider they strand arrived on time</div>
+      <div id="answers-early"></div>
+    </div>
+    <div class="card">
+      <h3>Who cancels, and who can't say?</h3>
+      <div class="sub">Cancelled share of scheduled trips; a dash means the feed never emits CANCELED at all</div>
+      <div id="answers-cancel"></div>
+    </div>
+  </div>
+</section>
+
 <!-- ======================= network maps ======================= -->
 <div class="band">
 <section class="section reveal" id="network">
@@ -187,7 +221,7 @@
     <h2>The warehouse behind the numbers</h2>
     <p class="section-note">Pollers fetch each agency's GTFS-RT into Kafka; Spark Structured
     Streaming lands it in S3 Iceberg; a Dagster chain drains, re-pins Snowflake, and rebuilds
-    the dbt marts every two hours. These are the finds that made the numbers trustworthy:</p>
+    the dbt marts twice a day. These are the finds that made the numbers trustworthy:</p>
   </div>
   <div class="tile-grid wide-tiles" id="pipeline-tiles"></div>
   <div class="finding-grid">

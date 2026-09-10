@@ -258,6 +258,104 @@ best = q(f"select * from ({ROUTE_AGG}) order by otp_pct desc, events desc limit 
 worst = q(f"select * from ({ROUTE_AGG}) order by otp_pct asc, events desc limit 8")
 dump("routes.json", {"as_of": AS_OF, "best": best, "worst": worst})
 
+# --- answers.json: the docs/06 sub-questions the sections above don't already
+# answer, measured with the same eligibility gate as the standings. One file,
+# four keyed blocks, so the findings section renders from a single fetch.
+ELIGIBLE = """
+    with eligible as (
+        select d.city_key, d.route_id, d.service_date
+        from fct_service_delivery_daily d
+        where d.service_day_closed
+          and d.service_date >= d.metrics_from
+          and coalesce(d.completeness_pct, 0) >= 0.50
+    )
+"""
+
+weekday_weekend = q(ELIGIBLE + """
+    select f.city_key,
+           case when dayofweekiso(f.service_date) >= 6 then 'weekend'
+                else 'weekday' end as day_type,
+           round(100 * avg(case when f.otp_band = 'on_time' then 1.0 else 0.0 end), 1)
+               as otp_pct,
+           count(f.otp_band) as events
+    from fct_stop_events f
+    join eligible e
+      on e.city_key = f.city_key and e.route_id = f.route_id
+     and e.service_date = f.service_date
+    where f.otp_band is not null
+    group by 1, 2
+    having count(f.otp_band) >= 1000
+    order by 1, 2
+""")
+
+# locked rule: bus departing a scheduled timepoint > 60s early = failure. Only
+# cities whose statics carry timepoint (see fct_stop_events header) can appear.
+early_departures = q(ELIGIBLE + """
+    select f.city_key,
+           round(100 * count(case when f.early_departure_flag then 1 end)
+               / nullif(count(case when f.mode = 'bus' and f.timepoint = 1
+                                    and f.delay_dep_sec is not null then 1 end), 0), 1)
+               as early_dep_pct,
+           count(case when f.mode = 'bus' and f.timepoint = 1
+                       and f.delay_dep_sec is not null then 1 end) as measured
+    from fct_stop_events f
+    join eligible e
+      on e.city_key = f.city_key and e.route_id = f.route_id
+     and e.service_date = f.service_date
+    group by 1
+    having measured >= 1000
+    order by early_dep_pct desc
+""")
+
+# peak vs off-peak per each city's own seeded windows (dim_city peak_* columns,
+# local time by construction — fct_stop_events.local_hour is already local)
+peak_offpeak = q(ELIGIBLE + """
+    select f.city_key,
+           case when f.local_hour >= hour(to_time(c.peak_am_start))
+                 and f.local_hour <  hour(to_time(c.peak_am_end))   then 'am_peak'
+                when f.local_hour >= hour(to_time(c.peak_pm_start))
+                 and f.local_hour <  hour(to_time(c.peak_pm_end))   then 'pm_peak'
+                when f.local_hour >= hour(to_time(c.peak_am_end))
+                 and f.local_hour <  hour(to_time(c.peak_pm_start)) then 'midday'
+                else 'off_hours' end as day_part,
+           round(100 * avg(case when f.otp_band = 'on_time' then 1.0 else 0.0 end), 1)
+               as otp_pct,
+           count(f.otp_band) as events
+    from fct_stop_events f
+    join dim_city c on c.city_key = f.city_key
+    join eligible e
+      on e.city_key = f.city_key and e.route_id = f.route_id
+     and e.service_date = f.service_date
+    where f.otp_band is not null
+    group by 1, 2
+    having count(f.otp_band) >= 1000
+    order by 1, 2
+""")
+
+# cancel rate context: a 0.000% is a feed property (the feed never emits
+# CANCELED), not a service property — docs/06. emits_cancels makes that visible.
+cancellations = q(ELIGIBLE + """
+    select e.city_key,
+           round(100 * cast(sum(d.trips_cancelled) as double)
+               / nullif(sum(d.trips_scheduled), 0), 2) as cancel_pct,
+           sum(d.trips_cancelled) as cancelled,
+           (sum(d.trips_cancelled) > 0) as emits_cancels
+    from eligible e
+    join fct_service_delivery_daily d
+      on d.city_key = e.city_key and d.route_id = e.route_id
+     and d.service_date = e.service_date
+    group by 1
+    order by cancel_pct desc
+""")
+
+dump("answers.json", {
+    "as_of": AS_OF,
+    "weekday_weekend": weekday_weekend,
+    "early_departures": early_departures,
+    "peak_offpeak": peak_offpeak,
+    "cancellations": cancellations,
+})
+
 # --- maps/*.json -----------------------------------------------------------
 if "--skip-maps" in sys.argv:
     print("maps skipped", flush=True)

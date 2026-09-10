@@ -337,6 +337,62 @@ async function renderModes() {
     `<p class="footnote">Cells under 5,000 scored events are suppressed. Hover a cell for its evidence count.</p>`;
 }
 
+// ---------- measured answers ----------
+function cityCell(key) {
+  return `<span class="city-cell"><span class="dot" style="background:${cityColor(key)}"></span>${CITIES[key].name}</span>`;
+}
+async function renderAnswers() {
+  const raw = await loadJSON("data/answers.json");
+  // a city can reach gold before this file's CITIES map learns it (tokyo did);
+  // render what we know rather than throwing on the whole section
+  const known = (rows) => rows.filter((r) => CITIES[r.city_key]);
+  const a = {
+    weekday_weekend: known(raw.weekday_weekend),
+    early_departures: known(raw.early_departures),
+    peak_offpeak: known(raw.peak_offpeak),
+    cancellations: known(raw.cancellations),
+  };
+
+  const wk = {};
+  for (const r of a.weekday_weekend) (wk[r.city_key] ??= {})[r.day_type] = +r.otp_pct;
+  const wkRows = Object.entries(wk)
+    .filter(([, v]) => v.weekday != null && v.weekend != null)
+    .map(([c, v]) => ({ c, ...v, edge: v.weekend - v.weekday }))
+    .sort((x, y) => y.edge - x.edge)
+    .map((r) => `<tr><td>${cityCell(r.c)}</td>
+      <td class="num mono">${r.weekday.toFixed(1)}%</td>
+      <td class="num mono">${r.weekend.toFixed(1)}%</td>
+      <td class="num mono">${r.edge > 0 ? "+" : ""}${r.edge.toFixed(1)}</td></tr>`).join("");
+  $("answers-wkend").innerHTML =
+    `<table class="data-table"><tr><th>city</th><th class="num">weekday</th><th class="num">weekend</th><th class="num">edge</th></tr>${wkRows}</table>`;
+
+  const PARTS = ["am_peak", "midday", "pm_peak", "off_hours"];
+  const LABEL = { am_peak: "am peak", midday: "midday", pm_peak: "pm peak", off_hours: "off hours" };
+  const pk = {};
+  for (const r of a.peak_offpeak) (pk[r.city_key] ??= {})[r.day_part] = +r.otp_pct;
+  const pkRows = Object.entries(pk).map(([c, v]) =>
+    `<tr><td>${cityCell(c)}</td>${PARTS.map((p) =>
+      `<td class="num mono">${v[p] != null ? v[p].toFixed(1) + "%" : ""}</td>`).join("")}</tr>`).join("");
+  $("answers-peak").innerHTML =
+    `<table class="data-table"><tr><th>city</th>${PARTS.map((p) => `<th class="num">${LABEL[p]}</th>`).join("")}</tr>${pkRows}</table>`;
+
+  const earlyRows = a.early_departures.map((r) =>
+    `<tr><td>${cityCell(r.city_key)}</td>
+     <td class="num mono"><span title="${fmt(r.measured)} measured timepoint departures">${Number(r.early_dep_pct).toFixed(1)}%</span></td></tr>`).join("");
+  $("answers-early").innerHTML = a.early_departures.length
+    ? `<table class="data-table"><tr><th>city</th><th class="num">left early</th></tr>${earlyRows}</table>` +
+      `<p class="footnote">Only cities whose static schedules mark timepoints can be measured. Hover for evidence counts.</p>`
+    : `<p class="footnote">No timepoint-bearing statics in gold yet.</p>`;
+
+  const cxRows = a.cancellations.map((r) =>
+    `<tr><td>${cityCell(r.city_key)}</td>
+     <td class="num mono">${r.emits_cancels ? Number(r.cancel_pct).toFixed(2) + "%" : "—"}</td>
+     <td class="num mono">${r.emits_cancels ? fmt(r.cancelled) : "never emits"}</td></tr>`).join("");
+  $("answers-cancel").innerHTML =
+    `<table class="data-table"><tr><th>city</th><th class="num">cancelled</th><th class="num">trips</th></tr>${cxRows}</table>` +
+    `<p class="footnote">A dash is a feed property, not perfect service — those feeds have no CANCELED vocabulary.</p>`;
+}
+
 // ---------- best / worst routes ----------
 function routeTable(rows) {
   const body = rows.map((r) => {
@@ -526,6 +582,7 @@ function rethemeAll() {
   renderLineCharts();
   renderDist();
   renderModes();
+  renderAnswers();
   renderRoutes();
   renderHero();
   renderCityMap(activeCity, false);
@@ -573,6 +630,7 @@ renderStandings();
 renderChartLegend().then(renderLineCharts);
 renderDist();
 renderModes();
+renderAnswers();
 renderRoutes();
 renderHero();
 renderTabs();
