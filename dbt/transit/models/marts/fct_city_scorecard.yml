@@ -1,15 +1,23 @@
 version: 2
 
 models:
-  - name: fct_city_scorecard_monthly
+  - name: fct_city_scorecard
     description: >
-      P6 headline: one composite reliability score per city per month, 0-100, with the
-      sub-scores and inputs that produced it.
+      P6 headline: one composite reliability score per city, 0-100, over the city's
+      full judged window [window_start, window_end], with the sub-scores and inputs
+      that produced it.
+
+      [rev 2026-09-10] WINDOW grain replaces calendar-month grain (Jake approved).
+      The month grain demanded var('scorecard_min_judged_days') judged days inside one
+      calendar month; with metrics_from spanning 23 Aug - 4 Sep and the project closing
+      17 Sep, no month could ever satisfy it even once 20+ judged days existed. The
+      20-day floor is UNCHANGED — it now counts the city's whole judged history. The
+      retired fct_city_scorecard_monthly relation stays in the warehouse untouched
+      until teardown; nothing builds or reads it.
 
       Deliberately refuses to emit a row for a city with fewer than
-      var('scorecard_min_judged_days') closed judged service days in the month. As of
-      2026-08-26 that means the table is EMPTY — there are four days of data. An empty
-      scorecard is the correct output for four days; a populated one would be the defect.
+      var('scorecard_min_judged_days') closed judged service days. An empty scorecard
+      is the correct output for thin history; a populated one would be the defect.
 
       Scores are versioned, never silently rewritten: every row carries
       methodology_version and the four weights that produced it, so changing weights
@@ -26,11 +34,15 @@ models:
       punishes (missing OTP is not 0) nor flatters (missing EWT is not perfection).
     columns:
       - name: scorecard_key
-        description: md5 of (city_key, month, methodology_version)
+        description: md5 of (city_key, methodology_version) — one row per city per methodology
         data_tests: [unique, not_null]
       - name: city_key
+        data_tests: [unique, not_null]
+      - name: window_start
+        description: first eligible judged service day behind this score
         data_tests: [not_null]
-      - name: month
+      - name: window_end
+        description: last eligible judged service day behind this score
         data_tests: [not_null]
 
       - name: score_0_100

@@ -40,7 +40,7 @@ sources:
 | `int_service_frequency` | ~~incremental~~ **table [rev P5]** (small; rebuilt with static) | median sched headway per (route, direction, daypart, service_date); `is_frequent = headway ≤ var('freq_headway_threshold_sec')` |
 | ~~`int_headways`~~ **`fct_headways` [rev P5]** (marts, per docs/02 §fct_headways) | incremental (delete+insert, 48h lookback) | LAG(actual_arr) per (city, route, dir, stop, service_date); sched headway from frequencies.txt else LAG(sched_arr) |
 | `fct_*`, `dim_*` | incremental / table per schema doc | facts: merge + cluster (service_date, city_key); dims from snapshots |
-| `fct_city_scorecard_monthly` | table | full-refresh each run; methodology_version stamped |
+| `fct_city_scorecard` | table | full-refresh each run; methodology_version stamped. [rev 2026-09-10] window grain (city × judged window), was calendar-month — the 20-day floor is unchanged but now counts the whole judged history; a month could never hold 20 days between metrics_from (Aug 23–Sep 4) and the Sep 17 close. Retired `fct_city_scorecard_monthly` relation stays until teardown |
 
 ## 3. `int_stop_events_finalized` — the core logic (sketch)
 

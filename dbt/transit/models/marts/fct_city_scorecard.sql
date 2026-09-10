@@ -1,19 +1,34 @@
--- P6: the headline. One composite reliability score per city per month, 0-100.
+-- P6: the headline. One composite reliability score per city, 0-100, over that
+-- city's full judged window.
 --
--- Grain: (city_key, month). Full refresh each run — the score is a function of the
--- month's data, so it must be recomputed rather than accumulated.
+-- Grain: (city_key) — one row per city per methodology version, covering
+-- [window_start, window_end] = the span of its eligible route-days. Full
+-- refresh each run — the score is a function of the window's data, so it must
+-- be recomputed rather than accumulated.
+--
+-- [rev 2026-09-10 — WINDOW grain replaces calendar-month grain; Jake approved]
+-- The month grain required var('scorecard_min_judged_days') judged days inside
+-- ONE calendar month. With metrics_from spanning 23 Aug – 4 Sep and the
+-- project closing 17 Sep, no month could ever hold 20 judged days even once
+-- 20+ genuinely judged days existed — August ends too early, September gets
+-- cut off. The month boundary was measuring the calendar, not the evidence.
+-- The 20-day floor itself is UNCHANGED (this is a grain change, not a
+-- threshold change): a city still needs 20 closed judged days, they just
+-- accumulate across its whole judged history. The retired monthly relation
+-- (fct_city_scorecard_monthly) stays in the warehouse untouched until
+-- teardown; nothing builds or reads it.
 --
 -- THIS IS THE MOST QUOTABLE NUMBER THE PROJECT PRODUCES, which drives four decisions:
 --
 -- 1. IT REFUSES TO EXIST RATHER THAN BE THIN. A city needs var('scorecard_min_judged_days')
---    closed, judged service days in the month or it produces no row. On 2026-08-26 that
---    means NO city is scored, because there are four days of data. That is the correct
---    output for four days, not a gap to work around. A confident-looking 0-100 built on a
---    sliver is worse than no number, because nobody can see the sliver in "68".
+--    closed, judged service days in its window or it produces no row. An empty scorecard
+--    is the correct output for thin history, not a gap to work around. A confident-looking
+--    0-100 built on a sliver is worse than no number, because nobody can see the sliver
+--    in "68".
 --
 -- 2. IT IS VERSIONED, NEVER SILENTLY REWRITTEN. Every row carries methodology_version and
 --    the four weights that produced it. Changing weights makes v2 rows; it does not
---    reinterpret history (docs/02 §fct_city_scorecard_monthly).
+--    reinterpret history (docs/02 §fct_city_scorecard).
 --
 -- 3. IT SHOWS ITS WORKING. score_0_100 is useless without the sub-scores, the inputs they
 --    came from, and how much was excluded — so all of it is on the row. A reader must be
@@ -27,11 +42,11 @@
 --
 -- GRAIN DISCIPLINE (the bug that forced the rewrite): fct_route_reliability_daily is
 -- direction-grain and repeats route-level delivery values on every direction row, so
--- summing its trip counts double-counts two-direction routes (triple where an unmatched
--- direction folds to -1). Delivery quantities are therefore taken from route-grain
--- fct_service_delivery_daily directly, and reliability ratios are weighted by their own
--- evidence counts (banded_events, rated_gaps, ewt_gap_count), never by trip counts that
--- live at a different grain.
+-- summing its trip counts double-counts two-direction routes (triple where an
+-- unmatched direction folds to -1). Delivery quantities are therefore taken from
+-- route-grain fct_service_delivery_daily directly, and reliability ratios are weighted
+-- by their own evidence counts (banded_events, rated_gaps, ewt_gap_count), never by
+-- trip counts that live at a different grain.
 --
 -- Weights (var score_weights): wait .35, otp .30, cancel .20, bunch .15. Wait dominates
 -- deliberately — on frequent service, which is where most riders are, waiting longer than
@@ -56,7 +71,6 @@ eligible_route_days as (
 
     select
         d.city_key,
-        date_trunc('month', d.service_date) as month,
         d.service_date,
         d.route_id,
         d.trips_scheduled,
@@ -75,13 +89,12 @@ excluded as (
 
     select
         d.city_key,
-        date_trunc('month', d.service_date) as month,
         count(*) as excluded_route_days
     from {{ ref('fct_service_delivery_daily') }} d
     where d.service_day_closed
       and d.service_date >= d.metrics_from
       and coalesce(d.completeness_pct, 0) < {{ var('scorecard_min_completeness') }}
-    group by 1, 2
+    group by 1
 
 ),
 
@@ -93,15 +106,16 @@ delivery as (
 
     select
         city_key,
-        month,
         count(distinct service_date) as judged_days,
+        min(service_date)            as window_start,
+        max(service_date)            as window_end,
         count(*)                     as route_days,
         sum(trips_scheduled)         as scheduled_trips,
         sum(trips_observed)          as observed_trips,
         cast(sum(trips_cancelled) as double) / nullif(sum(trips_scheduled), 0) as cancel_pct,
         sum(completeness_pct * trips_scheduled) / nullif(sum(trips_scheduled), 0) as completeness_pct
     from eligible_route_days
-    group by 1, 2
+    group by 1
 
 ),
 
@@ -113,7 +127,6 @@ reliability as (
 
     select
         r.city_key,
-        e.month,
         sum(r.otp_pct * r.banded_events)
             / nullif(sum(case when r.otp_pct      is not null then r.banded_events end), 0) as otp_pct,
         sum(r.bunching_pct * r.rated_gaps)
@@ -125,7 +138,7 @@ reliability as (
       on e.city_key = r.city_key
      and e.route_id = r.route_id
      and e.service_date = r.service_date
-    group by 1, 2
+    group by 1
 
 ),
 
@@ -137,7 +150,6 @@ frequent_share as (
 
     select
         e.city_key,
-        e.month,
         sum(case when f.has_ewt then e.trips_observed else 0 end)
             / nullif(sum(cast(e.trips_observed as double)), 0) as frequent_service_share
     from eligible_route_days e
@@ -150,7 +162,7 @@ frequent_share as (
       on f.city_key = e.city_key
      and f.route_id = e.route_id
      and f.service_date = e.service_date
-    group by 1, 2
+    group by 1
 
 ),
 
@@ -158,8 +170,9 @@ scored as (
 
     select
         d.city_key,
-        d.month,
         d.judged_days,
+        d.window_start,
+        d.window_end,
         d.route_days,
         d.scheduled_trips,
         d.observed_trips,
@@ -186,18 +199,18 @@ scored as (
              then 100.0 * least(1.0, greatest(0.0, 1.0 - r.bunching_pct)) end    as s_bunch
     from delivery d
     left join reliability r
-           on r.city_key = d.city_key and r.month = d.month
+           on r.city_key = d.city_key
     left join frequent_share fs
-           on fs.city_key = d.city_key and fs.month = d.month
+           on fs.city_key = d.city_key
     cross join weights w
 
 )
 
 select
-    md5(concat_ws('|', s.city_key, cast(s.month as string), '{{ var("methodology_version") }}'))
-        as scorecard_key,
+    md5(concat_ws('|', s.city_key, '{{ var("methodology_version") }}')) as scorecard_key,
     s.city_key,
-    s.month,
+    s.window_start,
+    s.window_end,
     -- Composite over the components that exist, weights renormalised so absence
     -- neither punishes nor flatters. Which components were present is visible in
     -- the sub-score columns: a NULL sub-score took no part in this number.
@@ -236,6 +249,6 @@ select
     '{{ var("methodology_version") }}' as methodology_version
 from scored s
 left join excluded e
-       on e.city_key = s.city_key and e.month = s.month
+       on e.city_key = s.city_key
 -- the guard: too little history means no score, not a quiet one
 where s.judged_days >= {{ var('scorecard_min_judged_days') }}

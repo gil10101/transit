@@ -1,7 +1,9 @@
 """Page 1 — the scorecard. The headline number, shown with the same honesty the
-model enforces: fct_city_scorecard_monthly refuses to score a city below 20 closed
-judged days, so until a city crosses that bar this page shows PROGRESS toward a
-score, clearly labeled provisional, rather than dressing 4 days up as a ranking."""
+model enforces: fct_city_scorecard refuses to score a city below 20 closed judged
+days across its whole judged window (window grain since 2026-09-10 — the month
+grain could never hold 20 days between metrics_from and the Sep 17 close), so
+until a city crosses that bar this page shows PROGRESS toward a score, clearly
+labeled provisional, rather than dressing thin history up as a ranking."""
 
 import streamlit as st
 from lib import CITIES, brand, city_name, q
@@ -18,11 +20,11 @@ st.caption(
 )
 
 scores = q("""
-    select city_key, month, score_0_100, s_wait, s_otp, s_cancel, s_bunch,
-           frequent_service_share, completeness_pct, judged_days,
-           excluded_route_days, methodology_version
-    from fct_city_scorecard_monthly
-    order by month desc, score_0_100 desc
+    select city_key, window_start, window_end, score_0_100, s_wait, s_otp,
+           s_cancel, s_bunch, frequent_service_share, completeness_pct,
+           judged_days, excluded_route_days, methodology_version
+    from fct_city_scorecard
+    order by score_0_100 desc
 """)
 
 progress = q("""
@@ -126,12 +128,18 @@ if scores.empty:
     )
 
 else:
-    months = sorted(scores.month.unique(), reverse=True)
-    month = st.selectbox("Month", months)
-    m = scores[scores.month == month].sort_values("score_0_100", ascending=False)
+    m = scores.sort_values("score_0_100", ascending=False)
     m["city"] = m.city_key.map(city_name)
+    lo, hi = m.window_start.min(), m.window_end.max()
 
-    st.subheader(f"Composite score, {month} (methodology v{m.methodology_version.iloc[0]})")
+    st.subheader(
+        f"Composite score, {lo:%b %d} - {hi:%b %d} "
+        f"(methodology v{m.methodology_version.iloc[0]})"
+    )
+    st.caption(
+        "Each city is scored over its own judged window - window_start differs per "
+        "city because metrics_from does. judged_days on every row is the evidence count."
+    )
     st.bar_chart(m.set_index("city").score_0_100)
 
     st.subheader("Component breakdown")

@@ -21,7 +21,7 @@
 7. **Weather sensitivity** — how much does reliability degrade per mm of rain / cm of snow, per city (Helsinki in snow vs Boston in snow is a great chart).
 8. **Data completeness** — observed trips vs scheduled trips per feed, tracked as a first-class metric (feeds differ in quality; measuring your sources is part of the answer).
 
-All of it rolls up into **`fct_city_scorecard_monthly`** — a 0–100 composite reliability score per city, with Tokyo's official government delay statistics loaded as an external benchmark to validate our measurements.
+All of it rolls up into **`fct_city_scorecard`** (window grain since 2026-09-10) — a 0–100 composite reliability score per city, with Tokyo's official government delay statistics loaded as an external benchmark to validate our measurements.
 
 ---
 
@@ -219,7 +219,7 @@ fct_route_reliability_daily    -- first aggregate mart
   ewt_sec (frequent routes), bunching_pct, big_gap_pct,
   cancel_pct, completeness_pct
 
-fct_city_scorecard_monthly     -- the headline
+fct_city_scorecard             -- the headline (window grain)
   city_key, month, score_0_100, rank,
   s_wait, s_otp, s_cancel, s_bunching (components),
   frequent_service_share, completeness_pct, excluded_days
@@ -293,7 +293,7 @@ mlit_benchmark_seed  ──►  (dbt) fct_benchmark_mlit_monthly
 
 s3_silver_sensor (new partition detected)
    └─►  (dbt) int_stop_events_finalized  ──►  fct_stop_events ──► fct_headways
-              ──►  fct_route_reliability_daily  ──►  fct_city_scorecard_monthly
+              ──►  fct_route_reliability_daily  ──►  fct_city_scorecard
                         └─►  dashboard_current_state   └─►  monthly_report_md
 
 Partitions: MultiPartition(city × service_date) on everything from silver down —

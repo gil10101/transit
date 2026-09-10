@@ -13,7 +13,7 @@ Star schema. All timestamps stored as `TIMESTAMP_NTZ` with explicit `_utc` / `_l
      |                         |
      |            fct_route_reliability_daily ── fct_alerts_daily
      |                         |                fct_weather_hourly
-     └──────────── fct_city_scorecard_monthly ── fct_benchmark_mlit_monthly
+     └──────────── fct_city_scorecard ── fct_benchmark_mlit_monthly
 ```
 
 ---
@@ -136,7 +136,7 @@ Grain: (city_key, mode, service_date, local_hour). distinct_vehicles, distinct_t
 ### fct_route_reliability_daily
 (city_key, route_key, service_date, direction_id): mode, otp_pct, early_pct, late_pct, very_late_pct, early_departure_pct, mean/median/p90_delay_sec, ewt_sec (frequent slices), bunching_pct, big_gap_pct, cancel_pct, completeness_pct, scheduled_trips, observed_trips.
 
-### fct_city_scorecard_monthly
+### fct_city_scorecard  *(window grain since 2026-09-10; was fct_city_scorecard_monthly — same columns plus window_start/window_end, month dropped, 20-day floor unchanged)*
 (city_key, month): score_0_100, s_wait, s_otp, s_cancel, s_bunch, frequent_service_share, completeness_pct, excluded_route_days, judged_days, route_days, trip totals, weights, methodology_version **[rev]** (scores are versioned — weight changes create v2, never silently rewrite history).
 
 > [rev P6, 2026-08-26] As built, three rules the sketch didn't spell out:

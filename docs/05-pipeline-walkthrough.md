@@ -44,7 +44,7 @@ vibes. Three decisions fall out of the question and explain most of the design:
 | Cancellations | `fct_service_delivery_daily` | feed-declared CANCELED trips | explicit service withdrawal |
 | Alert minutes | `fct_alerts_daily` | disruption exposure per route-day | context for a bad day |
 | Weather sensitivity *(collected, not yet joined)* | `silver.weather_hourly` | reliability vs precipitation/snow | resilience, not just fair-weather scores |
-| Composite score | `fct_city_scorecard_monthly` *(P6, not built)* | weighted: wait .35, otp .30, cancel .20, bunch .15 | the headline ranking |
+| Composite score | `fct_city_scorecard` *(window grain)* | weighted: wait .35, otp .30, cancel .20, bunch .15 | the headline ranking |
 
 ---
 
@@ -313,7 +313,7 @@ number, while the row still counts as service volume. See §7.
 | `fct_route_reliability_daily` | city × route × direction × service_date | `otp_pct`, `early/late/very_late_pct`, `mean/median/p90_delay_sec`, `ewt_sec`, `bunching_pct`, `big_gap_pct`, `cancel_pct`, `completeness_pct`, `scheduled_trips`, `observed_trips` |
 | `fct_alerts_daily` | city × route × service_date | `alerts_active`, `alert_minutes`, `worst_effect` |
 | `fct_vehicle_activity_hourly` | city × mode × service_date × local_hour | `distinct_vehicles`, `distinct_trips_active`, `distinct_routes_active`, `vehicle_id_reliable` |
-| `fct_city_scorecard_monthly` | city × month — **P6, not built** | composite score, versioned weights |
+| `fct_city_scorecard` | city × judged window ([rev 2026-09-10], was city × month) | composite score, versioned weights |
 
 ### Lineage
 

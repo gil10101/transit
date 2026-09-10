@@ -1,7 +1,7 @@
 # 06 — What the warehouse currently answers
 
 Every number on this page came out of `analysis/business_questions.sql` run
-against `TRANSIT.GOLD` on **2026-09-01 13:45Z**, over the data collected since
+against `TRANSIT.GOLD` on **2026-09-10 05:05Z**, over the data collected since
 2026-08-22. Re-run that file rather than editing numbers here by hand.
 
 **This run is the first whose MEANS are trustworthy.** Two defects were fixed
@@ -21,10 +21,10 @@ on 2026-08-31 and the whole history rebuilt behind them (docs/08):
   2026-08-26 run and reads +194s here. Earlier editions of this page told you
   to distrust the mean; you no longer have to.
 
-**Read the caveats before quoting anything.** This is 4–5 days of data, not a
-season. Cities onboarded on different days (`dim_city.metrics_from`), so the
+**Read the caveats before quoting anything.** This is under three weeks of data,
+not a season. Cities onboarded on different days (`dim_city.metrics_from`), so the
 denominators are not equal, and a "most reliable city" ranking off this window
-would be dishonest — which is precisely why `fct_city_scorecard_monthly`
+would be dishonest — which is precisely why `fct_city_scorecard`
 refuses to emit one until a city has 20 closed judged days. What the numbers
 *do* establish is that the pipeline produces plausible, internally consistent,
 cross-city-comparable measurements. This run is also the first with the 7-line
@@ -39,9 +39,11 @@ joined into gold (Q7 is live).
 > reliable?
 
 Not answerable yet as a single score — and now that is a *design guarantee*
-rather than a gap: `fct_city_scorecard_monthly` exists, is built by every
+rather than a gap: `fct_city_scorecard` exists, is built by every
 chain run, and deliberately holds ZERO rows until a city accrues 20 closed
-judged days in a month. Every input to it exists and is measured below, each
+judged days across its judged window ([rev 2026-09-10] window grain — the month
+boundary was measuring the calendar, not the evidence; first cities cross 20
+around Sep 12-14). Every input to it exists and is measured below, each
 of the eight sub-questions from `docs/transit-pulse-plan.md` §1 with its
 current answer.
 
@@ -69,22 +71,24 @@ construction, and its 0.0% early is an artifact of the same quantization —
 Toei never states a negative delay. First place with an asterisk that must
 travel with it everywhere.
 
-Zurich's 96.1% on 547k events is the real number — and a lesson. Until
+Zurich's 96.2% — first among the schedule-MEASURED cities (Tokyo's asterisked
+number above it is the operator's own claim) — is the real number, and a lesson. Until
 2026-08-27 its whole network was silently reduced to ~3k events because the Swiss
 feed publishes delay-only predictions (no timestamps) and finalization demanded
 timestamps; the completeness gate caught it on Zurich's FIRST judged day and the
 delay_plus_schedule finalization method fixed it (docs/08). Swiss punctuality
-lives up to its reputation: first place, by fifteen points, and its band split
-is now measured rather than pending — only 1.1% early and 0.2% very late, the
-tightest distribution of any city here.
+lives up to its reputation: fifteen points clear of third, with only 1.1% early
+and 0.2% very late — the tightest measured distribution of any city here.
 
-**Toronto's 38% early is the finding here, not its 50.4% on-time.** Toronto is
+**Toronto's 37% early is the finding here, not its 50.0% on-time.** Toronto is
 not late — it is *ahead of schedule* four times out of ten. For a bus network
 that is a genuine service defect (a bus that leaves a timepoint early strands
 riders who arrived on time), which is exactly why the early band is tracked
 separately instead of being folded into "not late". It is also worth one more
-look before it goes in a scorecard: 38% is high enough to suspect the TTC
-static's timepoints as well as TTC's driving.
+look before it goes in a scorecard: 37% is high enough to suspect the TTC
+static's timepoints as well as TTC's driving — and the timepoint-scoped cut
+agrees: 18% of Toronto's measured bus timepoint departures leave more than 60s
+early, ninety times Helsinki's rate (site: "Who leaves early?").
 
 By local hour, the 8am and 5pm peaks (routes with ≥500 events in the hour):
 
