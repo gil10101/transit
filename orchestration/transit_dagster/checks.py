@@ -85,12 +85,18 @@ SERVICE_HOURS_LOCAL = range(6, 24)
 
 @asset_check(asset=AssetKey("fct_stop_events"), name="gold_rows_growing")
 def gold_rows_growing(snowflake: SnowflakeResource) -> AssetCheckResult:
-    """Rows finalized since the previous chain run (3h window = 2h cadence plus
+    """Rows finalized since the previous chain run (5h window = 4h cadence plus
     slack) must be > 0 during NYC service hours. last_seen_utc = last prediction
-    snapshot backing the finalized event; sysdate() is UTC (quirk 1)."""
+    snapshot backing the finalized event; sysdate() is UTC (quirk 1).
+
+    [rev 2026-09-09] Window widened 3h -> 5h with the cadence change 2h -> 4h.
+    The happy path never needed it — this runs straight after a drain, so the
+    freshest finalized events are minutes old — but a single skipped chain now
+    leaves an 8h gap instead of 4h, and a check that fires on the recovery run
+    rather than the failure is worse than no check."""
     (rows,) = snowflake.fetch_one(
         "select count(*) from TRANSIT.GOLD.FCT_STOP_EVENTS "
-        "where last_seen_utc >= dateadd(hour, -3, sysdate())",
+        "where last_seen_utc >= dateadd(hour, -5, sysdate())",
         schema="GOLD",
     )
     rows = int(rows)  # connector may hand back Decimal; keep metadata serializable
@@ -104,15 +110,20 @@ def gold_rows_growing(snowflake: SnowflakeResource) -> AssetCheckResult:
 
 @asset_check(asset=AssetKey("stg_gtfsrt__trip_updates"), name="silver_predictions_fresh")
 def silver_predictions_fresh(snowflake: SnowflakeResource) -> AssetCheckResult:
-    """max(fetched_at) across silver stop_time_predictions must be < 3h old —
-    catches a stalled drain/refresh even when the poller is healthy."""
+    """max(fetched_at) across silver stop_time_predictions must be < 5h old —
+    catches a stalled drain/refresh even when the poller is healthy.
+
+    [rev 2026-09-09] 3h -> 5h alongside the 2h -> 4h cadence change, for the same
+    reason as gold_rows_growing: this runs after the drain so the happy path is
+    always minutes old, but the threshold has to clear one missed cycle or it
+    reports the recovery instead of the outage."""
     (age_sec,) = snowflake.fetch_one(
         "select datediff('second', max(fetched_at), sysdate()) "
         "from TRANSIT.SILVER.STOP_TIME_PREDICTIONS"
     )
     age_sec = int(age_sec) if age_sec is not None else None
     return AssetCheckResult(
-        passed=bool(age_sec is not None and age_sec < 3 * 3600),
+        passed=bool(age_sec is not None and age_sec < 5 * 3600),
         metadata={
             "age_min": round(age_sec / 60, 1) if age_sec is not None else "no rows in silver"
         },

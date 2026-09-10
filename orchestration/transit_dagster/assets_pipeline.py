@@ -135,6 +135,17 @@ warehouse_chain_job = define_asset_job(
 pipeline_schedule = ScheduleDefinition(
     default_status=DefaultScheduleStatus.RUNNING,
     job=warehouse_chain_job,
-    cron_schedule="5 */2 * * *",  # :05 keeps clear of the :00 EventBridge drain submit
+    # [rev 2026-09-09] 2h -> 4h to stretch the credit runway past the 17 Sep close.
+    # Warehouse credits track chain runtime almost exactly (22.5 of the last 3
+    # days' 23.4 credits were compute; cloud services 0.8; storage at 95 GB is
+    # cents), so halving the builds roughly halves the Snowflake bill: $14.00/day
+    # -> ~$7.66, moving exhaustion from 16 Sep to 23 Sep. It also halves the EMR
+    # drain submissions, which is the largest AWS line item.
+    #
+    # Nothing is lost by this. The pollers keep writing raw S3 every 30s at any
+    # cadence and the drain reads whatever accumulated since the last checkpoint;
+    # the only change is that gold trails the feeds by up to 4h instead of 2h.
+    # :05 keeps clear of the :00 EventBridge drain submit.
+    cron_schedule="5 */4 * * *",
     execution_timezone="UTC",
 )

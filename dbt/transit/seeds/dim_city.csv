@@ -6,4 +6,4 @@ helsinki,Helsinki,FI,Europe/Helsinki,07:00,10:00,16:00,19:00,computed,false,HSL 
 dc,Washington DC,US,America/New_York,07:00,10:00,16:00,19:00,computed,false,Data provided by the Washington Metropolitan Area Transit Authority,2026-08-25,true
 sf,San Francisco Bay Area,US,America/Los_Angeles,07:00,10:00,16:00,19:00,mixed,true,Data provided by 511.org,2026-08-25,true
 zurich,Zurich,CH,Europe/Zurich,07:00,10:00,16:00,19:00,feed,false,Data from opentransportdata.swiss (Open Data Platform Mobility Switzerland),2026-08-26,true
-tokyo,Tokyo,JP,Asia/Tokyo,07:00,10:00,17:00,20:00,odpt_stated,false,Data from the Public Transportation Open Data Center,2026-09-02,true
+tokyo,Tokyo,JP,Asia/Tokyo,07:00,10:00,17:00,20:00,odpt_stated,false,Data from the Public Transportation Open Data Center,2026-09-04,true

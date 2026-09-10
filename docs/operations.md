@@ -45,7 +45,7 @@ aws ssm send-command --instance-ids i-0f0d6e32cb15ce471 --document-name AWS-RunS
 # feed_groups keys in ingestion/config/cities/<city>.yaml, e.g. boston/trip_updates)
 aws s3 ls s3://transit-pulse-622221238588-raw/nyc/base/$(date -u +%Y-%m-%d)/ --recursive | tail -1
 
-# drains healthy (expect transit-drain SUCCESS hourly, plus the 2h chain's own)
+# drains healthy (expect transit-drain SUCCESS hourly, plus the 4h chain's own)
 aws emr-serverless list-job-runs --application-id 00g86oj9urdank0d \
   --query 'jobRuns[0:4].[name,state,createdAt]' --output text
 
@@ -61,8 +61,8 @@ snow sql -q "select count(*), max(fetched_at) from TRANSIT.SILVER.STOP_TIME_PRED
 | Task | Command |
 |---|---|
 | Manual drain now (also re-stages code zip + jars) | `make emr-drain` |
-| Re-pin Snowflake Iceberg metadata (automated: Dagster 2h chain since P5; manual fallback) | `make snowflake-refresh` |
-| Build gold on Snowflake (automated: Dagster 2h chain since P5; manual fallback) | `cd dbt/transit && uv run dbt build --target prod --profiles-dir .` |
+| Re-pin Snowflake Iceberg metadata (automated: Dagster 4h chain since P5; manual fallback) | `make snowflake-refresh` |
+| Build gold on Snowflake (automated: Dagster 4h chain since P5; manual fallback) | `cd dbt/transit && uv run dbt build --target prod --profiles-dir .` |
 | Local dev loop | `make up` → `make poll-nyc` / `make spark-local` → `make dbt-build` (duckdb) |
 | Rebuild/push service images (then restart via SSM `systemctl restart transit.service`) | `make deploy-images` (both) / `make dagster-deploy` (Dagster image only) |
 | One-off 2yr weather backfill (manual by design) | `make p5-backfill-weather` (see Dagster section for env prereqs) |
@@ -78,9 +78,9 @@ cadence (drains are idempotent `availableNow` catch-ups).
 
 | Schedule (UTC) | What runs |
 |---|---|
-| Every 2h at :05 | `emr_drain` → `snowflake_iceberg_refresh` (re-pin metadata) → dbt build (gold) → warehouse asset checks (gold row growth during service hours; silver `max(fetched_at)` < 3h) |
+| Every 4h at :05 (was 2h until 2026-09-09 — cadence halved to stretch the Snowflake credit runway past the 17 Sep close; warehouse credits track chain runtime almost 1:1, and no data is lost because the pollers write raw S3 every 30s regardless) | `emr_drain` → `snowflake_iceberg_refresh` (re-pin metadata) → dbt build (gold) → warehouse asset checks (gold row growth during service hours; silver `max(fetched_at)` < 3h) |
 | Every 15 min (:10 :25 :40 :55) | `raw_feed_freshness` — boto3-only S3 listing of every **polled** city's endpoint prefixes (config-driven from the `feed_groups` keys in `ingestion/config/cities/*.yaml`: nyc 8, boston 3, toronto 3, helsinki 2, dc 6, sf 3, zurich 2, tokyo 3 = 30). **[rev 2026-08-25]** The list is now `POLLED_CITIES`, not `LIVE_CITIES` (lib.py). Zurich sat in `LIVE_CITIES` from batch 2 so its national static would parse, but its poller was withheld pending the route allow-list — the tripwire asserted on two prefixes nothing ever wrote to and failed every 15 min for a day. Zurich's allow-list shipped 2026-08-25 and its poller deployed, so it is back to 27; the split remains so the next withheld poller cannot repeat it. Fails if any endpoint's newest object is older than 40 min (worst-case detection ~55 min after a kill; sf's 200s cadence still clears the 40-min bar by 12×). **[rev 2026-08-25] This 40-min bar is now a ceiling on per-endpoint cadence.** `feed_groups.<name>.poll_seconds` lets one feed poll slower than its city (zurich alerts at 600s = 10 min, clearing the bar by 4×); anything at or above 2400s would make the tripwire fail permanently on a healthy feed. Raise the threshold in `evaluate_feed_freshness` before setting a cadence that slow. **This is the killed-feed tripwire**; it never wakes the warehouse |
-| Weekly Sun 09:00 (off the 2h :05 grid) | `gtfs_static` — EMR parse of each live city's static zip (8 cities since tokyo joined 2026-09-03; sequential, one at a time on the 8 vCPU app; a failing city is skipped and reported, the rest still refresh) → refresh `gtfs_static_*` iceberg tables → dbt build --select "stg_gtfs__*+". Typically done well before the 10:05 chain; worst case (per-city 40-min timeouts) spills past it — that chain run fails on capacity and self-heals at its next 2h tick. Zurich's zip is the Swiss NATIONAL static (235 MB, largest of the set) — watch its first weekly run against the 40-min per-city EMR timeout. **[rev 2026-08-25] No longer red**: dc's two-zip keyed static and sf's 511 static are both wired and verified (ingestion/city_static.py, dc.yaml, sf.yaml, dictionary §D) |
+| Weekly Sun 09:00 (off the 4h :05 grid) | `gtfs_static` — EMR parse of each live city's static zip (8 cities since tokyo joined 2026-09-03; sequential, one at a time on the 8 vCPU app; a failing city is skipped and reported, the rest still refresh) → refresh `gtfs_static_*` iceberg tables → dbt build --select "stg_gtfs__*+". Typically done well before the 10:05 chain; worst case (per-city 40-min timeouts) spills past it — that chain run fails on capacity and self-heals at its next 4h tick. Zurich's zip is the Swiss NATIONAL static (235 MB, largest of the set) — watch its first weekly run against the 40-min per-city EMR timeout. **[rev 2026-08-25] No longer red**: dc's two-zip keyed static and sf's 511 static are both wired and verified (ingestion/city_static.py, dc.yaml, sf.yaml, dictionary §D) |
 | Hourly at :20 | `weather_hourly` — Open-Meteo forecast MERGE into `TRANSIT.SILVER.WEATHER_HOURLY` (all live cities: nyc, boston, toronto, helsinki, dc, sf, zurich, tokyo) |
 | Manual only | `weather_backfill_2yr` (`make p5-backfill-weather`) — Open-Meteo archive API, chunked by year |
 
@@ -325,7 +325,7 @@ count, which is outside the box) is the smallest thing that would close this. No
 6. **Docker Desktop on this laptop**: `credsStore: desktop` deadlocked all pulls once;
    removed (backup `~/.docker/config.json.bak-transit`).
 7. Iceberg tables in Snowflake are object-store cataloged: they do NOT auto-follow new
-   snapshots — re-pin to the latest version-hint required (Dagster's 2h chain does it
+   snapshots — re-pin to the latest version-hint required (Dagster's 4h chain does it
    since P5; `make snowflake-refresh` is the manual fallback).
 
 ## Cost model

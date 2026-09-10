@@ -47,6 +47,22 @@ scheduled as (
     from active_trips
     group by city_key, route_id, service_date
 
+    -- [rev 2026-09-09] Tokyo's denominator arrives pre-aggregated from
+    -- odpt:TrainTimetable, because active_trips above cannot see it: that path
+    -- runs GTFS static trips through int_service_dates, whose dates come from
+    -- the GTFS-RT stream, and Tokyo's rail realtime is odpt:Train JSON. Without
+    -- this branch trips_scheduled was 0 for every Tokyo day, completeness_pct
+    -- NULL, and the city unjudgeable and absent from the scorecard while its
+    -- events and OTP were correct all along (docs/08, 2026-09-06).
+    union all
+
+    select
+        city_key,
+        route_id,
+        service_date,
+        trips_scheduled
+    from {{ ref('int_odpt_scheduled_trips') }}
+
 ),
 
 observed as (
