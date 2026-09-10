@@ -447,9 +447,26 @@ tighten; `assert_delays_are_plausible` reads the var, so the tripwire follows
 automatically (and its 72h scope means the next chain's delete+insert window
 recompute clears recent rows before the test ever sees them).
 
-**Repair.** Incremental models never revisit old rows, so history got a
-surgical in-place `UPDATE` (delays in the dead band → NULL) on
-`int_stop_events_finalized` + `fct_stop_events`, then a full-refresh of the
-delay-consuming daily marts. Stated-input rows in the dead band that a
-recompute would have re-derived from timestamps: checked first, count below.
-Proof queries and before/after in this entry's verification block.
+**Repair.** Incremental models never revisit old rows, and an in-place UPDATE
+on gold is exactly the kind of mutation this project routes through a human.
+Instead the bound now lives at the FACT layer too: `fct_stop_events` applies
+`max_plausible_delay_sec` to whatever the finalized layer carries (and
+`otp_band` / `early_departure_flag` inherit the bounded values by
+construction), so one `--full-refresh` of the fact — a cheap read of the int
+table, no silver reprocess — heals all of history, for this bound change and
+any future one. `int_stop_events_finalized` keeps its stale >72h values,
+documented in both model headers; every consumer reads the fact.
+
+**Executed 2026-09-10 ~04:53Z** (fact + fct_route_reliability_daily +
+fct_benchmark_mlit_monthly + fct_city_scorecard_monthly, `--full-refresh`
+`--target prod`: 61 pass / 3 pre-existing warns / 0 errors). Proof:
+
+| | before | after |
+|---|---|---|
+| events with \|delay\| in the dead band | 57,523 (toronto 29,776 / sf 16,824 / nyc 10,898 / zurich 21 / dc 4) | **0** |
+| nyc mean / median arrival delay | −193s / +2s | **+59s** / +3s |
+| toronto mean / median | −35s / −5s | **+52s** / −5s |
+| sf mean / median | +198s / +62s | **+174s** / +61s |
+
+Means moved by minutes; medians moved by at most a second — the fingerprint of
+removing a symmetric artifact rather than reshaping the distribution.

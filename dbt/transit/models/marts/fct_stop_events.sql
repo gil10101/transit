@@ -19,7 +19,22 @@
 ) }}
 
 with f as (
-    select * from {{ ref('int_stop_events_finalized') }}
+    -- [rev 2026-09-10] The plausibility bound is enforced HERE as well as in the
+    -- finalizer. The finalizer is incremental and never revisits rows older than
+    -- the lookback, so when the bound tightened (86400 -> 43200, docs/01 §A.2)
+    -- its history kept the old rule forever; re-deriving those rows would mean
+    -- reprocessing all of silver. Applying the bound to whatever the finalized
+    -- layer carries means one --full-refresh of THIS model (a cheap read of the
+    -- int table) heals all of history, now and for any future bound change —
+    -- and otp_band / early_departure_flag below inherit the bounded values by
+    -- construction. Inside the 72h window both layers compute identically.
+    select
+        * exclude (delay_arr_sec, delay_dep_sec),
+        case when abs(delay_arr_sec) <= {{ var('max_plausible_delay_sec') }}
+             then delay_arr_sec end as delay_arr_sec,
+        case when abs(delay_dep_sec) <= {{ var('max_plausible_delay_sec') }}
+             then delay_dep_sec end as delay_dep_sec
+    from {{ ref('int_stop_events_finalized') }}
     {% if is_incremental() %}
     where service_date >= current_date - cast(ceil({{ var('lookback_hours') }} / 24.0) as int)
     {% endif %}
