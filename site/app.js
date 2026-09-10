@@ -91,7 +91,7 @@ async function renderTiles() {
   $("hero-tiles").innerHTML = [
     tile(fmt(c.stop_events), "stop events scored"),
     tile(fmt(s.trips.observed), "trips observed"),
-    tile("7 · 4", "cities · countries"),
+    tile("8 · 5", "cities · countries"),
     tile(fmt(c.silver_rows), "rows in silver"),
     tile(fmt(c.gold_rows), "rows in gold"),
     tile(c.service_days, "service days live"),
@@ -99,7 +99,7 @@ async function renderTiles() {
   $("pipeline-tiles").innerHTML = [
     tile(fmt(c.silver_rows), "silver rows (iceberg)"),
     tile(fmt(c.gold_rows), "gold rows (dbt marts)"),
-    tile("2h", "drain → dbt cadence"),
+    tile("12h", "drain → dbt cadence"),
     tile("30s", "poll floor per feed"),
   ].join("");
 }
