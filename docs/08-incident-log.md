@@ -393,13 +393,18 @@ no GTFS-RT rail stream, so it contributes no service dates and no scheduled
 trips. Its events, OTP, alerts and vehicle activity are all correct; only
 `trips_scheduled` is missing, so it cannot reach the scorecard either.
 
-Fix (proposed, NOT yet applied — needs Jake's go-ahead, it touches every
-schedule-side model): **point-in-time statics** — resolve calendar, trips and
-stop times per service date from the version current on that date rather than
-from the newest. Every old version is still in silver with its own trips and
-calendar, so this recovers Toronto and Boston completely and Helsinki back to
-2026-08-20. Plus a Tokyo branch feeding `trips_scheduled` from
-`odpt:TrainTimetable`.
+Fix (**APPLIED 2026-09-10**, commits `49db3f7` + `b7eb1bc`, deployed 03:34Z):
+**point-in-time statics for the denominator only** — `int_gtfs_version_for_date`
+pins (city, service_date) → the version live that day; `int_service_dates_pit`
+and `int_gtfs_trips_for_date` resolve calendar and trips against that pin; the
+delivery mart reads those two. The delay path (matchers,
+`int_gtfs_scheduled_stop_times`, `int_service_dates`) deliberately stays
+newest-pinned — it only operates inside the 72h window, where newest is correct,
+and PIT dates × newest trips would silently drop delay events after an id
+renumbering. Snowflake simulation before deploy: judged days Boston 10 → 18,
+Helsinki 5 → 18, Toronto 3 → 18. Tokyo's branch feeds `trips_scheduled` from
+`odpt:TrainTimetable` (`int_odpt_scheduled_trips`). First chain to run all of
+it: 04:05Z 2026-09-10 — verification below in the day's entry.
 
 Correction to the 2026-09-03 note on this: Helsinki's August was called
 unrecoverable on the strength of a 31% service_id overlap. That measurement
@@ -409,3 +414,42 @@ calendar with its own trips, so the overlap is not the constraint.
 Generalisable: **a full-refresh fact computed against a mutable reference is not
 reproducible — it is a snapshot of the reference, not of the day.** Either the
 reference must be versioned point-in-time or the fact must be frozen.
+
+## 2026-09-10 · The day-offset ghosts the 1-day bound was built for walked under it
+
+Found by the field-level sampling pass (memory rule: a green job is not
+evidence), not by any test — the same way the 2026-08-31 corrupt-delay class was
+found, and one band below it.
+
+**Mechanism.** A trip matched to the wrong calendar day produces
+`delay = ±(86400 − true_delay)`. The 2026-08-31 result-bound rejected
+`|delay| > 86400` — but the artifact lands just UNDER a day by construction, so
+the bound passed almost every one it existed to kill. Only the rare cases that
+crossed a day (±86400 and beyond) were caught.
+
+**Measured** (gold, 2026-09-10 04:00Z):
+
+| band | events |
+|---|---|
+| 12–24h | **57,153** (toronto 29,776 / sf 16,537 / nyc 10,815 / zurich 21 / dc 4; extremes exactly ±86400) |
+| 6–12h | 2,084 |
+| 2–6h | 23,341 |
+
+A distribution with a hole between 6h and 12h and a wall at exactly one day is
+an artifact family, not a service pattern. Medians never moved; means were
+wrecked (the 08-31 lesson again: a metric that only breaks in the mean is still
+broken, and docs/06 quotes means).
+
+**Fix.** `max_plausible_delay_sec` 86400 → 43200. Nothing real in urban transit
+is 12 hours late at a stop; every day-offset ghost is at least 12h out so long
+as true delay stays under 12h. Stated-input bound and result bound both
+tighten; `assert_delays_are_plausible` reads the var, so the tripwire follows
+automatically (and its 72h scope means the next chain's delete+insert window
+recompute clears recent rows before the test ever sees them).
+
+**Repair.** Incremental models never revisit old rows, so history got a
+surgical in-place `UPDATE` (delays in the dead band → NULL) on
+`int_stop_events_finalized` + `fct_stop_events`, then a full-refresh of the
+delay-consuming daily marts. Stated-input rows in the dead band that a
+recompute would have re-derived from timestamps: checked first, count below.
+Proof queries and before/after in this entry's verification block.

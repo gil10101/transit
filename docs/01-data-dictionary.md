@@ -35,7 +35,7 @@ Binary protobuf `FeedMessage`. One file = `header` + repeated `entity`, each ent
 
 **Canonical delay rule:** `delay_pred_sec = COALESCE(arrival.delay, arrival.time − scheduled_arrival_epoch)`,
 where a stated `arrival.delay` counts only if `abs(delay) <= max_plausible_delay_sec`
-(var, 86400 = one day).
+(var, 43200 = 12 hours — [rev 2026-09-10], was 86400).
 
 [rev 2026-08-31] The bound is part of the rule, not an implementation detail.
 Preferring the operator's stated delay is right — it knows its own service — but
@@ -56,6 +56,20 @@ unknown, and the honest value for unknown is NULL; the event still counts as
 service volume and simply leaves every delay/OTP aggregate, which is why docs/06
 divides by `count(delay_arr_sec)` and never `count(*)`. Asserted by
 `assert_delays_are_plausible`.
+
+[rev 2026-09-10] Bound tightened 86400 → 43200 (one day → 12 hours). The 1-day
+bound had a blind spot the artifact walks straight through: a trip matched to
+the wrong calendar day produces `delay = ±(86400 − true_delay)` — just UNDER a
+day by construction, so the very ghosts the bound exists to kill were passing
+it. Measured in gold on 2026-09-10: 57,153 events in the 12–24h |delay| band
+(toronto 29,776 / sf 16,537 / nyc 10,815 / zurich 21 / dc 4; extremes exactly
+±86400) against only 2,084 in the 6–12h band — a distribution with a hole in it,
+exactly what a day-offset artifact family looks like. Nothing real in urban
+transit is 12 hours late at a stop; a trip that far from its matched schedule
+row is a wrong-day match, not a late vehicle. Medians never moved (the artifact
+is sign-symmetric and rare per route-day) but means were wrecked — same failure
+shape as the 2026-08-31 finding, one band lower. History repaired in place the
+same night; incident + proof queries in docs/08 (2026-09-10).
 
 ### A.3 VehiclePosition (→ `silver.vehicle_positions`)
 | Field | Type | Our use |
@@ -140,6 +154,38 @@ divides by `count(delay_arr_sec)` and never `count(*)`. Asserted by
 - **Metro timetables DO exist** on the center (9,774) — only Metro's real-time odpt:Train is absent.
 
 ### C.5 MLIT benchmark seed (manual quarterly): `line_name`, `odpt_railway_urn`, `month`, `delay_certificate_days`, `avg_delay_minutes` (where published), `source_url`.
+
+### C.6 Challenge 2026 data — evaluated 2026-09-10, deliberately NOT used
+
+Catalog + live-verified the night of 2026-09-10, then **rejected on license**. Do not
+re-litigate without new facts.
+
+- What exists (challenge-limited, `api-challenge.odpt.org`, separate Challenge
+  token — the permanent-center key returns 403 `Invalid acl:consumerKey.`,
+  live-verified):
+  - **JR East** (`odpt_jreast_tokyo_area`): GTFS-RT **TripUpdate**
+    (`/api/v4/gtfs/realtime/jreast_odpt_train_trip_update`) + **VehiclePosition**
+    (`…/jreast_odpt_train_vehicle`) + **GTFS static**
+    (`/api/v4/files/JR-East/data/JR-East-Train-GTFS.zip`). Kanto conventional
+    lines only (Tokyo/Kanagawa/Saitama + fringes; no Shinkansen; no Sagami,
+    Tsurumi, Nambu-branch, Hachiko; Joban ≤ Hatori, Takasaki ≤ Jimbohara,
+    Ome Tachikawa–Ome, Chuo ≥ Kofu).
+  - **Tobu**: TripUpdate + VehiclePosition + Alert
+    (`…/tobu_odpt_train_trip_update`, `…/tobu_odpt_train_vehicle`) + GTFS static
+    (`/api/v4/files/Tobu/data/Tobu-Train-GTFS.zip`).
+  - **Keio**: rail GTFS-RT is **Alert-ONLY** (single resource, verified on the
+    dataset page) — not scoreable. GTFS static exists.
+  - **No bus realtime at all** in the challenge set; Tokyo Metro publishes no
+    train-grain RT here either (still status text + statics only).
+- Why rejected: the Challenge Limited License restricts the data to **developing
+  and running a work actually submitted to the contest**, bars redistribution,
+  and ends provision when the contest ends. Jake does not intend to enter
+  (2026-09-10), so any use — including a portfolio page — would violate the
+  license, and the feeds would die under the site anyway.
+- Consequence: Tokyo's scored rail remains **Toei via the permanent center**
+  (§C.1); Metro contributes alerts; ToeiBus contributes VP volume. If a future
+  session considers Tokyo expansion, this section is the map: the data is real,
+  TU-bearing, and one license decision away — but that decision belongs to Jake.
 
 ---
 
