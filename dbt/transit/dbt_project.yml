@@ -19,10 +19,19 @@ vars:
   # assert_gold_reflects_silver_coverage keys its window off this same var, so
   # detection and repairability stay defined by one number.
   lookback_hours: 72
-  # A feed-stated delay beyond this is a corrupt field, not a delay: it is
-  # treated as absent so the canonical COALESCE falls through to
-  # actual - scheduled. One day, chosen to reject only the impossible.
-  max_plausible_delay_sec: 86400
+  # A delay beyond this — stated OR computed — carries no information and is
+  # treated as absent/unknown (NULL), so the canonical COALESCE falls through
+  # or the event goes unscored while still counting as service volume.
+  # [rev 2026-09-10] 86400 -> 43200. One day was chosen to "reject only the
+  # impossible", but the day-offset artifact this bound exists to kill produces
+  # delays of ±(86400 - true_delay) — just UNDER a day by construction, so the
+  # 1-day bound passed almost all of them: 57,153 gold events sat in the
+  # 12-24h |delay| band (toronto 29,776 / sf 16,537 / nyc 10,815 / zurich 21 /
+  # dc 4), wrecking every mean while medians held. The 6-12h band holds only
+  # 2,084 events. Nothing real approaches 12h in urban transit; a trip that far
+  # off its schedule row is a wrong-calendar-day match, not a late vehicle.
+  # docs/01 §A.2, docs/08 2026-09-10.
+  max_plausible_delay_sec: 43200
   # How far a static trip's origin departure may sit from the start_time the feed
   # states before the id match is distrusted and identity falls back to
   # (route, origin departure). 30 min absorbs ordinary origin delay; measured on

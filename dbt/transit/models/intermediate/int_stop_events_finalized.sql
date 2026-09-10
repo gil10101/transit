@@ -215,6 +215,18 @@ select
     -- the honest value for unknown is NULL, not a fabricated one. The event
     -- still counts as service volume; it just stops polluting every delay and
     -- OTP aggregate (docs/06 divides by count(delay_arr_sec), never count(*)).
+    --
+    -- [rev 2026-09-10] The 1-day bound had a blind spot the artifact walks
+    -- straight through: a trip matched to the wrong calendar day yields
+    -- delay = ±(86400 − true_delay), which is just UNDER a day by
+    -- construction — so the very artifact the bound exists to reject was
+    -- passing it. Measured in gold: 57,153 events in the 12–24h |delay| band
+    -- (toronto 29,776 / sf 16,537 / nyc 10,815 / zurich 21 / dc 4, extremes
+    -- exactly ±86400) vs only 2,084 in 6–12h. max_plausible_delay_sec is now
+    -- 43200: nothing real is 12h late at a stop, and every day-offset ghost
+    -- is at least 12h out once true delay stays under 12h. History repaired
+    -- in place the same night (docs/08 2026-09-10) — an incremental model
+    -- never revisits those rows on its own.
     {% set arr_delay = "coalesce(case when abs(arr_delay_sec) <= " ~ var('max_plausible_delay_sec')
         ~ " then arr_delay_sec end, " ~ seconds_between('sched_arr_ts_utc',
             'coalesce(arr_pred_ts_utc, dep_pred_ts_utc)') ~ ")" %}
