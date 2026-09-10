@@ -146,6 +146,17 @@ pipeline_schedule = ScheduleDefinition(
     # cadence and the drain reads whatever accumulated since the last checkpoint;
     # the only change is that gold trails the feeds by up to 4h instead of 2h.
     # :05 keeps clear of the :00 EventBridge drain submit.
-    cron_schedule="5 */4 * * *",
+    #
+    # [rev 2026-09-10] 4h -> 12h on Jake's hard floor: credits must outlive
+    # 14 Sep with margin (~$2.6/day at 12h vs $7.66 at 4h; balance $110.91 on
+    # 9 Sep). NOT 24h, though Jake offered it: Kafka retention is 24h, so a
+    # 24h drain cadence reads the topic right at its expiry edge — one slipped
+    # run and the tail is gone. 12h keeps a full retention-window of slack.
+    # Fire times chosen so every city's previous local service day is closed
+    # (service_day_closed = local −3h; SF closes last at 10:00Z): the 11:05Z
+    # run judges yesterday everywhere, 23:05Z keeps the intraday view moving.
+    # Manual runs (`dagster job launch` on the box) cost ~$0.65 each when a
+    # deploy needs proof now rather than at the next tick.
+    cron_schedule="5 11,23 * * *",
     execution_timezone="UTC",
 )
