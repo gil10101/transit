@@ -54,13 +54,20 @@ more than 60s ahead; `very_late` is 15 min or worse.
 
 | City | Scored events | On time | Early | Late | Very late |
 |---|---:|---:|---:|---:|---:|
-| Zurich | 3,330,056 | **96.1%** | 1.1% | 2.6% | 0.2% |
-| Helsinki | 4,778,765 | **81.0%** | 12.1% | 6.5% | 0.4% |
-| New York | 1,721,301 | 66.6% | 22.4% | 9.4% | 1.6% |
-| SF Bay Area | 6,073,410 | 59.6% | 20.8% | 15.9% | 3.8% |
-| Boston | 3,033,193 | 57.9% | 15.0% | 22.8% | 4.3% |
-| Washington DC | 3,967,643 | 54.8% | 22.4% | 18.7% | 4.1% |
-| Toronto | 8,313,311 | 50.3% | **38.4%** | 9.1% | 2.3% |
+| Tokyo* | 285,976 | **97.1%** | 0.0% | 2.1% | 0.8% |
+| Zurich | 7,817,015 | **96.2%** | 1.1% | 2.4% | 0.2% |
+| Helsinki | 10,055,404 | **81.0%** | 12.0% | 6.6% | 0.4% |
+| New York | 3,381,705 | 67.8% | 21.4% | 9.3% | 1.5% |
+| SF Bay Area | 13,017,111 | 59.7% | 20.6% | 15.8% | 3.8% |
+| Boston | 6,332,661 | 57.4% | 14.6% | 23.3% | 4.7% |
+| Washington DC | 8,539,020 | 54.7% | 21.7% | 19.2% | 4.4% |
+| Toronto | 14,122,636 | 50.0% | **37.0%** | 10.0% | 2.9% |
+
+*Tokyo's number is operator-stated and minute-rounded (see the provenance
+section at the bottom of this page): sub-minute lateness reads as on-time by
+construction, and its 0.0% early is an artifact of the same quantization —
+Toei never states a negative delay. First place with an asterisk that must
+travel with it everywhere.
 
 Zurich's 96.1% on 547k events is the real number — and a lesson. Until
 2026-08-27 its whole network was silently reduced to ~3k events because the Swiss
@@ -83,18 +90,20 @@ By local hour, the 8am and 5pm peaks (routes with ≥500 events in the hour):
 
 | City | 8am OTP | 5pm OTP |
 |---|---:|---:|
-| Zurich | 95.6% | 91.6% |
-| Helsinki | 79.9% | 75.5% |
-| New York | 62.1% | 67.9% |
-| Boston | 61.3% | 52.0% |
-| SF Bay Area | 59.4% | 53.9% |
-| Washington DC | 54.2% | 49.0% |
-| Toronto | 48.2% | 47.9% |
+| Tokyo* | 93.0% | 99.3% |
+| Zurich | 95.9% | 91.9% |
+| Helsinki | 79.7% | 75.4% |
+| New York | 65.3% | 68.6% |
+| Boston | 57.9% | 50.4% |
+| SF Bay Area | 59.3% | 54.3% |
+| Washington DC | 53.6% | 49.3% |
+| Toronto | 50.2% | 46.1% |
 
-Every city now has both peaks, Zurich included (it had only one ≥500-event hour
-in the 2026-08-26 run). The near-universal pattern holds: the evening peak is
-worse than the morning one everywhere except New York, and Zurich stays above
-91% in both.
+The near-universal pattern holds: the evening peak is worse than the morning
+one everywhere except New York — and now Tokyo, whose stated-delay feed reads
+*better* at 5pm than 8am (99.3% vs 93.0%); with minute-rounded operator
+numbers, treat that as what Toei asserts, not an independent measurement.
+Zurich stays above 91% in both peaks.
 
 ## Q2 — Average delay
 
@@ -102,28 +111,32 @@ Signed seconds, positive = late.
 
 | City | Mean | Median | p90 | p99 |
 |---|---:|---:|---:|---:|
-| Toronto | −46 | **−12** | 333 | 1,335 |
-| New York | −193 | 1 | 302 | 1,122 |
-| Helsinki | 67 | 37 | 242 | 676 |
-| Zurich | 83 | 60 | 180 | 444 |
-| SF Bay Area | 193 | 61 | 490 | 2,559 |
-| Washington DC | 164 | 87 | 546 | 1,751 |
-| Boston | 206 | 130 | 591 | 1,740 |
+| Tokyo* | 28 | **0** | 0 | 720 |
+| Toronto | 52 | **−5** | 377 | 1,495 |
+| New York | 59 | 3 | 300 | 1,071 |
+| Helsinki | 69 | 38 | 245 | 680 |
+| Zurich | 82 | 60 | 180 | 420 |
+| SF Bay Area | 174 | 61 | 491 | 2,485 |
+| Washington DC | 173 | 92 | 564 | 1,824 |
+| Boston | 191 | 133 | 615 | 1,748 |
 
-**The means are now usable, and that is new.** The 2026-08-26 edition of this
-page reported SF at a mean of −19,027s against a median of +63s and told you to
-distrust the mean. That was the right reading of the data and the wrong response
-to it: the number was not a quirk of transit, it was corrupt feed values adopted
-over a correct computation (docs/08, 2026-08-31). With delays bounded, SF reads
-+194s mean / +62s median, and every city's mean now sits on the same side of
-zero as its median.
+**The means took two rounds to become usable, and the second round is this
+week's.** The 2026-08-26 edition reported SF at a mean of −19,027s and told you
+to distrust the mean; 2026-08-31 bounded corrupt *stated* delays and the means
+looked healed. They were not: a second artifact family — trips matched to the
+wrong calendar day, yielding delays of ±(86400 − true delay), just *under* the
+1-day bound — kept 57,153 events polluting the means while every median held
+(docs/08, 2026-09-10). With the bound tightened to 12h and history healed
+through the fact layer, New York's mean moved from −193s to +59s and Toronto's
+from −35s to +52s **without either median moving more than a second** — the
+fingerprint of removing an artifact rather than reshaping the distribution.
+Every city's mean now sits above its median by an amount a right tail of real
+late vehicles explains.
 
-Still prefer the median when quoting a single figure — mean and median diverge
-honestly here, because a long right tail of genuinely late vehicles is real
-service, not an artifact. Toronto (−49 mean, −10 median) and New York (−209 /
-+1) keep negative means from real early-running and prediction tails. Boston's
-mean and median agree most closely, which is what a well-behaved city looks
-like.
+Still prefer the median when quoting a single figure. Toronto's negative median
+(−5s) is real early-running — see Q1. Tokyo's 0/0/0 row is the quantization
+caveat made visible: 97% of its stated delays are exactly zero, so mean 28s
+comes almost entirely from its p99 tail.
 
 ## Q3 — Service volume
 
