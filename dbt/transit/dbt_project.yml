@@ -79,6 +79,12 @@ vars:
   # (measured 2026-08-24), so 60 excludes the tail without touching normal
   # tracking. HSL publishes trips days ahead, which is the extreme case.
   max_prediction_lead_min: 60
+  # [rev 2026-09-11] Minutes without a single fetch before a city's feed counts as dark
+  # (int_feed_gaps); an arrival inside the dark is unobserved and leaves OTP. The
+  # slowest healthy cadence is sf's 200s, so 10 min is three missed polls; measured on
+  # the silver fetch log over 2026-08-31..09-10, gaps above it are the known incidents
+  # plus Zurich's allow-list-quiet nights, whose few arrivals are unobserved anyway.
+  feed_gap_min: 10
 
 seeds:
   transit:

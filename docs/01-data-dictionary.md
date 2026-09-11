@@ -71,6 +71,17 @@ is sign-symmetric and rare per route-day) but means were wrecked — same failur
 shape as the 2026-08-31 finding, one band lower. History repaired in place the
 same night; incident + proof queries in docs/08 (2026-09-10).
 
+[rev 2026-09-11] **Feed-gap rule — an arrival nobody could see is not an observation.**
+When a city's feed goes dark (agency outage, dead poller, dropped drain), the finalizer
+still turns each in-flight trip's last prediction into an "actual" at every stop the
+vehicle reached in the dark. TTC's 2026-09-10 outage (15:51–22:17Z) put 23,474 such
+echoes into scored gold; the prediction-lead cap caught 45, because their leads were
+minutes, not hours. The rule: any stretch longer than `feed_gap_min` (10) with no fetch
+in silver for that city is a feed gap (`int_feed_gaps`, from the silver FETCH log — event
+timestamps thin out overnight and misread quiet hours as outages), and an arrival
+strictly inside one is `stale_observation_flag` / `feed_gap_flag`: service volume yes,
+OTP no. Asserted by `assert_no_scored_events_in_feed_gaps`.
+
 ### A.3 VehiclePosition (→ `silver.vehicle_positions`)
 | Field | Type | Our use |
 |---|---|---|

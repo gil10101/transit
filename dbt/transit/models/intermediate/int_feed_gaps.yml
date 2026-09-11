@@ -1,0 +1,19 @@
+version: 2
+
+models:
+  - name: int_feed_heartbeat
+    description: One row per (city, minute) with at least one silver fetch — the feed's pulse.
+    columns:
+      - name: city_key
+        data_tests: [not_null]
+      - name: fetch_minute
+        data_tests: [not_null]
+  - name: int_feed_gaps
+    description: Stretches over var('feed_gap_min') with no fetch; arrivals inside are unobserved.
+    columns:
+      - name: city_key
+        data_tests: [not_null]
+      - name: gap_start_utc
+        data_tests: [not_null]
+      - name: gap_end_utc
+        data_tests: [not_null]

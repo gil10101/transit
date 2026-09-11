@@ -49,6 +49,7 @@ localized as (
         r.mode,
         dr.route_key,
         ds.stop_key,
+        (g.city_key is not null) as in_feed_gap,
         {{ to_local('f.actual_arr_ts_utc', 'c.iana_tz') }} as actual_arr_ts_local
     from f
     join {{ ref('dim_city') }} c on c.city_key = f.city_key
@@ -59,6 +60,10 @@ localized as (
     -- that service day.
     {{ scd2_join(ref('dim_route'), 'dr', 'f.city_key', 'route_id', 'f.route_id', 'f.service_date') }}
     {{ scd2_join(ref('dim_stop'), 'ds', 'f.city_key', 'stop_id', 'f.stop_id', 'f.service_date') }}
+    left join {{ ref('int_feed_gaps') }} g
+      on g.city_key = f.city_key
+     and f.actual_arr_ts_utc > g.gap_start_utc
+     and f.actual_arr_ts_utc < g.gap_end_utc
 )
 
 select
@@ -111,11 +116,18 @@ select
     -- 3,840 events (3.6%) exceeded 60 min, up to 205. HSL is the extreme case —
     -- it publishes trips up to 3 days ahead, so a poll can carry an arrival
     -- "prediction" for a journey that has not begun.
+    --
+    -- [rev 2026-09-11] ...or an arrival that landed while the city's feed was dark
+    -- (int_feed_gaps). When a feed dies, every in-flight trip's last prediction becomes
+    -- the "actual" at each stop reached in the dark; TTC's 2026-09-10 outage put 23,474
+    -- such echoes into scored gold, and the lead cap above caught 45 of them. Nothing
+    -- was fetched, so nothing was observed. feed_gap_flag says which rule fired.
     coalesce(
         {{ seconds_between('last_seen_utc', 'actual_arr_ts_utc') }}
             > {{ var('max_prediction_lead_min') }} * 60,
         false
-    ) as stale_observation_flag,
+    ) or in_feed_gap as stale_observation_flag,
+    in_feed_gap as feed_gap_flag,
     -- Neither a SKIPPED stop nor a stale observation is an on-time observation:
     -- the vehicle never served the stop (WMATA bus marks ~30% of STUs SKIPPED,
     -- fixtures 2026-08-23), or we never saw it do so. Null band drops both from
@@ -124,6 +136,7 @@ select
     -- locked rule makes for ADDED trips.
     case
         when coalesce(skipped_flag, false) then null
+        when in_feed_gap then null
         when coalesce(
             {{ seconds_between('last_seen_utc', 'actual_arr_ts_utc') }}
                 > {{ var('max_prediction_lead_min') }} * 60,
