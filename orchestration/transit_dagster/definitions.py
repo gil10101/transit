@@ -17,6 +17,9 @@ from .alerting import pipeline_failure_alert, pipeline_recovery_alert
 from .assets_pipeline import (
     emr_drain,
     pipeline_schedule,
+    silver_backfill_job,
+    silver_drain_job,
+    silver_drain_schedule,
     snowflake_iceberg_refresh,
     transit_dbt_assets,
     warehouse_chain_job,
@@ -51,8 +54,21 @@ defs = Definitions(
         raw_feed_freshness,
     ],
     asset_checks=[gold_rows_growing, silver_predictions_fresh],
-    jobs=[warehouse_chain_job, static_job, weather_job, freshness_job],
-    schedules=[pipeline_schedule, static_schedule, weather_schedule, freshness_schedule],
+    jobs=[
+        warehouse_chain_job,
+        silver_drain_job,
+        silver_backfill_job,
+        static_job,
+        weather_job,
+        freshness_job,
+    ],
+    schedules=[
+        pipeline_schedule,
+        silver_drain_schedule,
+        static_schedule,
+        weather_schedule,
+        freshness_schedule,
+    ],
     # Alerting is the half of observability this pipeline lacked: it detected breakage
     # and told nobody. Default status RUNNING so a deploy cannot silently leave it off
     # (dagster sensors default to STOPPED — the same trap the schedules hit in P5).

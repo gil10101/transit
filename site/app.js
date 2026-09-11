@@ -109,6 +109,9 @@ async function renderTiles() {
 
 // ---------- standings ----------
 function sparkline(points, color) {
+  // a judged day with no scoreable delay is absent, not zero — plotting it at 0
+  // drew Toronto's timetable-refresh days (09-03..05) as a service collapse
+  points = points.filter((p) => p.otp_pct != null);
   if (points.length < 2) return `<span class="spark-empty">1 judged day</span>`;
   const W = 140, H = 30, P = 3;
   const ys = points.map((p) => p.otp_pct);
@@ -266,7 +269,10 @@ async function renderLineCharts() {
   const dates = [...new Set(daily.rows.map((r) => r.service_date))].sort();
   const idx = new Map(dates.map((d, i) => [d, i]));
   const dSeries = {};
-  for (const r of daily.rows) (dSeries[r.city_key] ??= [])[idx.get(r.service_date)] = { y: +r.otp_pct };
+  for (const r of daily.rows) {
+    if (r.otp_pct == null) continue; // a gap in the line, never a plunge to 0
+    (dSeries[r.city_key] ??= [])[idx.get(r.service_date)] = { y: +r.otp_pct };
+  }
   drawLineChart({
     svgId: "daily-chart", tipId: "daily-tooltip", series: dSeries,
     xMax: dates.length - 1, xTickStep: 1,

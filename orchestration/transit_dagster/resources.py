@@ -18,6 +18,7 @@ from .lib import (
     CATALOG_INTEGRATION,
     EMR_ACTIVE_STATES,
     EXTERNAL_VOLUME,
+    backfill_job_request,
     drain_job_request,
     odpt_static_job_request,
     require_env,
@@ -53,6 +54,9 @@ class EmrResource(ConfigurableResource):
             odpt_static_job_request(os.environ, version_id=version_id),
             timeout_minutes=self.static_timeout_minutes,
         )
+
+    def run_backfill(self, windows: Sequence[str]) -> str:
+        return self._run(backfill_job_request(os.environ, list(windows)))
 
     def _in_flight_run(self, client, request: dict) -> str | None:
         """Id of an already-active run that does this request's work, if any.

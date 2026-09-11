@@ -238,6 +238,27 @@ def odpt_static_job_request(
     return request
 
 
+def backfill_job_request(
+    env: Mapping[str, str], windows: list[str], client_token: str | None = None
+) -> dict:
+    """StartJobRun kwargs for a bronze -> silver replay of dropped windows.
+
+    Drain params unchanged (same catalog, jars, tz map, allow-list bucket) so the
+    builders behave exactly as in the stream; only the entryPoint moves to
+    silver_backfill.py, staged beside the drain's entry.py. The name must not
+    start with "transit-drain": the drain's adopt-in-flight guard matches on
+    that prefix and would otherwise mistake a backfill for a drain."""
+    request = drain_job_request(env, client_token)
+    submit = request["jobDriver"]["sparkSubmit"]
+    request["name"] = "transit-silver-backfill"
+    request["jobDriver"]["sparkSubmit"] = {
+        "entryPoint": submit["entryPoint"].rsplit("/", 1)[0] + "/silver_backfill.py",
+        "entryPointArguments": list(windows),
+        "sparkSubmitParameters": submit["sparkSubmitParameters"],
+    }
+    return request
+
+
 # ---------------------------------------------------------------------------
 # Open-meteo -> TRANSIT.SILVER.WEATHER_HOURLY rows
 # ---------------------------------------------------------------------------

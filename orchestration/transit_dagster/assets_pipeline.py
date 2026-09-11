@@ -15,13 +15,16 @@ from dagster import (
     AssetSelection,
     AssetSpec,
     Backoff,
+    Config,
     DefaultScheduleStatus,
     MaterializeResult,
     RetryPolicy,
     ScheduleDefinition,
     asset,
     define_asset_job,
+    job,
     multi_asset,
+    op,
 )
 from dagster_dbt import DbtCliResource, dbt_assets
 
@@ -157,6 +160,52 @@ pipeline_schedule = ScheduleDefinition(
     # run judges yesterday everywhere, 23:05Z keeps the intraday view moving.
     # Manual runs (`dagster job launch` on the box) cost ~$0.65 each when a
     # deploy needs proof now rather than at the next tick.
+    # [rev 2026-09-10, same day] The 12h figure now governs dbt only. A 12h DRAIN made
+    # silver's 2h dedup watermark drop whole hours as late data (docs/08); drains run
+    # every 2h again through silver_drain_schedule below, EMR only, no Snowflake.
     cron_schedule="5 11,23 * * *",
     execution_timezone="UTC",
 )
+
+
+# [rev 2026-09-10] Drain every 2h, build every 12h. Silver's exact-duplicate drop is
+# also a late-data filter: withWatermark("fetched_at", "2 hours") discards any row more
+# than 2h behind the newest event the query has seen. A 12h cadence made one drain chew
+# through 7-13h of backlog with partitions advancing unevenly, and whole hours were
+# discarded — Helsinki lost 06-07Z and 15-21Z on 2026-09-10 while bronze kept every
+# fetch. Keeping each drain's backlog near the watermark is the regime that never
+# dropped a row. Drain-only runs cost EMR time and no Snowflake credit; the shared
+# serialize tag keeps them from overlapping the chain's own drain or a backfill.
+silver_drain_job = define_asset_job(
+    "silver_drain",
+    selection=AssetSelection.assets(emr_drain),
+    description="drain only (Kafka -> bronze -> silver); keeps backlog inside the 2h watermark",
+    tags={"transit/serialize": "warehouse_chain"},
+)
+
+silver_drain_schedule = ScheduleDefinition(
+    default_status=DefaultScheduleStatus.RUNNING,
+    job=silver_drain_job,
+    cron_schedule="5 1-9/2,13-21/2 * * *",  # every 2h, around the 11:05/23:05 chains
+    execution_timezone="UTC",
+)
+
+
+class BackfillConfig(Config):
+    windows: list[str]  # "<city>,<start_utc>,<end_utc>", ISO times
+
+
+@op
+def silver_backfill(context, config: BackfillConfig, emr: EmrResource) -> None:
+    """Replays bronze windows through the silver builders (spark_jobs/silver_backfill.py).
+    Idempotent: rows already in silver are anti-joined out, so a rerun appends nothing."""
+    run_id = emr.run_backfill(config.windows)
+    context.log.info(f"silver backfill EMR run {run_id} SUCCESS for {config.windows}")
+
+
+@job(
+    description="manual: replay dropped silver windows from bronze",
+    tags={"transit/serialize": "warehouse_chain"},
+)
+def silver_backfill_job():
+    silver_backfill()

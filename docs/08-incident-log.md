@@ -511,3 +511,44 @@ published-but-uncaptured, i.e. as our blindness. Projected clear: the late
 schedule supplies 13 / 29 / 34 more trips after the edge against 1 / 2 / 6
 needed. Verified at the 11:05Z chain (below). If a future mid-day agency outage
 lands near day-close, this is the misfire to expect.
+
+## 2026-09-10 · The 12-hour cadence silently dropped silver rows — found in bronze, replayed from bronze
+
+**Found by asking whether gold was skewed, not by any test.** Chasing Toronto's
+outage-edge echoes turned up "feed gaps" in cities whose feeds never failed. Bronze
+vs silver, distinct fetches per hour, settled it: bronze complete, silver holed.
+
+| city | lost (UTC, 2026-09-10) | silver / bronze fetches |
+|---|---|---|
+| helsinki | 06–07Z, 15–21Z | 20 / 1,080 |
+| nyc | 06Z | 27 / 120 |
+| dc | 06Z | 27 / 120 |
+| zurich | 06Z | 14 / 60 |
+| sf | 06Z | 4 / 18 |
+
+(Zurich's nightly 23–00Z shortfall is the allow-list emptying fetches overnight — it is
+there on 2026-09-08 too, under the 2h cadence. Not loss.)
+
+**Mechanism.** Silver's dedup, `withWatermark("fetched_at", "2 hours")
+.dropDuplicatesWithinWatermark(...)`, is also a late-data filter: a row more than 2h
+behind the newest event its query has seen is discarded. Under the 2h cadence each
+drain's backlog was about the watermark, so partitions never drifted 2h apart. The 12h
+cadence (72e2026) made single drains process 7–13h of backlog; partitions advanced
+unevenly, the watermark ran ahead of the slow ones, and their rows were dropped as
+"late". Bronze is written in the same drain with no watermark, so it kept everything.
+Every lost window sits inside one of the two long-backlog drains (11:05Z, 23:05Z).
+
+**Owned.** The cadence change shipped with the credit arithmetic and without checking
+the streaming semantics it leaned on. Jake asked for a replay from bronze the same
+evening; the first answer proved Toronto unrecoverable (true — TTC never served those
+hours) and generalised it. It did not generalise.
+
+**Fix.**
+- Drains every 2h again (`silver_drain` job + schedule, EMR only — no Snowflake credit);
+  dbt stays at 12h. The shared `transit/serialize` tag keeps drain, chain and backfill
+  from overlapping on the Iceberg tables.
+- `spark_jobs/silver_backfill.py` replays bronze windows through the SAME silver
+  builders (bronze's `envelope_json` is the Kafka value verbatim) and anti-joins on the
+  stream's own dedup keys (`silver_normalize.DEDUP_KEYS`, looked up 2h before each
+  window), so a rerun appends nothing. Launched through the Dagster `silver_backfill`
+  job on the production EMR path.

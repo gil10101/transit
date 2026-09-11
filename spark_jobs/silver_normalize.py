@@ -169,6 +169,13 @@ def read_topic(spark: SparkSession, topic: str, record: T.StructType) -> DataFra
         # could pull GBs into a single batch and OOM the executor
         .load()
     )
+    return parse_envelopes(raw, record)
+
+
+def parse_envelopes(raw: DataFrame, record: T.StructType) -> DataFrame:
+    """Envelope string -> columns + payload. The input is a Kafka `value` or, for a
+    backfill, bronze's envelope_json — the same bytes, which is why silver_backfill
+    can replay bronze through these builders instead of reimplementing them."""
     env = F.from_json(F.col("value").cast("string"), envelope_schema(record)).alias("env")
     return raw.select(env).select("env.*")
 
@@ -313,8 +320,42 @@ def meta_cols():
     ]
 
 
-def stop_time_predictions(spark: SparkSession) -> DataFrame:
-    df = read_topic(spark, "transit.trip_updates", TRIP_UPDATE_RECORD)
+# Each table's exact-duplicate identity, dropped within its 2h watermark. Module-level so
+# silver_backfill anti-joins on the identity the stream itself enforces.
+DEDUP_KEYS = {
+    "stop_time_predictions": [
+        "city",
+        "trip_uid",
+        "stop_id",
+        "stop_sequence",
+        "arr_pred_ts_utc",
+        "dep_pred_ts_utc",
+        "arr_delay_sec",
+        "dep_delay_sec",
+        "schedule_relationship",
+        "stu_schedule_relationship",
+    ],
+    "vehicle_positions": ["city", "trip_uid", "vehicle_id", "ts_utc", "current_status", "stop_id"],
+    "odpt_trains": ["city", "trip_uid", "from_station", "to_station", "delay_sec", "ts_utc"],
+    "alerts": ["city", "alert_id", "content_hash"],
+}
+
+
+def dedup(df: DataFrame, table: str) -> DataFrame:
+    """Drop re-polled duplicates on the table's identity. The stream does it within
+    its 2h watermark; a batch replay (silver_backfill) has no watermark and Spark
+    refuses the streaming-only operator there, so it takes dropDuplicates on the
+    same keys."""
+    keys = DEDUP_KEYS[table]
+    if df.isStreaming:
+        return df.withWatermark("fetched_at", "2 hours").dropDuplicatesWithinWatermark(keys)
+    return df.dropDuplicates(keys)
+
+
+# `read` is the envelope source: the Kafka stream by default, bronze for a backfill.
+# Resolved at call time (not a default of read_topic) so tests patching it still work.
+def stop_time_predictions(spark: SparkSession, read=None) -> DataFrame:
+    df = (read or read_topic)(spark, "transit.trip_updates", TRIP_UPDATE_RECORD)
     df = df.select("*", F.explode_outer("payload").alias("rec")).drop("payload")
     df = with_common(df)
     df = national_filter(df, F.col("rec.route_id"))
@@ -334,24 +375,11 @@ def stop_time_predictions(spark: SparkSession) -> DataFrame:
         F.col("stu.schedule_relationship").alias("stu_schedule_relationship"),
         F.lit(None).cast("timestamp").alias("sched_arr_ts_utc"),
     )
-    return out.withWatermark("fetched_at", "2 hours").dropDuplicatesWithinWatermark(
-        [
-            "city",
-            "trip_uid",
-            "stop_id",
-            "stop_sequence",
-            "arr_pred_ts_utc",
-            "dep_pred_ts_utc",
-            "arr_delay_sec",
-            "dep_delay_sec",
-            "schedule_relationship",
-            "stu_schedule_relationship",
-        ]
-    )
+    return dedup(out, "stop_time_predictions")
 
 
-def vehicle_positions(spark: SparkSession) -> DataFrame:
-    df = read_topic(spark, "transit.vehicle_positions", VEHICLE_POSITION_RECORD)
+def vehicle_positions(spark: SparkSession, read=None) -> DataFrame:
+    df = (read or read_topic)(spark, "transit.vehicle_positions", VEHICLE_POSITION_RECORD)
     df = df.select("*", F.explode_outer("payload").alias("rec")).drop("payload")
     df = with_common(df)
     df = national_filter(df, F.col("rec.route_id"))
@@ -368,12 +396,10 @@ def vehicle_positions(spark: SparkSession) -> DataFrame:
         F.col("rec.current_status").alias("current_status"),
         F.col("rec.occupancy_status").alias("occupancy_status"),
     )
-    return out.withWatermark("fetched_at", "2 hours").dropDuplicatesWithinWatermark(
-        ["city", "trip_uid", "vehicle_id", "ts_utc", "current_status", "stop_id"]
-    )
+    return dedup(out, "vehicle_positions")
 
 
-def odpt_trains(spark: SparkSession) -> DataFrame:
+def odpt_trains(spark: SparkSession, read=None) -> DataFrame:
     """Tokyo odpt:Train snapshots, train grain (docs/02 silver.odpt_trains).
 
     No stop explosion here: that needs odpt:TrainTimetable, a static asset a
@@ -381,7 +407,7 @@ def odpt_trains(spark: SparkSession) -> DataFrame:
     service_date always takes the fallback cutover (ODPT has no start_date;
     tokyo pins 3h in timeutils — the 01:30-04:30 JST dead window's midpoint).
     """
-    df = read_topic(spark, "transit.odpt_trains", ODPT_TRAIN_RECORD)
+    df = (read or read_topic)(spark, "transit.odpt_trains", ODPT_TRAIN_RECORD)
     df = df.select("*", F.explode_outer("payload").alias("rec")).drop("payload")
     df = with_common(df)
     out = df.select(
@@ -404,9 +430,7 @@ def odpt_trains(spark: SparkSession) -> DataFrame:
     )
     # A train re-polled with unchanged position AND delay is the same observation;
     # ts_utc moves only when the operator updates the object, so it anchors dedup.
-    return out.withWatermark("fetched_at", "2 hours").dropDuplicatesWithinWatermark(
-        ["city", "trip_uid", "from_station", "to_station", "delay_sec", "ts_utc"]
-    )
+    return dedup(out, "odpt_trains")
 
 
 def national_alert_filter(df: DataFrame) -> DataFrame:
@@ -444,8 +468,8 @@ def national_alert_filter(df: DataFrame) -> DataFrame:
     return df
 
 
-def alerts(spark: SparkSession) -> DataFrame:
-    df = read_topic(spark, "transit.alerts", ALERT_RECORD)
+def alerts(spark: SparkSession, read=None) -> DataFrame:
+    df = (read or read_topic)(spark, "transit.alerts", ALERT_RECORD)
     df = df.select("*", F.explode_outer("payload").alias("rec")).drop("payload")
     df = national_alert_filter(df)
     tz = F.coalesce(tz_map_expr()[F.col("city")], F.lit("UTC"))
@@ -492,9 +516,7 @@ def alerts(spark: SparkSession) -> DataFrame:
             256,
         ),
     )
-    return out.withWatermark("fetched_at", "2 hours").dropDuplicatesWithinWatermark(
-        ["city", "alert_id", "content_hash"]
-    )
+    return dedup(out, "alerts")
 
 
 PREDICTIONS_DDL = """
