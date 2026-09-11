@@ -429,6 +429,23 @@ def alert_body(run_id: str, job_name: str, error: str | None) -> str:
     return f"job: {job_name}\nrun: {run_id}\n\n{detail}"
 
 
+def alert_kind(
+    succeeded: bool, detail: str | None, prev_status: str | None, prev_detail: str | None
+) -> str | None:
+    """Transition-only alerting: "failed" when a job starts failing or fails a NEW
+    way, "recovered" on the first success after a failure, None otherwise.
+
+    [rev 2026-09-10] One six-hour TTC outage produced 22 byte-identical failure
+    emails, 15 minutes apart. An identical repeat is the same incident still open,
+    not news; a changed detail (a second city going stale) is news and pages."""
+    prev_failed = prev_status == "FAILURE"
+    if succeeded:
+        return "recovered" if prev_failed else None
+    if prev_failed and (prev_detail or "").strip() == (detail or "").strip():
+        return None
+    return "failed"
+
+
 # --- broker reachability -------------------------------------------------------
 # The pollers dual-write raw S3 and Kafka, so a dead broker leaves the raw-feed
 # tripwire green while silver quietly stops (2026-08-28: the kafka box filled its

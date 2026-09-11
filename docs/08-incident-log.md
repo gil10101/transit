@@ -470,3 +470,44 @@ fct_benchmark_mlit_monthly + fct_city_scorecard_monthly, `--full-refresh`
 
 Means moved by minutes; medians moved by at most a second — the fingerprint of
 removing a symmetric artifact rather than reshaping the distribution.
+
+## 2026-09-10 · TTC's feed went dark for six hours, and the alerting shouted 22 times
+
+**Agency outage, not ours.** `bustime.ttc.ca` stopped answering at **15:51Z**
+(11:51 ET): read timeouts, then connect timeouts, plus one 41-byte non-protobuf
+body ("Error parsing message" at 15:54Z, archived at 16:05Z). Service returned
+**22:17Z** (18:17 ET). The other seven cities were untouched — bronze holds NYC
+and Boston complete through 15–17Z — so broker, network and box are cleared.
+
+**Nothing to recover, proven rather than assumed.** A bronze→gold rebuild was
+requested and declined on evidence: raw S3 (the replay archive) and bronze agree
+at both edges — last good payload 15:58:21Z in each, next 22:17:51Z in each, only
+the 41-byte error object between. Silver and gold reproduce that same hole hour
+for hour (gold local hours 13–17 near-zero on 2026-09-10). A rebuild would spend
+a full reprocess of credits and write identical gold. The six hours were never
+published to anyone.
+
+**Detection worked; notification failed the reader.** `raw_feed_freshness_job`
+failed correctly on 22 consecutive runs (16:55Z–22:10Z), and the run-failure
+sensor emailed every one — 22 byte-identical messages for one incident, plus one
+more for a weather run killed by an image restart. Subject lines read "FAILED",
+so the reader heard "the chain is failing" all afternoon. That is the alert
+fatigue the sensor's original "no dedup window" rationale warned against, reached
+from the other direction. Fixed: **transition-only alerting** —
+alert when a job starts failing or fails a *new* way (different error detail),
+stay silent on an identical repeat, and send one RECOVERED message on the first
+success after a failure (`lib.alert_kind`, `alerting.py`, tests/test_alerting.py).
+
+**Scoring impact.** Toronto 2026-09-10 read 53.5% complete at gold's 20:35 ET
+edge. Route-days under the 50% floor drop out of scoring by design; the rest count.
+Not seeded into `incident_days` — that seed is OUR-outage-only by contract, and
+the error tripwire already reads agency silence as capture ≈ 1.
+
+**One edge the tripwire's heuristic gets wrong, measured.** Three route-days
+(202, 191, 185) would page if the day closed as it stood: completeness 0.45–0.49
+with capture 0.85–0.89. The outage cut trips off mid-route — they published
+predictions before the feed died and never finalized — so they read as
+published-but-uncaptured, i.e. as our blindness. Projected clear: the late
+schedule supplies 13 / 29 / 34 more trips after the edge against 1 / 2 / 6
+needed. Verified at the 11:05Z chain (below). If a future mid-day agency outage
+lands near day-close, this is the misfire to expect.

@@ -13,7 +13,7 @@ import os
 from dagster import Definitions
 from dagster_dbt import DbtCliResource
 
-from .alerting import pipeline_failure_alert
+from .alerting import pipeline_failure_alert, pipeline_recovery_alert
 from .assets_pipeline import (
     emr_drain,
     pipeline_schedule,
@@ -59,7 +59,9 @@ defs = Definitions(
     # zombie_run_reaper is the backstop for run_monitoring's blind spot: a run
     # whose worker died with the box stays STARTED forever and blocks the
     # serialized chain queue, stopping the pipeline with no alert at all.
-    sensors=[pipeline_failure_alert, zombie_run_reaper],
+    # [rev 2026-09-10] Alerting is transition-only: a FAILED on the first failure or
+    # a new one, a RECOVERED on the first success after (alerting.py).
+    sensors=[pipeline_failure_alert, pipeline_recovery_alert, zombie_run_reaper],
     resources={
         "emr": EmrResource(),
         "snowflake": SnowflakeResource(),

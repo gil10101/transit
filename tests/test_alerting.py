@@ -6,7 +6,31 @@ RUNNING, registration in Definitions) cannot be asserted here for that reason; i
 pinned by an explicit `default_status=` in alerting.py and reviewed on deploy.
 """
 
-from orchestration.transit_dagster.lib import ALERT_MAX_ERROR_CHARS, alert_body
+from orchestration.transit_dagster.lib import ALERT_MAX_ERROR_CHARS, alert_body, alert_kind
+
+
+def test_first_failure_alerts():
+    assert alert_kind(False, "raw feeds stale: toronto/alerts", "SUCCESS", None) == "failed"
+    assert alert_kind(False, "anything", None, None) == "failed"  # no prior run at all
+
+
+def test_identical_repeat_failure_is_the_same_incident_not_news():
+    # 2026-09-10: one TTC outage, 22 byte-identical emails 15 minutes apart
+    msg = "raw feeds stale (>40 min or no objects): toronto/trip_updates"
+    assert alert_kind(False, msg, "FAILURE", msg) is None
+    assert alert_kind(False, msg + "\n", "FAILURE", "  " + msg) is None
+
+
+def test_a_failure_that_changes_shape_alerts_again():
+    # toronto still down AND nyc joins: new information, must page
+    before = "stale: toronto/trip_updates"
+    assert alert_kind(False, "stale: nyc/ace, toronto/trip_updates", "FAILURE", before) == "failed"
+
+
+def test_first_success_after_failure_announces_recovery_and_only_then():
+    assert alert_kind(True, None, "FAILURE", "stale: toronto/trip_updates") == "recovered"
+    assert alert_kind(True, None, "SUCCESS", None) is None
+    assert alert_kind(True, None, None, None) is None
 
 
 def test_body_leads_with_job_and_run_so_it_is_readable_on_a_phone():
