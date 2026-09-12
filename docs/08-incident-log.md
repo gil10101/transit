@@ -552,3 +552,75 @@ hours) and generalised it. It did not generalise.
   stream's own dedup keys (`silver_normalize.DEDUP_KEYS`, looked up 2h before each
   window), so a rerun appends nothing. Launched through the Dagster `silver_backfill`
   job on the production EMR path.
+
+### Verification (2026-09-11, 21:50 ET)
+
+Backfill EMR run `00g8m95mgjfg0o0f` SUCCESS. Bronze-vs-silver parity for 2026-09-10
+went **92.65% → 97.29%**, and every real hole closed: Helsinki 06–07Z and 15–21Z, NYC /
+DC / SF / Zurich 06Z. What remains is benign and predates the cadence change — Zurich's
+overnight hours, where the national allow-list leaves a fetch with no rows (present on
+2026-09-08 under the old 2h cadence too), and Tokyo's 20Z, which is the 5am start of bus
+service. Drains have run every 2h since; the 3h drain that followed the fix dropped
+nothing (99.03% parity, only Zurich's overnight).
+
+Toronto's three at-risk route-days closed exactly as projected — 185/191/202 at 0.68–0.76
+completeness with capture 1.0 — and the completeness tripwire would page on **0**
+route-days. Both scheduled chains (11:05Z, 23:05Z) succeeded.
+
+One drain failed at 23:05Z and succeeded on retry at 23:48Z. That is the first live test
+of transition-only alerting: one FAILED mail, one RECOVERED mail, instead of the old
+behaviour's repeat-per-tick.
+
+## 2026-09-11 · An arrival nobody could see was still being scored
+
+**Found by pulling on "is the data skewed?" rather than by a test.** When a feed goes
+dark the finalizer still turns each in-flight trip's LAST prediction into an "actual" at
+every stop the vehicle reached in the dark. Measured across gold: **1,004,952 scored
+events sat inside stretches where their own city's feed delivered nothing** — Helsinki
+380,755, SF 193,882, Toronto 123,387, Zurich 120,117, DC 92,024, Boston 62,600, NYC
+31,424, Tokyo 763.
+
+Every one of them traces to a known incident, which is what makes the rule safe to
+apply: 2026-09-10 (TTC outage + the silver drops above) 306,503; 2026-08-28 (kafka disk
++ box wedge) 274,751; 2026-09-01 (box wedge) 196,102; 2026-08-31 76,043; 2026-08-27
+(checkpoint replay) 25,136 + the 108,870 filed under local service date 2026-08-26,
+because that replay gap (00:25–04:47Z) falls inside North America's previous service
+day. Genuinely ordinary days hold at most 364 events between them.
+
+**Why the existing guard missed it.** `max_prediction_lead_min` (60) asks how old the
+winning prediction was; an outage echo's lead is *minutes*, because the feed died right
+after predicting. It caught 45 of Toronto's 23,474.
+
+**The rule** (docs/01 §A.2): an arrival strictly inside a feed gap — over
+`feed_gap_min` (10) minutes with no fetch for that city — is unobserved. Volume yes, OTP
+no. `int_feed_heartbeat` (incremental, one row per city-minute that delivered anything)
+→ `int_feed_gaps` (view) → `feed_gap_flag` folded into `stale_observation_flag` on
+`fct_stop_events`. Built from the silver FETCH log, not event timestamps: the first cut
+used event first/last_seen and misread quiet overnight hours as outages (~400 false flags
+a day in Tokyo alone). `fct_headways` drops any gap interval overlapping a dark stretch —
+dropping the *gap* rather than the arrival, so an outage cannot manufacture one six-hour
+headway — and the MLIT benchmark excludes stale arrivals. Asserted by
+`assert_no_scored_events_in_feed_gaps`.
+
+## 2026-09-11 · Rotation freeze: a refresh may no longer erase the days before it
+
+TTC's 2026-09-06 static publishes a calendar starting 2026-09-06. The delay path resolves
+schedules against the NEWEST static, so the next chains recomputed 09-03..05 against a
+calendar that does not cover them: **3.13M Toronto events, 0% scored** — volume intact,
+every delay gone. The point-in-time fix of 2026-09-10 covered the denominator only; this
+is the same erosion one layer over.
+
+DC made it urgent rather than historical: its newest calendar **ends 2026-09-12**, so the
+Sunday 09-13 refresh is mandatory *and* would have taken DC 09-10..12 the same way.
+
+Fix, in `int_stop_events_finalized`'s incremental filter: a (city, service_date) the
+newest static does not cover is **not recomputed** — it keeps what it computed while its
+own static was current. A day never computed before is still computed, because volume must
+never be lost to protect a delay. Simulated against the live window before shipping: every
+city-day currently in range is covered, so the guard is inert until a rotation lands.
+(`ref()` inside `is_incremental()` needs an explicit `-- depends_on:` hint; dbt cannot
+infer it.) The Sunday static refresh also moves 09:00Z → 12:30Z, after the 11:05Z chain,
+so Saturday's late evening is computed on its own static before the rotation arrives.
+
+Toronto 09-03..05 stay volume-only: repairing them needs a recompute against the old
+static, which the delay path cannot address today.
