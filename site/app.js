@@ -102,7 +102,7 @@ async function renderTiles() {
   $("pipeline-tiles").innerHTML = [
     tile(fmt(c.silver_rows), "silver rows (iceberg)"),
     tile(fmt(c.gold_rows), "gold rows (dbt marts)"),
-    tile("12h", "drain → dbt cadence"),
+    tile("2h · 12h", "drain · dbt cadence"),
     tile("30s", "poll floor per feed"),
   ].join("");
 }
