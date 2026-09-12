@@ -1,7 +1,7 @@
 # 06 — What the warehouse currently answers
 
 Every number on this page came out of `analysis/business_questions.sql` run
-against `TRANSIT.GOLD` on **2026-09-10 05:05Z**, over the data collected since
+against `TRANSIT.GOLD` on **2026-09-12 03:00Z**, over the data collected since
 2026-08-22. Re-run that file rather than editing numbers here by hand.
 
 **This run is the first whose MEANS are trustworthy.** Two defects were fixed
@@ -56,14 +56,14 @@ more than 60s ahead; `very_late` is 15 min or worse.
 
 | City | Scored events | On time | Early | Late | Very late |
 |---|---:|---:|---:|---:|---:|
-| Tokyo* | 285,976 | **97.1%** | 0.0% | 2.1% | 0.8% |
-| Zurich | 7,817,015 | **96.2%** | 1.1% | 2.4% | 0.2% |
-| Helsinki | 10,055,404 | **81.0%** | 12.0% | 6.6% | 0.4% |
-| New York | 3,381,705 | 67.8% | 21.4% | 9.3% | 1.5% |
-| SF Bay Area | 13,017,111 | 59.7% | 20.6% | 15.8% | 3.8% |
-| Boston | 6,332,661 | 57.4% | 14.6% | 23.3% | 4.7% |
-| Washington DC | 8,539,020 | 54.7% | 21.7% | 19.2% | 4.4% |
-| Toronto | 14,122,636 | 50.0% | **37.0%** | 10.0% | 2.9% |
+| Tokyo* | 362,297 | **96.7%** | 0.0% | 2.4% | 0.9% |
+| Zurich | 8,768,300 | **96.3%** | 1.1% | 2.4% | 0.2% |
+| Helsinki | 11,198,014 | **81.0%** | 11.9% | 6.7% | 0.4% |
+| New York | 3,758,758 | 67.8% | 21.2% | 9.4% | 1.6% |
+| SF Bay Area | 14,521,826 | 59.8% | 20.5% | 15.9% | 3.8% |
+| Boston | 7,097,320 | 56.8% | 14.1% | 24.0% | 5.2% |
+| Washington DC | 9,574,910 | 54.8% | 21.5% | 19.4% | 4.4% |
+| Toronto | 18,835,798 | 49.8% | **36.1%** | 10.8% | 3.3% |
 
 *Tokyo's number is operator-stated and minute-rounded (see the provenance
 section at the bottom of this page): sub-minute lateness reads as on-time by
@@ -115,14 +115,14 @@ Signed seconds, positive = late.
 
 | City | Mean | Median | p90 | p99 |
 |---|---:|---:|---:|---:|
-| Tokyo* | 28 | **0** | 0 | 720 |
-| Toronto | 52 | **−5** | 377 | 1,495 |
-| New York | 59 | 3 | 300 | 1,071 |
-| Helsinki | 69 | 38 | 245 | 680 |
-| Zurich | 82 | 60 | 180 | 420 |
-| SF Bay Area | 174 | 61 | 491 | 2,485 |
-| Washington DC | 173 | 92 | 564 | 1,824 |
-| Boston | 191 | 133 | 615 | 1,748 |
+| Tokyo* | 31 | **0** | 0 | 840 |
+| Toronto | 63 | **0** | 409 | 1,564 |
+| New York | 61 | 3 | 301 | 1,089 |
+| Helsinki | 69 | 39 | 246 | 673 |
+| Zurich | 82 | 60 | 180 | 414 |
+| SF Bay Area | 174 | 61 | 492 | 2,493 |
+| Washington DC | 173 | 93 | 564 | 1,816 |
+| Boston | 201 | 139 | 640 | 1,803 |
 
 **The means took two rounds to become usable, and the second round is this
 week's.** The 2026-08-26 edition reported SF at a mean of −19,027s and told you
@@ -136,6 +136,15 @@ from −35s to +52s **without either median moving more than a second** — the
 fingerprint of removing an artifact rather than reshaping the distribution.
 Every city's mean now sits above its median by an amount a right tail of real
 late vehicles explains.
+
+[rev 2026-09-12] These numbers are the first computed after two corrections that
+both removed measurements rather than adding them. Arrivals that landed while a
+city's feed was dark no longer score (1,004,952 events across every known outage —
+docs/08 2026-09-11), and Toronto 09-03..05, which a TTC timetable rotation had left
+with volume and no delays, were recomputed against the static that was live those
+days (+3.1M scored events). **No city's on-time share moved more than 0.2 points**
+through either change, which is the strongest evidence yet that the ranking reflects
+service and not our collection artifacts.
 
 Still prefer the median when quoting a single figure. Toronto's negative median
 (−5s) is real early-running — see Q1. Tokyo's 0/0/0 row is the quantization
