@@ -19,7 +19,7 @@ with observed_dates as (
 ),
 
 latest as (
-    select city_key, max(gtfs_version_id) as gtfs_version_id
+    select city_key, {{ static_version_pin('city_key', 'max(gtfs_version_id)') }} as gtfs_version_id
     from {{ ref('int_gtfs_versions') }}
     group by city_key
 ),

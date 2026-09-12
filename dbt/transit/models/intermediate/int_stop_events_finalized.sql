@@ -63,7 +63,15 @@ with preds as (
     where (p.arr_pred_ts_utc is not null or p.dep_pred_ts_utc is not null
            or p.arr_delay_sec is not null or p.dep_delay_sec is not null)
     {% if is_incremental() %}
+      {% if var('repair_city', none) %}
+      -- Repair mode: one city, an exact date range, recomputed against whatever
+      -- var('static_version_override') pins — for days a rotation stranded outside the
+      -- normal window (docs/08, 2026-09-11). Manual and one-off; no schedule sets it.
+      and p.city_key = '{{ var('repair_city') }}'
+      and p.service_date between '{{ var('repair_from') }}' and '{{ var('repair_to') }}'
+      {% else %}
       and p.service_date >= current_date - cast(ceil({{ var('lookback_hours') }} / 24.0) as int)
+      {% endif %}
       -- [rev 2026-09-11] Rotation freeze. The delay path resolves schedules against the
       -- NEWEST static, and an agency whose new calendar starts at its publication date
       -- leaves the days before it unschedulable: recomputing them inside this window

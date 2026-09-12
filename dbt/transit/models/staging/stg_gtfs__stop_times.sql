@@ -1,5 +1,5 @@
 with latest as (
-    select city, max(gtfs_version_id) as gtfs_version_id
+    select city, {{ static_version_pin('city', 'max(gtfs_version_id)') }} as gtfs_version_id
     from {{ source('silver', 'gtfs_static_stop_times') }}
     group by 1
 )
