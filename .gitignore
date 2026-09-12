@@ -10,6 +10,8 @@ __pycache__/
 
 # dbt
 dbt/transit/target/
+# dbt writes one target dir per run mode (target_prod, target_repair, target_compile, ...)
+dbt/transit/target_*/
 dbt/transit/dbt_packages/
 dbt/transit/logs/
 *.duckdb

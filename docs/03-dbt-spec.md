@@ -37,10 +37,24 @@ sources:
 | `int_trip_matching` **[rev P3]** | table | union of nyc + generic matchers with identical columns — the **only** matcher downstream models reference (`int_stop_events_finalized` joins it on city_key/service_date/trip_uid). Grain 1 row per (city_key, service_date, trip_uid): best-confidence kept via qualify, guarded by `tests/assert_trip_matching_unique.sql` |
 | `int_odpt_stop_map` | table | ODPT URN ↔ GTFS stop_id/route_id; `dbt_utils.relationships` tested both ways |
 | `int_stop_events_finalized` | **incremental (merge)** | THE model — see §3. unique_key `(city_key, service_date, trip_uid, stop_sequence)`, lookback var 48h |
-| `int_service_frequency` | ~~incremental~~ **table [rev P5]** (small; rebuilt with static) | median sched headway per (route, direction, daypart, service_date); `is_frequent = headway ≤ var('freq_headway_threshold_sec')` |
+| `int_odpt_scheduled_stop_times` | table **[rev 2026-09-12]** | Tokyo's schedule exploded to stop grain from `odpt:TrainTimetable`, shaped to match `int_gtfs_scheduled_stop_times`. Toei only; one timetable per (date, railway, train, direction) via the same calendar priority as `int_odpt_stop_events`; arrival times NOT coalesced with departures (ODPT omits arrival at a train's origin, and the observed side omits it too) |
+| `int_scheduled_stop_times` | table **[rev 2026-09-12]** | union of the GTFS and ODPT scheduled stop times. **Read by `fct_headways` and `int_service_frequency` only** — the two models that compare an observed sequence to a scheduled one. The other five consumers of `int_gtfs_scheduled_stop_times` stay GTFS-specific (calendars, static versions, trip matching), which Tokyo reaches via `int_odpt_scheduled_trips` / `int_odpt_stop_events` |
+| `int_service_frequency` | ~~incremental~~ **table [rev P5]** (small; rebuilt with static) | median sched headway per (route, direction, daypart, service_date); `is_frequent = headway ≤ var('freq_headway_threshold_sec')`. **[rev 2026-09-12]** now reads `int_scheduled_stop_times`, so Tokyo gets `is_frequent` and therefore EWT |
 | ~~`int_headways`~~ **`fct_headways` [rev P5]** (marts, per docs/02 §fct_headways) | incremental (delete+insert, 48h lookback) | LAG(actual_arr) per (city, route, dir, stop, service_date); sched headway from frequencies.txt else LAG(sched_arr) |
 | `fct_*`, `dim_*` | incremental / table per schema doc | facts: merge + cluster (service_date, city_key); dims from snapshots |
 | `fct_city_scorecard` | table | full-refresh each run; methodology_version stamped. [rev 2026-09-10] window grain (city × judged window), was calendar-month — the 20-day floor is unchanged but now counts the whole judged history; a month could never hold 20 days between metrics_from (Aug 23–Sep 4) and the Sep 17 close. Retired `fct_city_scorecard_monthly` relation stays until teardown |
+
+> **[rev 2026-09-12] Tokyo's scheduled side was never joined.** `fct_headways` and
+> `int_service_frequency` both drew their scheduled sequence from
+> `int_gtfs_scheduled_stop_times`, which Tokyo never enters — its schedule is
+> `odpt:TrainTimetable`, not static GTFS trips. Nothing failed: Tokyo produced 362,473 real
+> observed gaps with `sched_headway_sec` NULL on every one, so `gap_ratio`, `bunched_flag` and
+> `big_gap_flag` (all of which divide by it) nulled out together, and `int_service_frequency`
+> had no Tokyo rows at all, so `is_frequent` was unknown and EWT never ran. The city rendered a
+> dash for bunching and excess wait beside a fully populated OTP column. Fixed by
+> `int_odpt_scheduled_stop_times` + `int_scheduled_stop_times`; guarded by
+> `assert_observed_cities_have_scheduled_headways`, which fails any schedule-matchable city that
+> has rated gaps and no scheduled headway anywhere in the lookback window.
 
 ## 3. `int_stop_events_finalized` — the core logic (sketch)
 

@@ -14,7 +14,7 @@ with sched as (
         s.stop_id,
         s.sched_arr_ts_utc,
         c.iana_tz
-    from {{ ref('int_gtfs_scheduled_stop_times') }} s
+    from {{ ref('int_scheduled_stop_times') }} s
     join {{ ref('dim_city') }} c on c.city_key = s.city_key
     where s.sched_arr_ts_utc is not null
 

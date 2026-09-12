@@ -1,0 +1,57 @@
+version: 2
+
+models:
+  - name: int_odpt_scheduled_stop_times
+    description: >
+      Tokyo's schedule exploded to stop grain from odpt:TrainTimetable, shaped to
+      match int_gtfs_scheduled_stop_times so the two can union. Exists because
+      Tokyo rail never enters the GTFS path, which left fct_headways with
+      362,473 observed gaps and no scheduled headway to divide by, and
+      int_service_frequency with no Tokyo rows at all — so bunching and excess
+      wait read as unmeasurable when only the join was missing (2026-09-12).
+      Toei only, one timetable per (date, railway, train, direction), calendar
+      priority identical to int_odpt_stop_events.
+    columns:
+      - name: city_key
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['tokyo']
+      - name: service_date
+        data_tests: [not_null]
+      - name: route_id
+        data_tests: [not_null]
+      - name: direction_id
+        description: ascending = 0, descending = 1 — the mapping int_odpt_stop_events writes into fct_stop_events, so both sides of the headway join agree.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: stop_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('int_odpt_stop_map')
+                field: stop_id
+      - name: stop_sequence
+        data_tests: [not_null]
+
+  - name: int_scheduled_stop_times
+    description: >
+      Union of the GTFS scheduled stop times (seven cities) and the ODPT ones
+      (Tokyo). Read by exactly the two models that compare an observed sequence
+      against a scheduled one — fct_headways and int_service_frequency — and by
+      nothing else. The GTFS relation keeps its five GTFS-specific consumers
+      (service dates, point-in-time dates, version-for-date, service delivery,
+      stop-event finalization), which Tokyo reaches through
+      int_odpt_scheduled_trips and int_odpt_stop_events instead.
+    columns:
+      - name: city_key
+        data_tests: [not_null]
+      - name: service_date
+        data_tests: [not_null]
+      - name: stop_id
+        data_tests: [not_null]

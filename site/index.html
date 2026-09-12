@@ -218,52 +218,197 @@
 <!-- ======================= pipeline ======================= -->
 <section class="section reveal" id="pipeline">
   <div class="section-head">
-    <div class="eyebrow">PIPELINE · WHAT THE TESTS CAUGHT</div>
-    <h2>The warehouse behind the numbers</h2>
-    <p class="section-note">Pollers fetch each agency's GTFS-RT into Kafka; Spark Structured
-    Streaming lands it in S3 Iceberg; a Dagster chain drains, re-pins Snowflake, and rebuilds
-    the dbt marts twice a day. These are the finds that made the numbers trustworthy:</p>
+    <div class="eyebrow">PIPELINE · FIVE LAYERS</div>
+    <h2>What happens to one poll</h2>
+    <p class="section-note">Every number on this page starts as a single HTTP request to an
+    agency. Eight poller containers hold 30 endpoints at a 30-second floor, and each response is
+    archived verbatim before anything interprets it — so every layer below can be rebuilt from
+    the one above without asking an agency for the same bytes twice.</p>
   </div>
   <div class="tile-grid wide-tiles" id="pipeline-tiles"></div>
-  <div class="finding-grid">
-    <div class="card finding">
-      <h3>Zurich was a delay-only feed</h3>
-      <p>97% of Swiss rows carry a stated delay with no timestamps. Finalization demanded
-      timestamps and silently cut the city to ~3k events a day. Fixed by computing actuals
-      as schedule&nbsp;+&nbsp;stated delay — Zurich jumped to ~550k events a day and first
-      place on on-time share.</p>
-    </div>
-    <div class="card finding">
-      <h3>A regex ate the 7 train</h3>
-      <p>Snowflake string literals consume backslashes, so a direction regex quietly matched
-      the wrong character and every northbound 7-line trip vanished between silver and gold.
-      A completeness floor test went red; the fix ships with a contract test so it cannot
-      come back.</p>
-    </div>
-    <div class="card finding">
-      <h3>TTC publishes two schedules</h3>
-      <p>Toronto scored 0.8% stop overlap until it turned out the city ships two GTFS files
-      and the pipeline read the one that pairs with nothing. The one that pairs with its
-      realtime matches 99.6% — the coverage gap was ours, not the agency's.</p>
-    </div>
-    <div class="card finding">
-      <h3>A replay, rolled back exactly</h3>
-      <p>A replacement Spark checkpoint replayed Kafka retention as ~67M duplicate rows.
-      Caught at the 75-minute mark; Iceberg's snapshot rollback reversed it to the byte,
-      and the gap is documented in the incident log rather than papered over.</p>
-    </div>
-    <div class="card finding">
-      <h3>One 10&nbsp;MB file, 2,880 times a day</h3>
-      <p>The Swiss alerts endpoint returned a byte-identical 10&nbsp;MB payload on every
-      30-second poll — 29&nbsp;GB a day of one repeated file, most of the raw bucket. Fixed
-      with per-endpoint cadence; the alerts product now polls every 10 minutes.</p>
-    </div>
-    <div class="card finding">
-      <h3>The schedule that never fired</h3>
-      <p>EventBridge Scheduler's context token was passed through un-substituted, so every
-      trigger failed an API regex — found by reading the dead-letter queue, not the green
-      console. Replaced with a Lambda invoker; the first hands-off drain is in the log.</p>
-    </div>
+  <div class="chart-wrap" style="margin-top:18px">
+  <table class="data-table">
+    <thead>
+      <tr><th>Layer</th><th>What it holds</th><th class="num">Volume</th><th>The rule that governs it</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>Raw</b><div class="sub">S3, verbatim</div></td>
+        <td>Every poll exactly as the agency returned it — protobuf for GTFS-RT, JSON for ODPT</td>
+        <td class="num">161 GB<div class="sub">515,314 objects</div></td>
+        <td>Immutable and replayable. A 7-day expiry rule holds it flat instead of unbounded.</td>
+      </tr>
+      <tr>
+        <td><b>Bronze</b><div class="sub">Iceberg on S3</div></td>
+        <td>Decoded envelopes, one row per record, still untyped and undeduplicated</td>
+        <td class="num">122 GB<div class="sub">107,126 objects</div></td>
+        <td>Keeps everything. No watermark, so nothing here can arrive too late to be kept.</td>
+      </tr>
+      <tr>
+        <td><b>Silver</b><div class="sub">Iceberg on S3</div></td>
+        <td>One schema for eight cities: typed, deduplicated, service-date resolved</td>
+        <td class="num">2.53B rows<div class="sub">41.7 GB · 16 tables</div></td>
+        <td>Exact-duplicate drop inside a 2-hour watermark, which is why drains run every 2 hours.</td>
+      </tr>
+      <tr>
+        <td><b>Gold</b><div class="sub">Snowflake + dbt</div></td>
+        <td>Realtime matched to schedule, delays computed, metrics rolled up</td>
+        <td class="num">331.1M rows<div class="sub">36 relations</div></td>
+        <td>A metric with no evidence is NULL, never zero. 231 tests run on every build.</td>
+      </tr>
+      <tr>
+        <td><b>Site</b><div class="sub">static JSON</div></td>
+        <td>The eight snapshots this page reads</td>
+        <td class="num">8 files</td>
+        <td>Built from gold, committed to the repo, so a deploy is a plain static publish.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ======================= feeds ======================= -->
+<div class="band">
+<section class="section reveal" id="feeds">
+  <div class="section-head">
+    <div class="eyebrow">FEEDS · WHAT EACH CITY SENDS</div>
+    <h2>Thirty endpoints, eight shapes</h2>
+    <p class="section-note">No two agencies publish the same thing. Volumes below are the live
+    7-day raw window; a feed's size says more about how it is published than about how much
+    service the city runs — Zurich ships a whole national network on every poll, and Tokyo ships
+    one JSON array of trains.</p>
+  </div>
+  <div class="chart-wrap">
+  <table class="data-table">
+    <thead>
+      <tr><th>City</th><th class="num">Feeds</th><th class="num">Cadence</th><th class="num">Raw / 7d</th><th>What it gives</th><th>What it withholds</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><b>New York</b><div class="sub">MTA</div></td><td class="num">8</td><td class="num">30s</td><td class="num">10.5 GB<div class="sub">182,280 obj</div></td><td>Eight subway feeds, trip updates + positions + alerts, no key required</td><td>No <span class="mono">arrival.delay</span> outside the L feed; no coordinates on subway positions</td></tr>
+      <tr><td><b>Boston</b><div class="sub">MBTA</div></td><td class="num">3</td><td class="num">30s</td><td class="num">24.4 GB<div class="sub">68,360 obj</div></td><td>Subway, bus, commuter rail, occupancy, and real cancellations — 9,118 of them</td><td>Ferry runs but never appears in realtime</td></tr>
+      <tr><td><b>Toronto</b><div class="sub">TTC</div></td><td class="num">3</td><td class="num">30s</td><td class="num">13.1 GB<div class="sub">65,943 obj</div></td><td>Every surface vehicle, 100% of scheduled routes observed</td><td>The subway publishes alerts only — never a position or a prediction</td></tr>
+      <tr><td><b>Helsinki</b><div class="sub">HSL</div></td><td class="num">2</td><td class="num">30s</td><td class="num">16.1 GB<div class="sub">45,567 obj</div></td><td>Tram, metro, rail and bus predictions, keyless</td><td>No VehiclePositions feed at all; <span class="mono">trip_id</span> ships empty on every row</td></tr>
+      <tr><td><b>Washington DC</b><div class="sub">WMATA</div></td><td class="num">6</td><td class="num">30s</td><td class="num">15.2 GB<div class="sub">136,724 obj</div></td><td>Rail and bus as separate feed families, every scheduled route observed</td><td>Two static schedules that must load as one version</td></tr>
+      <tr><td><b>SF Bay</b><div class="sub">511.org</div></td><td class="num">3</td><td class="num">200s</td><td class="num">5.7 GB<div class="sub">10,239 obj</div></td><td>~30 operators behind one regional feed, including ferries and cable cars</td><td>Six small operators publish schedule and no realtime; 60 requests/hour cap</td></tr>
+      <tr><td><b>Zurich</b><div class="sub">Swiss OTD</div></td><td class="num">2</td><td class="num">60s / 600s</td><td class="num">77.5 GB<div class="sub">12,524 obj</div></td><td>A national feed filtered to a 615-route allow-list — 5.8 MB per poll</td><td>Delays only, no arrival timestamps; boats, funiculars and aerial lifts have no realtime product</td></tr>
+      <tr><td><b>Tokyo</b><div class="sub">ODPT</div></td><td class="num">3</td><td class="num">30s / 60s</td><td class="num">1.9 GB<div class="sub">56,934 obj</div></td><td>Operator-stated delays for four Toei subway lines, 52 KB per poll</td><td>Tokyo Metro publishes no train data; buses send positions only; no cancellation field exists</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="footnote">Chicago is the ninth city in the plan and the one that never opened: its
+  GTFS-RT key has never activated. The Train Tracker API does answer on the same key, but it
+  publishes run numbers rather than trip ids, so scoring it would mean building a matcher from
+  scratch — and a score needs 20 judged days this project does not have left.</p>
+</section>
+</div>
+
+<!-- ======================= journeys ======================= -->
+<section class="section reveal" id="journeys">
+  <div class="section-head">
+    <div class="eyebrow">JOURNEYS · ONE RECORD, END TO END</div>
+    <h2>Follow a single vehicle through the warehouse</h2>
+    <p class="section-note">One real record from each city, on 11 September 2026, from the bytes
+    an agency returned to the point it becomes a number on this page. Every value below is the
+    actual stored value — the same row read back out of each layer.</p>
+  </div>
+  <div class="journey-list">
+
+    <details class="journey">
+      <summary><span class="jcity">New York</span><span class="jmeta">MTA · E train · trip ids encode an origin time</span></summary>
+      <ol class="hops">
+        <li><b>Fetch</b><span>GET the <span class="mono">ace</span> feed, one of eight, every 30s → ~132 KB of protobuf archived at <span class="mono">nyc/ace/2026-09-11/21/…pb</span></span></li>
+        <li><b>Envelope</b><span>Decoded to the canonical shape and keyed by city onto <span class="mono">transit.trip_updates</span></span></li>
+        <li><b>Silver</b><span>Typed into <span class="mono">stop_time_predictions</span>. The trip arrives as <span class="mono">106150_E..S71R</span> — MTA encodes the origin time in the id, so it drifts intraday</span></li>
+        <li><b>Match</b><span>The NYC-specific matcher resolves it on route + origin-time to static trip <span class="mono">L0S7-E-1078-S01_106150_E..S71R</span>, confidence 1.0</span></li>
+        <li><b>Gold</b><span>Stop <span class="mono">G06S</span>, sequence 2. Six predictions collapse into one arrival: scheduled <span class="mono">21:43:00</span>, actual <span class="mono">21:43:00</span>, delay <b>0s</b> → <b>on time</b>. NYC has no feed-supplied delay outside the L, so this was computed against the schedule.</span></li>
+        <li><b>Chart</b><span>Lands in the 17:00 local column of on-time-by-hour, and in NYC's 85.8 composite</span></li>
+      </ol>
+    </details>
+
+    <details class="journey">
+      <summary><span class="jcity">Boston</span><span class="jmeta">MBTA · route 78 · exact trip ids, real cancellations</span></summary>
+      <ol class="hops">
+        <li><b>Fetch</b><span>Three feeds at 30s → ~357 KB per poll at <span class="mono">boston/trip_updates/…</span></span></li>
+        <li><b>Envelope</b><span>Same canonical wrapper; Boston also carries occupancy, which most feeds omit</span></li>
+        <li><b>Silver</b><span>Trip <span class="mono">78512915</span>, vehicle <span class="mono">y2023</span> — MBTA's realtime ids match its static file exactly, so no inference is needed</span></li>
+        <li><b>Match</b><span>Straight equijoin to the same id in the schedule, confidence 1.0</span></li>
+        <li><b>Gold</b><span>Stop <span class="mono">2471</span>, sequence 9, scheduled <span class="mono">00:35:00</span>, actual <span class="mono">00:35:00</span>, delay <b>0s</b> → <b>on time</b>, from 6 predictions</span></li>
+        <li><b>Chart</b><span>20:00 local. Boston is also the fleet's most honest cancellation feed — its 9,118 cancellations are why its completeness reads lower than cities that simply never say the word</span></li>
+      </ol>
+    </details>
+
+    <details class="journey">
+      <summary><span class="jcity">Toronto</span><span class="jmeta">TTC · route 340 · a service day that starts at 4am</span></summary>
+      <ol class="hops">
+        <li><b>Fetch</b><span>Three surface feeds at 30s → <span class="mono">toronto/trip_updates/…</span>, 13.1 GB a week</span></li>
+        <li><b>Envelope</b><span>Attribution is a licence condition here, carried through to the footer of this page</span></li>
+        <li><b>Silver</b><span>Trip <span class="mono">128666020</span>, vehicle <span class="mono">8331</span>. TTC sets <span class="mono">start_date</span> on zero trips, so the service day is resolved with a −4h cutover rather than the usual noon rule — without it, every overnight trip lands on the wrong date</span></li>
+        <li><b>Match</b><span>Exact id against the surface schedule, confidence 1.0</span></li>
+        <li><b>Gold</b><span>Stop <span class="mono">5954</span>, sequence 4, scheduled <span class="mono">08:26:40</span> UTC = <b>04:26 local</b>, delay <b>0s</b> → <b>on time</b></span></li>
+        <li><b>Chart</b><span>The 4am column — and part of why Toronto's early share, 36%, is the most striking number on this page</span></li>
+      </ol>
+    </details>
+
+    <details class="journey">
+      <summary><span class="jcity">Helsinki</span><span class="jmeta">HSL · route 1041 · the trip id arrives empty</span></summary>
+      <ol class="hops">
+        <li><b>Fetch</b><span>Two feeds at 30s, keyless → <span class="mono">helsinki/trip_updates/…</span></span></li>
+        <li><b>Envelope</b><span>No vehicle-position topic for this city: HSL publishes none</span></li>
+        <li><b>Silver</b><span><b><span class="mono">trip_id</span> is empty on every row.</b> Identity is rebuilt from (route, direction, start date, start time) so the trip still has one stable key across polls</span></li>
+        <li><b>Match</b><span>Resolved to static trip <span class="mono">1041_20260907_Pe_2_0640</span>, confidence 1.0 — 99.6% of realtime stops line up with the schedule</span></li>
+        <li><b>Gold</b><span>Stop <span class="mono">1291112</span>, sequence 12, scheduled <span class="mono">03:51:00</span>, actual <span class="mono">03:51:00</span>, delay <b>0s</b> → <b>on time</b></span></li>
+        <li><b>Chart</b><span>Helsinki's 2.5% bunching — the lowest in the fleet — is built from arrivals like this one</span></li>
+      </ol>
+    </details>
+
+    <details class="journey">
+      <summary><span class="jcity">Washington DC</span><span class="jmeta">WMATA · route C71 · two schedules, one version</span></summary>
+      <ol class="hops">
+        <li><b>Fetch</b><span>Six feeds — rail and bus each with updates, positions and alerts — at 30s, ~517 KB per bus poll</span></li>
+        <li><b>Envelope</b><span>Keyed onto the same three topics as every other GTFS-RT city</span></li>
+        <li><b>Silver</b><span>Trip <span class="mono">12331170</span>, vehicle <span class="mono">7047</span>. DC's schedule ships as two separate zips, loaded under one version so neither mode hides behind the other</span></li>
+        <li><b>Match</b><span>Exact id, confidence 1.0</span></li>
+        <li><b>Gold</b><span>Stop <span class="mono">7315</span>, sequence 30, scheduled <span class="mono">10:17:45</span> UTC = <b>06:17 local</b>, delay <b>0s</b> → <b>on time</b></span></li>
+        <li><b>Chart</b><span>DC restates a stop 49 times on average before the vehicle arrives — the most of any feed here. This one settled in 6.</span></li>
+      </ol>
+    </details>
+
+    <details class="journey">
+      <summary><span class="jcity">SF Bay</span><span class="jmeta">511.org · SamTrans · thirty operators, one feed</span></summary>
+      <ol class="hops">
+        <li><b>Fetch</b><span>Three feeds at <b>200s</b>, not 30s — the regional key allows 60 requests an hour</span></li>
+        <li><b>Envelope</b><span>One feed carries ~30 operators; the operator prefix survives in every id</span></li>
+        <li><b>Silver</b><span>Trip <span class="mono">SM:15252201-155-Blocks-Weekday-62</span>, vehicle <span class="mono">436</span> — <span class="mono">SM:</span> is SamTrans</span></li>
+        <li><b>Match</b><span>Exact id against the regional schedule, confidence 1.0</span></li>
+        <li><b>Gold</b><span>Stop <span class="mono">335503</span>, sequence 34, scheduled <span class="mono">12:15:33</span>, actual <span class="mono">12:15:33</span>, delay <b>0s</b> → <b>on time</b></span></li>
+        <li><b>Chart</b><span>SF's completeness reads lowest in the fleet at 84.4%, and it is six operators publishing no realtime at all — not one failing agency</span></li>
+      </ol>
+    </details>
+
+    <details class="journey">
+      <summary><span class="jcity">Zurich</span><span class="jmeta">Swiss OTD · a delay-only national feed</span></summary>
+      <ol class="hops">
+        <li><b>Fetch</b><span>Trip updates every 60s, alerts every 600s. Each trip-update poll is <b>5.8 MB</b> — the whole Swiss network — and Zurich alone is 77.5 GB of the raw window</span></li>
+        <li><b>Envelope</b><span>Filtered in silver to a 615-route allow-list, on both the realtime and schedule sides, so no Swiss operator is mislabelled as Zurich</span></li>
+        <li><b>Silver</b><span>Trip <span class="mono">.ojp-91-11-C.1.TA.1450.j26</span>. <b>The feed carries a stated delay and no arrival timestamp</b>, so an actual time has to be constructed rather than read</span></li>
+        <li><b>Match</b><span>Realtime and static ids do not line up, so it resolves on route + time to <span class="mono">.ojp-91-11-C.1.TA.1374.j26</span> — confidence <b>0.9</b>, the only city here that routinely falls back</span></li>
+        <li><b>Gold</b><span>Stop <span class="mono">ch:1:sloid:91299::5</span>, sequence 11. Actual = schedule + stated delay → <span class="mono">20:27:00</span>, delay <b>0s</b> → <b>on time</b>, method <span class="mono">delay_plus_schedule</span></span></li>
+        <li><b>Chart</b><span>Zurich's 96.3% on-time — the best measured here, and worth reading next to the method that produced it</span></li>
+      </ol>
+    </details>
+
+    <details class="journey">
+      <summary><span class="jcity">Tokyo</span><span class="jmeta">ODPT · Toei Mita line · the operator states the delay</span></summary>
+      <ol class="hops">
+        <li><b>Fetch</b><span><span class="mono">odpt:Train</span> every 30s → a 52 KB JSON array of every Toei train in service, archived at <span class="mono">tokyo/trains/2026-09-11/…json</span></span></li>
+        <li><b>Envelope</b><span>Its own topic, <span class="mono">transit.odpt_trains</span> — the record shares no shape with GTFS-RT</span></li>
+        <li><b>Silver</b><span>Train <span class="mono">Toei.Mita.2031K</span> with <span class="mono">odpt:delay</span> = 0 and a <span class="mono">fromStation</span>. There is no arrival time in the feed at all</span></li>
+        <li><b>Match</b><span>Station URNs map to GTFS stop ids, and the train matches its published timetable <span class="mono">…Mita.2031K.Weekday</span>. Arrival is detected by watching <span class="mono">fromStation</span> advance along the line across 16 snapshots</span></li>
+        <li><b>Gold</b><span>Stop <span class="mono">226</span>, sequence 2, scheduled <span class="mono">11:52:00</span>, actual = schedule + stated delay → <span class="mono">11:52:00</span>, <b>on time</b>, method <span class="mono">odpt_stated</span></span></li>
+        <li><b>Chart</b><span>Tokyo's delay distribution is a single spike: <b>91.1% of its events are exactly 0 seconds</b> and none are negative, because Toei reports punctuality in whole minutes and calls on-time zero</span></li>
+      </ol>
+    </details>
+
   </div>
 </section>
 
@@ -287,6 +432,39 @@
   </div>
 </section>
 
+<!-- ======================= specs (fine print) ======================= -->
+<section class="section reveal" id="specs">
+  <div class="section-head">
+    <div class="eyebrow">SPECS · FINE PRINT</div>
+    <h2>What it runs on</h2>
+  </div>
+  <div class="spec-grid">
+    <div class="spec"><b>Ingest</b><p>Eight poller containers, one per city, from a single
+    config-driven image. Thirty endpoints at a 30-second floor — SF at 200s under a 60 requests/hour
+    cap, Zurich's alerts at 600s. Every response is archived to S3 before anything decodes it,
+    on a 7-day expiry.</p></div>
+    <div class="spec"><b>Queue</b><p>Single-broker Kafka in KRaft mode on a t4g.small with 48 GB
+    gp3. Four topics at three partitions each, zstd compression, 50 ms linger, 10 MB maximum
+    message, 24-hour retention.</p></div>
+    <div class="spec"><b>Processing</b><p>Spark Structured Streaming on EMR Serverless 7.5.0 with
+    an availableNow trigger. The application is capped at 8 vCPU / 32 GB; each run is a 2 vCPU /
+    6 GB driver plus two 2 vCPU / 10 GB executors, 16 shuffle partitions, five state-store
+    versions retained.</p></div>
+    <div class="spec"><b>Lake</b><p>Apache Iceberg on S3 through a Hadoop catalog. Bronze is
+    partitioned by (feed, city, service_date), silver by (city, service_date). Snowflake reads
+    silver as external tables, so there is no load step.</p></div>
+    <div class="spec"><b>Warehouse</b><p>Snowflake on an X-Small warehouse. dbt builds 17 staging
+    views, 17 intermediate tables and 13 marts over 6 seeds, with 231 tests on every run.</p></div>
+    <div class="spec"><b>Orchestration</b><p>Dagster on a t4g.medium services box: drains every
+    two hours, the dbt chain at 11:05 and 23:05 UTC, a feed-freshness tripwire four times an hour,
+    hourly weather, and a schedule refresh on Sunday mornings.</p></div>
+  </div>
+  <p class="footnote">Gross AWS usage was <b>$46.92</b> for 1–12 September 2026 — EMR Serverless
+  $16.86, S3 $14.60, EC2 $8.96, the remainder networking and registry. Credits cover it, so the
+  invoice is $0.00. Every figure on this page is read from the Snowflake catalog, the AWS API or
+  the orchestrator's own run log rather than estimated.</p>
+</section>
+
 </main>
 
 <footer class="site-footer">
@@ -298,7 +476,9 @@
       <a href="https://developer.wmata.com">WMATA</a>, <a href="https://511.org/open-data">511.org</a>,
       <a href="https://www.ttc.ca">TTC</a> (route and arrival data used with permission of the
       Toronto Transit Commission), <a href="https://hsl.fi/en/hsl/open-data">HSL</a>,
-      <a href="https://opentransportdata.swiss">opentransportdata.swiss</a>. Basemap ©
+      <a href="https://opentransportdata.swiss">opentransportdata.swiss</a>,
+      <a href="https://developer.odpt.org">ODPT</a> (Bureau of Transportation, Tokyo Metropolitan
+      Government / Association for Open Data of Public Transportation, CC BY 4.0). Basemap ©
       OpenStreetMap contributors, © <a href="https://carto.com/attributions">CARTO</a>.
       On-time figures are computed against each agency's own published schedule.</p>
     </div>

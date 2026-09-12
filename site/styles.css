@@ -653,3 +653,60 @@ h2 {
   h1 { font-size: 26px; }
   .map-frame { height: 460px; }
 }
+
+/* ---------- pipeline: per-city journeys + spec fine print ---------- */
+.journey-list { display: grid; gap: 8px; }
+details.journey {
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); overflow: hidden;
+}
+details.journey > summary {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px;
+  cursor: pointer; padding: 14px 18px; list-style: none; user-select: none;
+}
+details.journey > summary::-webkit-details-marker { display: none; }
+details.journey > summary::before {
+  content: "\25B8"; color: var(--muted-foreground); font-size: 12px;
+  display: inline-block; transition: transform .12s ease;
+}
+details.journey[open] > summary::before { transform: rotate(90deg); }
+details.journey > summary:hover { background: var(--surface-2); }
+details.journey > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.jcity { font-weight: 600; font-size: 15px; color: var(--foreground); }
+.jmeta { color: var(--muted-foreground); font-size: 13px; }
+.hops {
+  margin: 0; padding: 14px 18px 18px; list-style: none;
+  display: grid; gap: 11px; border-top: 1px solid var(--border);
+}
+.hops li {
+  display: grid; grid-template-columns: 84px 1fr; gap: 14px;
+  align-items: baseline; font-size: 14px; line-height: 1.55;
+}
+.hops li b {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted-foreground); font-weight: 600;
+}
+.hops li span { color: var(--foreground-2); }
+.spec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 12px; }
+.spec { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 14px 16px; }
+.spec b {
+  display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted-foreground); margin-bottom: 6px;
+}
+.spec p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--foreground-2); }
+@media (max-width: 640px) {
+  .hops li { grid-template-columns: 1fr; gap: 2px; }
+}
+
+/* mid-table .num columns need a gutter: the base rule zeroes padding-right,
+   which only works when .num is the last column (standings, routes). */
+#pipeline .data-table td.num, #pipeline .data-table th.num,
+#feeds .data-table td.num, #feeds .data-table th.num {
+  padding-right: 30px; white-space: nowrap;
+}
+#pipeline .data-table td, #feeds .data-table td { vertical-align: top; }
+#pipeline .data-table td:first-child, #feeds .data-table td:first-child { padding-right: 20px; }
+#pipeline .data-table .sub, #feeds .data-table .sub {
+  margin-top: 2px; font-size: 11px; line-height: 1.4;
+  color: var(--muted-foreground); font-weight: 400;
+}

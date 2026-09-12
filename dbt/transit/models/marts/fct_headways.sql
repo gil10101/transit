@@ -79,7 +79,7 @@ sched_gaps as (
                 partition by city_key, route_id, direction_id, stop_id, service_date
                 order by sched_arr_ts_utc)",
             "sched_arr_ts_utc") }} as sched_gap_sec
-    from {{ ref('int_gtfs_scheduled_stop_times') }}
+    from {{ ref('int_scheduled_stop_times') }}
     where sched_arr_ts_utc is not null
     {% if is_incremental() %}
       and service_date >= current_date - cast(ceil({{ var('lookback_hours') }} / 24.0) as int)
