@@ -188,6 +188,7 @@ hourly = q("""
     from fct_stop_events e
     join closed c on c.city_key = e.city_key and c.service_date = e.service_date
     where e.otp_band is not null
+      and e.local_hour is not null  -- no arrival time, no hour
     group by 1, 2
     -- A city-hour drawn from a handful of events is noise with a line through it:
     -- Tokyo's 01:00 held 10 last-train stragglers and plotted as a 0% collapse beside

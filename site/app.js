@@ -258,7 +258,10 @@ async function renderLineCharts() {
   const [hourly, daily] = await Promise.all([loadJSON("data/hourly.json"), loadJSON("data/daily.json")]);
 
   const hSeries = {};
-  for (const r of hourly.rows) (hSeries[r.city_key] ??= [])[r.local_hour] = { y: +r.otp_pct };
+  for (const r of hourly.rows) {
+    if (r.local_hour == null) continue; // events with no arrival time have no hour to plot
+    (hSeries[r.city_key] ??= [])[r.local_hour] = { y: +r.otp_pct };
+  }
   drawLineChart({
     svgId: "hourly-chart", tipId: "hourly-tooltip", series: hSeries,
     xMax: 23, xTickStep: 3,
