@@ -85,6 +85,15 @@
     <p class="footnote">On-time = arrival within &minus;1 to +5 min of schedule. Excess wait =
     time beyond the scheduled headway on frequent service. Added (unscheduled) trips count
     toward volume, never toward on-time.</p>
+    <p class="footnote"><b>Tokyo's wait and bunching figures are not measured the way the other
+    seven are, and should not be read as a win.</b> Toei publishes a stated delay instead of an
+    arrival time, so an arrival is reconstructed as schedule&nbsp;+&nbsp;stated delay — and because
+    91% of those stated delays are exactly zero, <b>90.4% of Tokyo's gaps between consecutive trains
+    are identical to the scheduled gap</b>, against 0.2&ndash;4.1% everywhere else. Its excess wait
+    and bunching are therefore close to the timetable reflected back rather than observed
+    irregularity. The same caveat already applies to its on-time share. Cancellations stay blank
+    for a different reason: <span class="mono">odpt:Train</span> has no cancellation field at
+    all.</p>
   </div>
 </section>
 
@@ -254,7 +263,7 @@
         <td><b>Gold</b><div class="sub">Snowflake + dbt</div></td>
         <td>Realtime matched to schedule, delays computed, metrics rolled up</td>
         <td class="num">331.1M rows<div class="sub">36 relations</div></td>
-        <td>A metric with no evidence is NULL, never zero. 231 tests run on every build.</td>
+        <td>A metric with no evidence is NULL, never zero. 244 tests run on every build.</td>
       </tr>
       <tr>
         <td><b>Site</b><div class="sub">static JSON</div></td>
@@ -454,7 +463,7 @@
     partitioned by (feed, city, service_date), silver by (city, service_date). Snowflake reads
     silver as external tables, so there is no load step.</p></div>
     <div class="spec"><b>Warehouse</b><p>Snowflake on an X-Small warehouse. dbt builds 17 staging
-    views, 17 intermediate tables and 13 marts over 6 seeds, with 231 tests on every run.</p></div>
+    views, 19 intermediate tables and 13 marts over 6 seeds, with 244 tests on every run.</p></div>
     <div class="spec"><b>Orchestration</b><p>Dagster on a t4g.medium services box: drains every
     two hours, the dbt chain at 11:05 and 23:05 UTC, a feed-freshness tripwire four times an hour,
     hourly weather, and a schedule refresh on Sunday mornings.</p></div>

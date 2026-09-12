@@ -218,6 +218,25 @@ schedule promises.
 | SF Bay Area | 217 | 194s | 78s |
 | Washington DC | 253 | 176s | 97s |
 
+> **[rev 2026-09-12] Tokyo is absent from the Q4 and Q5 tables above because its
+> schedule was never joined, and it is now present in gold — but read it with the same
+> asterisk as its on-time share.** `fct_headways` and `int_service_frequency` both took
+> their scheduled side from `int_gtfs_scheduled_stop_times`, a GTFS path Tokyo never
+> enters (its schedule is `odpt:TrainTimetable`). Tokyo therefore carried 362,473 real
+> observed gaps with `sched_headway_sec` NULL on every one, so `gap_ratio`, `bunched_flag`
+> and `big_gap_flag` — all of which divide by it — nulled out together, and `is_frequent`
+> was unknown so EWT never ran. Fixed via `int_odpt_scheduled_stop_times` →
+> `int_scheduled_stop_times`; scheduled-headway coverage went 0.00% → 100.00% with **no
+> other city moving a decimal place** on bunching, EWT or OTP, and NYC's composite
+> unchanged at 85.8. Tokyo now reads 0.7% bunched and a 2s median EWT — **the best in the
+> fleet, and close to tautological**: Toei publishes a stated delay rather than an arrival
+> time, so an arrival is reconstructed as schedule + stated delay, and because 91% of those
+> delays are exactly zero, **90.4% of Tokyo's consecutive-train gaps equal the scheduled gap
+> exactly**, against 0.2–4.1% in every other city. Its wait regularity is largely the
+> timetable reflected back. These tables are regenerated from
+> `analysis/business_questions.sql`, so the Tokyo rows land at the next scripted re-run
+> rather than being hand-typed here.
+
 Toronto's median EWT collapsed from the provisional 372s to 56s once the
 grain-and-evidence rewrite weighted route-days properly and more days closed —
 the earlier magnitude was exactly the partial-day artifact the docs warned
