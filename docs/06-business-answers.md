@@ -71,7 +71,7 @@ construction, and its 0.0% early is an artifact of the same quantization —
 Toei never states a negative delay. First place with an asterisk that must
 travel with it everywhere.
 
-Zurich's 96.2% — first among the schedule-MEASURED cities (Tokyo's asterisked
+Zurich's 96.3% — first among the schedule-MEASURED cities (Tokyo's asterisked
 number above it is the operator's own claim) — is the real number, and a lesson. Until
 2026-08-27 its whole network was silently reduced to ~3k events because the Swiss
 feed publishes delay-only predictions (no timestamps) and finalization demanded
@@ -80,12 +80,12 @@ delay_plus_schedule finalization method fixed it (docs/08). Swiss punctuality
 lives up to its reputation: fifteen points clear of third, with only 1.1% early
 and 0.2% very late — the tightest measured distribution of any city here.
 
-**Toronto's 37% early is the finding here, not its 50.0% on-time.** Toronto is
+**Toronto's 36% early is the finding here, not its 49.8% on-time.** Toronto is
 not late — it is *ahead of schedule* four times out of ten. For a bus network
 that is a genuine service defect (a bus that leaves a timepoint early strands
 riders who arrived on time), which is exactly why the early band is tracked
 separately instead of being folded into "not late". It is also worth one more
-look before it goes in a scorecard: 37% is high enough to suspect the TTC
+look before it goes in a scorecard: 36% is high enough to suspect the TTC
 static's timepoints as well as TTC's driving — and the timepoint-scoped cut
 agrees: 18% of Toronto's measured bus timepoint departures leave more than 60s
 early, ninety times Helsinki's rate (site: "Who leaves early?").
