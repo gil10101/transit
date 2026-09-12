@@ -99,7 +99,7 @@
   <div class="card-grid two">
     <div class="card">
       <h3>On-time share by local hour</h3>
-      <div class="sub">All closed judged days pooled, scored stop events only</div>
+      <div class="sub">All closed judged days pooled, scored stop events only — an hour with fewer than 200 scored events is left out rather than drawn from a handful</div>
       <div class="chart-wrap">
         <svg id="hourly-chart" class="linechart" role="img" aria-label="Line chart of on-time percentage by local hour for eight cities"></svg>
         <div class="tooltip" id="hourly-tooltip" hidden></div>
@@ -115,7 +115,7 @@
     </div>
     <div class="card">
       <h3>Where the delay mass sits</h3>
-      <div class="sub">Distribution of arrival delay, 30-second bins, share of each city's scored events</div>
+      <div class="sub">Distribution of arrival delay, 30-second bins, share of each city's scored events. Tokyo is the exception to read carefully: Toei states delay rounded to whole minutes, so 90.7% of its 358k scored events land in the zero bin by construction — a coarse ruler, not a thin sample</div>
       <div id="dist-grid" class="dist-grid"></div>
     </div>
     <div class="card">

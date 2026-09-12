@@ -189,6 +189,10 @@ hourly = q("""
     join closed c on c.city_key = e.city_key and c.service_date = e.service_date
     where e.otp_band is not null
     group by 1, 2
+    -- A city-hour drawn from a handful of events is noise with a line through it:
+    -- Tokyo's 01:00 held 10 last-train stragglers and plotted as a 0% collapse beside
+    -- hours of 5k-25k events. Same floor the dashboard's Patterns page uses.
+    having count(*) >= 200
     order by 1, 2
 """)
 dump("hourly.json", {"as_of": AS_OF, "rows": hourly})
