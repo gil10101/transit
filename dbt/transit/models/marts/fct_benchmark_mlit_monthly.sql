@@ -23,6 +23,8 @@ with measured as (
         select distinct route_id, railway_urn from {{ ref('int_odpt_stop_map') }}
     ) m on m.route_id = e.route_id
     where e.city_key = 'tokyo'
+      -- an arrival nobody observed is no measurement to benchmark (feed-gap rule, docs/01)
+      and not coalesce(e.stale_observation_flag, false)
     group by 1, 2
 )
 

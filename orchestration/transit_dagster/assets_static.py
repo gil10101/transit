@@ -258,7 +258,13 @@ static_job = define_asset_job(
 static_schedule = ScheduleDefinition(
     default_status=DefaultScheduleStatus.RUNNING,
     job=static_job,
-    cron_schedule="0 9 * * 0",  # Sun 09:00 UTC — off the 2h chain grid (:05) so the
-    # static parses never queue behind a chain drain on the 8 vCPU app
+    # [rev 2026-09-11] 09:00Z -> 12:30Z Sunday, AFTER the 11:05Z chain. A new static
+    # becomes the delay path's schedule, and a day it does not cover is frozen at its
+    # last computation (int_stop_events_finalized rotation freeze). At 09:00Z Saturday's
+    # late evening (drained after the 23:05Z chain) was not computed yet and would
+    # freeze incomplete; after 11:05Z every city's Saturday is closed and computed on
+    # its own static (SF closes last, 10:00Z).
+    cron_schedule="30 12 * * 0",  # Sun 12:30 UTC — off the :05 drain grid so static
+    # parses never queue behind a drain on the 8 vCPU app
     execution_timezone="UTC",
 )

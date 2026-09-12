@@ -1,3 +1,6 @@
+-- depends_on: {{ ref('int_service_dates') }}
+-- (the rotation freeze refs it inside is_incremental(), where dbt cannot infer it)
+
 -- THE model: prediction snapshots -> one finalized stop event per
 -- (city_key, service_date, trip_uid, stop_sequence). Two finalization methods:
 --   * last_prediction — the last observed prediction before the vehicle plausibly
@@ -61,6 +64,25 @@ with preds as (
            or p.arr_delay_sec is not null or p.dep_delay_sec is not null)
     {% if is_incremental() %}
       and p.service_date >= current_date - cast(ceil({{ var('lookback_hours') }} / 24.0) as int)
+      -- [rev 2026-09-11] Rotation freeze. The delay path resolves schedules against the
+      -- NEWEST static, and an agency whose new calendar starts at its publication date
+      -- leaves the days before it unschedulable: recomputing them inside this window
+      -- erased every delay they had. TTC's 2026-09-06 refresh did exactly that to
+      -- toronto 09-03..05 (3.13M events, 0% scored; docs/08). A day the newest static
+      -- does not cover keeps what it computed while its own static was current —
+      -- unless it was never computed, in which case it is computed now, because
+      -- volume must never be lost to protect a delay.
+      and (
+          exists (
+              select 1 from {{ ref('int_service_dates') }} sd
+              where sd.city_key = p.city_key and sd.service_date = p.service_date
+          )
+          or not exists (
+              select 1 from {{ this }} t
+              where t.city_key = p.city_key and t.service_date = p.service_date
+                and t.service_date >= current_date - cast(ceil({{ var('lookback_hours') }} / 24.0) as int)
+          )
+      )
     {% endif %}
 ),
 

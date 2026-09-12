@@ -109,6 +109,17 @@ paired as (
      and s.stop_id = o.stop_id
      and s.sched_arr_ts_utc <= o.actual_arr_ts_utc
     where o.prev_arr_ts_utc is not null
+      -- [rev 2026-09-11] A gap that overlaps a stretch the city's feed was dark
+      -- (int_feed_gaps) measures nothing: either an endpoint is a frozen pre-outage
+      -- prediction scored as an arrival, or the two real arrivals straddle hours
+      -- nobody saw. Dropping the gap — not the arrival — keeps the lag sequence honest
+      -- on both sides of the outage instead of manufacturing one six-hour headway.
+      and not exists (
+          select 1 from {{ ref('int_feed_gaps') }} g
+          where g.city_key = o.city_key
+            and o.prev_arr_ts_utc < g.gap_end_utc
+            and o.actual_arr_ts_utc > g.gap_start_utc
+      )
     qualify row_number() over (
         partition by o.city_key, o.service_date, o.trip_uid, o.stop_sequence
         order by s.sched_arr_ts_utc desc
