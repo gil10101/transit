@@ -17,6 +17,15 @@
 -- Pointing them here would hand them a trip_id that is a TrainTimetable URN and
 -- a gtfs_version_id that describes stops rather than trips.
 
+-- var('pit_cities') routes named cities through the point-in-time schedule
+-- instead of the newest-pinned one, so history deleted by a static rotation can
+-- be recomputed against the static that was actually live. The two sources are
+-- disjoint by city, never unioned for the same (city, date): two identical
+-- scheduled arrivals would make a zero-second gap and null every ratio built on
+-- it. Empty by default, which leaves the steady-state chain untouched.
+{% set pit_cities = var('pit_cities', '') %}
+{% set pit_list = pit_cities.split(',') | map('trim') | reject('equalto', '') | list %}
+
 select
     city_key,
     service_date,
@@ -30,6 +39,27 @@ select
     sched_arr_ts_utc,
     sched_dep_ts_utc
 from {{ ref('int_gtfs_scheduled_stop_times') }}
+{% if pit_list %}
+where city_key not in ({{ "'" ~ pit_list | join("','") ~ "'" }})
+{% endif %}
+
+{% if pit_list %}
+union all
+
+select
+    city_key,
+    service_date,
+    trip_id,
+    route_id,
+    direction_id,
+    stop_id,
+    stop_sequence,
+    timepoint,
+    gtfs_version_id,
+    sched_arr_ts_utc,
+    sched_dep_ts_utc
+from {{ ref('int_gtfs_scheduled_stop_times_pit') }}
+{% endif %}
 
 union all
 
