@@ -127,7 +127,11 @@ standings = q("""
             / nullif(sum(case when r.bunching_pct is not null then r.rated_gaps end), 0), 1)
             as bunching_pct,
         round(100 * cast(sum(e.trips_cancelled) as double)
-            / nullif(sum(e.trips_scheduled), 0), 2) as cancel_pct
+            / nullif(sum(e.trips_scheduled), 0), 2) as cancel_pct,
+        -- A feed that never emits CANCELED and a feed that emits it and cancelled
+        -- nothing are different facts, and 0% renders them identically. The
+        -- standings row shows a dash for the first (docs/06 Q6).
+        (sum(e.trips_cancelled) > 0) as emits_cancels
     from eligible e
     left join fct_route_reliability_daily r
       on r.city_key = e.city_key and r.route_id = e.route_id

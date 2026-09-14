@@ -269,10 +269,18 @@ inflates the cancel rate.
 | Washington DC | 625 | 2,551 | 113 |
 | Washington DC | 96 | 461 | 63 |
 
-A zero cancel rate for Toronto and NYC means *their feeds never emit
-CANCELED*, not that nothing was cancelled. Cancellation rate is a measure of
-feed behaviour as much as of service, and must not be scored across cities
-without that caveat. NYC's alert profile is the opposite extreme: 1,441 alerts
+A zero cancel rate for NYC and Tokyo means *their feeds never emit CANCELED*,
+not that nothing was cancelled: all 13.4M NYC rows are SCHEDULED, and
+`odpt:Train` has no cancellation field at all. **[rev 2026-09-12] Toronto was
+listed here as a third never-emitting feed and that was wrong.** TTC does emit
+CANCELED — 11 raw rows resolving to 4 cancelled trips, on 2 days out of 19, or
+0.00061% of 661,306 scheduled trips. It rounds to 0.00% at two decimals, which
+is why it read as a never-emitter; the site now renders any nonzero count below
+a hundredth of a percent as `<0.01%` rather than as a bare zero. Three states
+therefore exist in this column and must not be collapsed: feeds that cannot say
+it, feeds that can and essentially never do, and feeds that say it and mean it.
+Cancellation rate is a measure of feed behaviour as much as of service, and must
+not be scored across cities without that caveat. NYC's alert profile is the opposite extreme: 1,441 alerts
 across only 10 routes — the MTA raises long-lived, line-level alerts, while
 MBTA and 511 raise many short route-level ones.
 

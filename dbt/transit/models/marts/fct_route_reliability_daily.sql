@@ -103,8 +103,15 @@ ewt_slices as (
      and f.route_id = h.route_id
      and f.direction_id = h.direction_id
      and f.daypart = h.daypart
+    join {{ ref('dim_city') }} c
+      on c.city_key = h.city_key
     where f.is_frequent
       and h.actual_gap_sec > 0
+      -- EWT is AWT - SWT over the same gaps bunching uses, so it inherits the
+      -- same precondition: where observed arrivals are reconstructed from the
+      -- timetable, AWT collapses onto SWT and EWT trends to zero by
+      -- construction rather than by good service (docs/06 Q5).
+      and coalesce(c.gap_regularity_measurable, true)
     group by h.city_key, h.service_date, h.route_id, h.direction_id, h.stop_id, h.daypart
 
 ),

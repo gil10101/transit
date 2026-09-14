@@ -97,6 +97,7 @@ seeds:
         crowding_usable: boolean
         metrics_from: date
         schedule_matchable: boolean
+        gap_regularity_measurable: boolean
 
 models:
   transit:

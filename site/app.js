@@ -108,6 +108,17 @@ async function renderTiles() {
 }
 
 // ---------- standings ----------
+// Cancellations carry three states and one number cannot show them: a feed with
+// no CANCELED vocabulary (New York, Tokyo) reads a dash, a feed that says it and
+// almost never means it reads "<0.01%" rather than a bare 0.00% beside a real
+// count (Toronto: 4 trips in 661,306), and everyone else reads the rate.
+function cancelCell(r) {
+  if (r.cancel_pct == null) return "—";
+  if (r.emits_cancels === false) return `<span title="feed never emits CANCELED">—</span>`;
+  const v = Number(r.cancel_pct);
+  return v > 0 && v < 0.01 ? "&lt;0.01%" : v + "%";
+}
+
 function sparkline(points, color) {
   // a judged day with no scoreable delay is absent, not zero — plotting it at 0
   // drew Toronto's timetable-refresh days (09-03..05) as a service collapse
@@ -148,7 +159,7 @@ async function renderStandings() {
       <span class="num mono otp">${r.otp_pct == null ? "—" : Number(r.otp_pct).toFixed(1) + "%"}</span>
       <span class="num mono">${r.ewt_sec == null ? "—" : r.ewt_sec + "s"}</span>
       <span class="num mono optional">${r.bunching_pct == null ? "—" : r.bunching_pct + "%"}</span>
-      <span class="num mono optional">${r.cancel_pct == null ? "—" : r.cancel_pct + "%"}</span>
+      <span class="num mono optional">${cancelCell(r)}</span>
       <span class="num mono">${r.judged_days} / 20</span>
     </div>`;
   }).join("");
@@ -396,13 +407,25 @@ async function renderAnswers() {
       `<p class="footnote">Only cities whose static schedules mark timepoints can be measured. Hover for evidence counts.</p>`
     : `<p class="footnote">No timepoint-bearing statics in gold yet.</p>`;
 
+  // Toronto cancels 4 trips in 661,306. Rounded to two places that prints
+  // "0.00%" beside a count of 4, which reads as a contradiction rather than as
+  // the real finding: this feed CAN say CANCELED and almost never does. Any
+  // nonzero count under a hundredth of a percent shows as "<0.01%" instead.
+  const cxPct = (r) => {
+    const v = Number(r.cancel_pct);
+    return Number(r.cancelled) > 0 && v < 0.005 ? "&lt;0.01%" : v.toFixed(2) + "%";
+  };
   const cxRows = a.cancellations.map((r) =>
     `<tr><td>${cityCell(r.city_key)}</td>
-     <td class="num mono">${r.emits_cancels ? Number(r.cancel_pct).toFixed(2) + "%" : "—"}</td>
+     <td class="num mono">${r.emits_cancels ? cxPct(r) : "—"}</td>
      <td class="num mono">${r.emits_cancels ? fmt(r.cancelled) : "never emits"}</td></tr>`).join("");
   $("answers-cancel").innerHTML =
     `<table class="data-table"><tr><th>city</th><th class="num">cancelled</th><th class="num">trips</th></tr>${cxRows}</table>` +
-    `<p class="footnote">A dash is a feed property, not perfect service — those feeds have no CANCELED vocabulary.</p>`;
+    `<p class="footnote">Three different things sit in this column. A dash means the feed has no
+     CANCELED vocabulary at all — New York's 13.4M rows are every one SCHEDULED, and
+     <span class="mono">odpt:Train</span> has no cancellation field — so it is a feed property, not
+     perfect service. A percentage means the feed says it and means it. Toronto is the third case:
+     it can say it, and has, <b>4 times in 19 judged days</b>.</p>`;
 }
 
 // ---------- best / worst routes ----------

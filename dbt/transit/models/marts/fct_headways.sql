@@ -97,6 +97,17 @@ paired as (
     -- headways and wait-time regularity.
     select
         o.*,
+        -- Gap-derived regularity (bunching, big gaps, and the EWT built on the
+        -- same gaps) is only a measurement where the observed arrival is
+        -- independent of the timetable it is compared against. Tokyo's is not:
+        -- Toei publishes a stated delay rather than an arrival time, so an
+        -- arrival is reconstructed as schedule + stated delay, and because 91%
+        -- of those delays are exactly zero, 90.4% of its consecutive-train gaps
+        -- equal the scheduled gap exactly (0.2-4.1% in every other city,
+        -- measured 2026-09-12). A bunching rate computed on that is the
+        -- timetable reflected back, not service. dim_city declares it, the same
+        -- way schedule_matchable declares an id mismatch.
+        coalesce(c.gap_regularity_measurable, true) as gap_regularity_measurable,
         case when coalesce(c.schedule_matchable, true) then s.sched_gap_sec end
             as sched_headway_sec
     from obs o
@@ -156,7 +167,14 @@ select
     prev_arr_ts_utc,
     cast(actual_gap_sec as integer) as actual_gap_sec,
     cast(sched_headway_sec as integer) as sched_headway_sec,
-    cast(actual_gap_sec as double) / nullif(sched_headway_sec, 0) as gap_ratio,
-    (cast(actual_gap_sec as double) / nullif(sched_headway_sec, 0)) < 0.5 as bunched_flag,
-    (cast(actual_gap_sec as double) / nullif(sched_headway_sec, 0)) > 2.0 as big_gap_flag
+    -- NULL, not zero, where the comparison measures nothing (see the
+    -- gap_regularity_measurable note above). fct_route_reliability_daily counts
+    -- rated gaps as count(gap_ratio), so bunching_pct and big_gap_pct null out
+    -- with these rather than reporting a flattering 0%.
+    case when gap_regularity_measurable
+         then cast(actual_gap_sec as double) / nullif(sched_headway_sec, 0) end as gap_ratio,
+    case when gap_regularity_measurable
+         then (cast(actual_gap_sec as double) / nullif(sched_headway_sec, 0)) < 0.5 end as bunched_flag,
+    case when gap_regularity_measurable
+         then (cast(actual_gap_sec as double) / nullif(sched_headway_sec, 0)) > 2.0 end as big_gap_flag
 from final

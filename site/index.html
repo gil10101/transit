@@ -282,25 +282,27 @@
   <div class="section-head">
     <div class="eyebrow">FEEDS · WHAT EACH CITY SENDS</div>
     <h2>Thirty endpoints, eight shapes</h2>
-    <p class="section-note">No two agencies publish the same thing. Volumes below are the live
-    7-day raw window; a feed's size says more about how it is published than about how much
-    service the city runs — Zurich ships a whole national network on every poll, and Tokyo ships
-    one JSON array of trains.</p>
+    <p class="section-note">No two agencies publish the same thing. Volumes are the live 7-day raw
+    window, and a feed's size says more about how it is published than about how much service the
+    city runs — Zurich ships a whole national network on every poll, Tokyo ships one JSON array of
+    trains. The vehicle column is the most vehicles seen moving in any single hour, by mode: two
+    cities publish no positions at all, and where vehicles run on routes missing from the static
+    schedule they are listed separately rather than folded in.</p>
   </div>
   <div class="chart-wrap">
   <table class="data-table">
     <thead>
-      <tr><th>City</th><th class="num">Feeds</th><th class="num">Cadence</th><th class="num">Raw / 7d</th><th>What it gives</th><th>What it withholds</th></tr>
+      <tr><th>City</th><th class="num">Feeds</th><th class="num">Cadence</th><th class="num">Raw / 7d</th><th class="num">Stops</th><th>Vehicles seen in a peak hour</th><th>What it gives</th></tr>
     </thead>
     <tbody>
-      <tr><td><b>New York</b><div class="sub">MTA</div></td><td class="num">8</td><td class="num">30s</td><td class="num">10.5 GB<div class="sub">182,280 obj</div></td><td>Eight subway feeds, trip updates + positions + alerts, no key required</td><td>No <span class="mono">arrival.delay</span> outside the L feed; no coordinates on subway positions</td></tr>
-      <tr><td><b>Boston</b><div class="sub">MBTA</div></td><td class="num">3</td><td class="num">30s</td><td class="num">24.4 GB<div class="sub">68,360 obj</div></td><td>Subway, bus, commuter rail, occupancy, and real cancellations — 9,118 of them</td><td>Ferry runs but never appears in realtime</td></tr>
-      <tr><td><b>Toronto</b><div class="sub">TTC</div></td><td class="num">3</td><td class="num">30s</td><td class="num">13.1 GB<div class="sub">65,943 obj</div></td><td>Every surface vehicle, 100% of scheduled routes observed</td><td>The subway publishes alerts only — never a position or a prediction</td></tr>
-      <tr><td><b>Helsinki</b><div class="sub">HSL</div></td><td class="num">2</td><td class="num">30s</td><td class="num">16.1 GB<div class="sub">45,567 obj</div></td><td>Tram, metro, rail and bus predictions, keyless</td><td>No VehiclePositions feed at all; <span class="mono">trip_id</span> ships empty on every row</td></tr>
-      <tr><td><b>Washington DC</b><div class="sub">WMATA</div></td><td class="num">6</td><td class="num">30s</td><td class="num">15.2 GB<div class="sub">136,724 obj</div></td><td>Rail and bus as separate feed families, every scheduled route observed</td><td>Two static schedules that must load as one version</td></tr>
-      <tr><td><b>SF Bay</b><div class="sub">511.org</div></td><td class="num">3</td><td class="num">200s</td><td class="num">5.7 GB<div class="sub">10,239 obj</div></td><td>~30 operators behind one regional feed, including ferries and cable cars</td><td>Six small operators publish schedule and no realtime; 60 requests/hour cap</td></tr>
-      <tr><td><b>Zurich</b><div class="sub">Swiss OTD</div></td><td class="num">2</td><td class="num">60s / 600s</td><td class="num">77.5 GB<div class="sub">12,524 obj</div></td><td>A national feed filtered to a 615-route allow-list — 5.8 MB per poll</td><td>Delays only, no arrival timestamps; boats, funiculars and aerial lifts have no realtime product</td></tr>
-      <tr><td><b>Tokyo</b><div class="sub">ODPT</div></td><td class="num">3</td><td class="num">30s / 60s</td><td class="num">1.9 GB<div class="sub">56,934 obj</div></td><td>Operator-stated delays for four Toei subway lines, 52 KB per poll</td><td>Tokyo Metro publishes no train data; buses send positions only; no cancellation field exists</td></tr>
+      <tr><td><b>New York</b><div class="sub">MTA</div></td><td class="num">8</td><td class="num">30s</td><td class="num">10.5 GB<div class="sub">182,280 obj</div></td><td class="num">1,488</td><td><b>1,024</b> metro · 13 rail<div class="sub">counted by active trip — the subway feed carries no vehicle ids</div></td><td>Eight subway feeds, trip updates + positions + alerts, no key required</td></tr>
+      <tr><td><b>Boston</b><div class="sub">MBTA</div></td><td class="num">3</td><td class="num">30s</td><td class="num">24.4 GB<div class="sub">68,360 obj</div></td><td class="num">10,309</td><td><b>726</b> bus · 87 tram · 60 rail · 53 metro<div class="sub">ids reliable across all four modes</div></td><td>Subway, bus, commuter rail, occupancy, and real cancellations — 9,118 of them</td></tr>
+      <tr><td><b>Toronto</b><div class="sub">TTC</div></td><td class="num">3</td><td class="num">30s</td><td class="num">13.1 GB<div class="sub">65,943 obj</div></td><td class="num">9,135</td><td><b>1,479</b> bus · 207 tram · 2 ferry<div class="sub">+1,458 on routes absent from the static</div></td><td>Every surface vehicle, 100% of scheduled routes observed</td></tr>
+      <tr><td><b>Helsinki</b><div class="sub">HSL</div></td><td class="num">2</td><td class="num">30s</td><td class="num">16.1 GB<div class="sub">45,567 obj</div></td><td class="num">8,344</td><td><b>none</b><div class="sub">HSL publishes no VehiclePositions feed at all</div></td><td>Tram, metro, rail and bus predictions, keyless — but trip_id ships empty on every row</td></tr>
+      <tr><td><b>Washington DC</b><div class="sub">WMATA</div></td><td class="num">6</td><td class="num">30s</td><td class="num">15.2 GB<div class="sub">136,724 obj</div></td><td class="num">9,708</td><td><b>1,032</b> bus · 127 metro<div class="sub">+645 on routes absent from the static</div></td><td>Rail and bus as separate feed families, every scheduled route observed</td></tr>
+      <tr><td><b>SF Bay</b><div class="sub">511.org</div></td><td class="num">3</td><td class="num">200s</td><td class="num">5.7 GB<div class="sub">10,239 obj</div></td><td class="num">21,420</td><td><b>1,667</b> bus · 145 tram · 44 rail · 27 cable car · 13 ferry<div class="sub">+1,014 on routes absent from the static</div></td><td>~30 operators behind one regional feed; six of them publish schedule and no realtime</td></tr>
+      <tr><td><b>Zurich</b><div class="sub">Swiss OTD</div></td><td class="num">2</td><td class="num">60s / 600s</td><td class="num">77.5 GB<div class="sub">12,524 obj</div></td><td class="num">14,188</td><td><b>none</b><div class="sub">the Swiss feed carries delays, not positions</div></td><td>A national feed filtered to a 615-route allow-list — 5.8 MB per poll, delays only</td></tr>
+      <tr><td><b>Tokyo</b><div class="sub">ODPT</div></td><td class="num">3</td><td class="num">30s / 60s</td><td class="num">1.9 GB<div class="sub">56,934 obj</div></td><td class="num">5,514</td><td><b>1,051</b> bus<div class="sub">ToeiBus only — rail trains carry a train number, never a vehicle id</div></td><td>Operator-stated delays for four Toei subway lines, 52 KB per poll</td></tr>
     </tbody>
   </table>
   </div>
