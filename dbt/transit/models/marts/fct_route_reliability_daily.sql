@@ -42,7 +42,11 @@ with events as (
         coalesce(route_id, '__unrouted__') as route_id
     from {{ ref('fct_stop_events') }}
     {% if is_incremental() %}
+    {% if var('repair_city', none) %}
+    where city_key = '{{ var('repair_city') }}'
+    {% else %}
     where service_date >= current_date - cast(ceil({{ var('lookback_hours') }} / 24.0) as int)
+    {% endif %}
     {% endif %}
 
 ),

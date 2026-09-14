@@ -228,14 +228,20 @@ schedule promises.
 > was unknown so EWT never ran. Fixed via `int_odpt_scheduled_stop_times` →
 > `int_scheduled_stop_times`; scheduled-headway coverage went 0.00% → 100.00% with **no
 > other city moving a decimal place** on bunching, EWT or OTP, and NYC's composite
-> unchanged at 85.8. Tokyo now reads 0.7% bunched and a 2s median EWT — **the best in the
-> fleet, and close to tautological**: Toei publishes a stated delay rather than an arrival
-> time, so an arrival is reconstructed as schedule + stated delay, and because 91% of those
-> delays are exactly zero, **90.4% of Tokyo's consecutive-train gaps equal the scheduled gap
-> exactly**, against 0.2–4.1% in every other city. Its wait regularity is largely the
-> timetable reflected back. These tables are regenerated from
-> `analysis/business_questions.sql`, so the Tokyo rows land at the next scripted re-run
-> rather than being hand-typed here.
+> unchanged at 85.8.
+>
+> **Tokyo's bunching and EWT are then deliberately NULL, and stay absent from these
+> tables.** Computed naively it read 0.7% bunched and a 2s median EWT — best in the fleet —
+> but Toei publishes a stated delay rather than an arrival time, so an arrival is
+> reconstructed as schedule + stated delay, and because 91% of those delays are exactly
+> zero, **90.4% of Tokyo's consecutive-train gaps equal the scheduled gap exactly**, against
+> 0.2–4.1% in every other city. Gap regularity is only a measurement where the observed side
+> is independent of the scheduled side, so `dim_city.gap_regularity_measurable` declares the
+> city, `fct_headways` nulls `gap_ratio`/`bunched_flag`/`big_gap_flag`, and EWT is gated on
+> the same flag — the mechanism `schedule_matchable` already uses for an id mismatch, and
+> the same rule that keeps ADDED trips out of OTP. `assert_gap_regularity_gate_holds` keeps
+> it nulled. What Tokyo keeps: scheduled headway and `is_frequent`, which are real facts
+> from its published timetable.
 
 Toronto's median EWT collapsed from the provisional 372s to 56s once the
 grain-and-evidence rewrite weighted route-days properly and more days closed —

@@ -39,7 +39,19 @@ with events as (
       and coalesce(schedule_relationship, 'SCHEDULED') in ('SCHEDULED', 'ADDED')
       and not coalesce(skipped_flag, false)
     {% if is_incremental() %}
+      -- [rev 2026-09-14] repair mode. The scheduled side of this model is pinned
+      -- to the NEWEST static on purpose (int_gtfs_version_for_date explains why:
+      -- it only ever serves the 72h window, where the newest static always covers
+      -- the date). That makes --full-refresh actively destructive here: it
+      -- recomputes history against a static that no longer reaches back, and the
+      -- cities with a short calendar lookback (boston, helsinki, toronto) lose
+      -- their older bunching and EWT. Repair one city by selecting it, never by
+      -- full-refreshing everything: delete+insert replaces only that city's keys.
+      {% if var('repair_city', none) %}
+      and city_key = '{{ var('repair_city') }}'
+      {% else %}
       and service_date >= current_date - cast(ceil({{ var('lookback_hours') }} / 24.0) as int)
+      {% endif %}
     {% endif %}
 
 ),
@@ -82,7 +94,11 @@ sched_gaps as (
     from {{ ref('int_scheduled_stop_times') }}
     where sched_arr_ts_utc is not null
     {% if is_incremental() %}
+      {% if var('repair_city', none) %}
+      and city_key = '{{ var('repair_city') }}'
+      {% else %}
       and service_date >= current_date - cast(ceil({{ var('lookback_hours') }} / 24.0) as int)
+      {% endif %}
     {% endif %}
 
 ),

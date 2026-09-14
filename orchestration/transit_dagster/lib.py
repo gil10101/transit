@@ -8,6 +8,7 @@ dagster wiring lives in resources.py / assets_*.py / checks.py.
 
 from __future__ import annotations
 
+import os
 import uuid
 import warnings
 from collections.abc import Mapping, Sequence
@@ -96,8 +97,27 @@ def city_static_sources(city: str, config_dir: Path | None = None):
     return static_sources(cfg.get("static_gtfs"))
 
 
+def retired_cities(env: Mapping[str, str] | None = None) -> frozenset[str]:
+    """Cities whose poller has been deliberately stopped, from TP_POLLING_RETIRED
+    (comma-separated city keys).
+
+    A city is retired once it has banked the judged days its score needs: the
+    scorecard reads stored history with no recency filter, so a stopped city
+    keeps its score forever while its feed stops costing raw S3, Kafka, EMR drain
+    time and warehouse build time. The freshness tripwire must be told, or it
+    reports every retired endpoint as a killed feed 4x an hour — the alert storm
+    this pipeline was explicitly fixed to stop emitting. Env-driven rather than
+    baked into the image so retiring the next city is a compose edit, not a
+    rebuild.
+    """
+    raw = (os.environ if env is None else env).get("TP_POLLING_RETIRED", "")
+    return frozenset(c.strip() for c in raw.split(",") if c.strip())
+
+
 def city_feed_endpoints(
-    config_dir: Path | None = None, live: Sequence[str] = POLLED_CITIES
+    config_dir: Path | None = None,
+    live: Sequence[str] = POLLED_CITIES,
+    retired: frozenset[str] | None = None,
 ) -> dict[str, tuple[str, ...]]:
     """Feed endpoint names per live city, read from the feed_groups keys in
     ingestion/config/cities/*.yaml (the keys are the <endpoint> segment of the
@@ -108,16 +128,20 @@ def city_feed_endpoints(
     POLLED_CITIES is skipped (its poller is not deployed). Raises when no
     live-city config is found — the tripwire must fail loudly, never probe
     nothing and pass. Called at materialize time only, so definitions still
-    import without the configs present.
+    import without the configs present. Cities named in TP_POLLING_RETIRED are
+    dropped: their pollers were stopped on purpose once their judged days were
+    banked, so a stale prefix there is the intended state rather than a killed
+    feed.
     """
     import yaml  # lazy: repo venv + dagster image have it; never ships to EMR
 
     config_dir = cities_config_dir(config_dir)
+    skip = retired_cities() if retired is None else retired
     out: dict[str, tuple[str, ...]] = {}
     for path in sorted(Path(config_dir).glob("*.yaml")):
         cfg = yaml.safe_load(path.read_text()) or {}
         city = cfg.get("city", path.stem)
-        if city not in live:
+        if city not in live or city in skip:
             continue
         endpoints = tuple(cfg.get("feed_groups") or ())
         if endpoints:

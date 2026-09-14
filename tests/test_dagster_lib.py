@@ -14,11 +14,13 @@ import pytest
 from orchestration.transit_dagster.lib import (
     NYC_FEED_ENDPOINTS,
     REAP_AFTER_SECONDS,
+    city_feed_endpoints,
     drain_job_request,
     evaluate_feed_freshness,
     hour_prefixes,
     iceberg_refresh_statements,
     latest_metadata_path,
+    retired_cities,
     silver_tables,
     static_job_request,
     weather_rows,
@@ -229,6 +231,40 @@ def test_all_eight_nyc_endpoints_probed():
     evaluate_feed_freshness(SpyS3(), "raw", now=NOW)
     probed = {p.split("/")[1] for p in seen}
     assert probed == set(NYC_FEED_ENDPOINTS) and len(NYC_FEED_ENDPOINTS) == 8
+
+
+# --- retired pollers --------------------------------------------------------
+
+
+def test_retired_cities_parses_and_tolerates_whitespace():
+    assert retired_cities({}) == frozenset()
+    assert retired_cities({"TP_POLLING_RETIRED": ""}) == frozenset()
+    assert retired_cities({"TP_POLLING_RETIRED": "nyc, boston ,dc"}) == frozenset(
+        {"nyc", "boston", "dc"}
+    )
+
+
+def test_retired_cities_drop_out_of_the_freshness_tripwire():
+    """A city whose poller was stopped on purpose must not be probed: its raw
+    prefix goes stale by design, and the tripwire fires four times an hour."""
+    everything = city_feed_endpoints(retired=frozenset())
+    assert {"nyc", "zurich", "tokyo"} <= set(everything)
+
+    kept = city_feed_endpoints(
+        retired=frozenset({"nyc", "boston", "toronto", "helsinki", "dc", "sf"})
+    )
+    assert set(kept) == {"zurich", "tokyo"}
+    # the cities still polling keep every one of their endpoints
+    assert kept["tokyo"] == everything["tokyo"]
+    assert kept["zurich"] == everything["zurich"]
+
+
+def test_retiring_every_city_still_fails_loudly():
+    """The tripwire must never probe nothing and pass."""
+    with pytest.raises(RuntimeError, match="no live-city configs"):
+        city_feed_endpoints(retired=frozenset(NYC_FEED_ENDPOINTS) | frozenset(
+            {"nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich", "tokyo"}
+        ))
 
 
 # --- iceberg refresh --------------------------------------------------------

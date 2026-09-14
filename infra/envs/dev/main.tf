@@ -51,15 +51,20 @@ module "services" {
   raw_bucket       = module.lake.raw_bucket
   lakehouse_bucket = module.lake.lakehouse_bucket
   kafka_private_ip = module.kafka.private_ip
+  # Cities retired from polling once they banked 20 judged days (2026-09-14):
+  # their scores are already computed off stored history, so the feeds only cost
+  # money from here. Zurich (19 days) and Tokyo (10) keep running until they
+  # reach the bar. Empty string = nothing retired.
+  polling_retired = var.polling_retired
   # P5: Dagster submits the same EMR jobs as the drain Lambda — single-source
   # the job-submit strings from the spark module.
-  emr_application_id     = module.spark.application_id
-  emr_execution_role_arn = module.spark.execution_role_arn
-  emr_entry_point        = module.spark.entry_point
-  emr_static_entry_point = module.spark.static_entry_point
+  emr_application_id          = module.spark.application_id
+  emr_execution_role_arn      = module.spark.execution_role_arn
+  emr_entry_point             = module.spark.entry_point
+  emr_static_entry_point      = module.spark.static_entry_point
   emr_odpt_static_entry_point = module.spark.odpt_static_entry_point
-  emr_spark_params       = module.spark.spark_params
-  emr_log_uri            = module.spark.log_uri
+  emr_spark_params            = module.spark.spark_params
+  emr_log_uri                 = module.spark.log_uri
   # pipeline health alerting: Dagster's run-failure sensor publishes here
   pipeline_alerts_topic_arn = module.monitoring.pipeline_alerts_topic_arn
   # P3 batch 2: poller API keys -> SSM SecureStrings via write-only args

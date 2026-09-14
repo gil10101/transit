@@ -75,25 +75,28 @@
     <div class="eyebrow">STANDINGS · CLOSED JUDGED DAYS ONLY</div>
     <h2>Reliability, city by city</h2>
     <p class="section-note">Service-weighted across every closed judged day; routes below a 50%
-    completeness floor are excluded rather than guessed. A composite 0&ndash;100 score requires
-    20 judged days across a city's judged window; <strong>New York is the first to clear it, scoring
-    85.8</strong> on 2026-08-23&ndash;09-11. The rest still show provisional evidence rather than a
-    verdict — the bar refuses a score rather than dressing up a thin one.</p>
+    completeness floor are excluded rather than guessed. A composite 0&ndash;100 score requires 20
+    judged days across a city's judged window, and <strong>six of the eight have now cleared
+    it</strong> — New York got there first, but <strong>Helsinki leads at 92.3</strong>, ahead of
+    New York 85.8, Boston 81.1, Washington DC 79.6, Toronto 70.3 and SF Bay 61.3. Zurich sits one
+    judged day short. Tokyo has 10 and cannot reach 20 before this dataset closes, so it will show
+    evidence and never a score — the bar refuses a thin number rather than dressing one up.</p>
   </div>
   <div class="card">
     <div class="standings" id="standings-rows"></div>
     <p class="footnote">On-time = arrival within &minus;1 to +5 min of schedule. Excess wait =
     time beyond the scheduled headway on frequent service. Added (unscheduled) trips count
     toward volume, never toward on-time.</p>
-    <p class="footnote"><b>Tokyo's wait and bunching figures are not measured the way the other
-    seven are, and should not be read as a win.</b> Toei publishes a stated delay instead of an
-    arrival time, so an arrival is reconstructed as schedule&nbsp;+&nbsp;stated delay — and because
-    91% of those stated delays are exactly zero, <b>90.4% of Tokyo's gaps between consecutive trains
-    are identical to the scheduled gap</b>, against 0.2&ndash;4.1% everywhere else. Its excess wait
-    and bunching are therefore close to the timetable reflected back rather than observed
-    irregularity. The same caveat already applies to its on-time share. Cancellations stay blank
-    for a different reason: <span class="mono">odpt:Train</span> has no cancellation field at
-    all.</p>
+    <p class="footnote"><b>Tokyo shows a dash for excess wait and bunching on purpose.</b> Both
+    compare observed arrivals against the timetable, which only measures something when the two are
+    independent. Toei publishes a stated delay instead of an arrival time, so an arrival is
+    reconstructed as schedule&nbsp;+&nbsp;stated delay — and because 91% of those stated delays are
+    exactly zero, <b>90.4% of Tokyo's gaps between consecutive trains are identical to the scheduled
+    gap</b>, against 0.2&ndash;4.1% everywhere else. Computed anyway it would read 0.7% bunching and
+    a 2s wait, best in the fleet, on what is very nearly its own timetable handed back — so it is
+    nulled at the fact layer instead, the same way every metric without evidence is. Cancellations
+    are blank for an unrelated reason: <span class="mono">odpt:Train</span> has no cancellation
+    field at all.</p>
   </div>
 </section>
 

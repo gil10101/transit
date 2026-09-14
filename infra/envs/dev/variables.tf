@@ -64,3 +64,13 @@ variable "swiss_otd_sa_token" {
   default   = ""
   sensitive = true
 }
+
+# Cities whose poller is intentionally stopped. A city is retired once it has the
+# 20 closed judged days the scorecard requires: fct_city_scorecard reads stored
+# history with no recency filter, so the score survives the feed being switched
+# off, and the raw-feed freshness tripwire skips these prefixes instead of
+# reporting them as killed feeds four times an hour.
+variable "polling_retired" {
+  type    = string
+  default = ""
+}

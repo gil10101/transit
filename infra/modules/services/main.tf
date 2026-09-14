@@ -7,6 +7,12 @@ variable "subnet_id" { type = string }
 variable "sg_id" { type = string }
 variable "bucket_arns" { type = map(string) }
 variable "raw_bucket" { type = string }
+variable "polling_retired" {
+  type        = string
+  default     = ""
+  description = "Comma-separated city keys whose poller is intentionally stopped; the raw-feed freshness tripwire skips them."
+}
+
 variable "lakehouse_bucket" { type = string }
 variable "kafka_private_ip" { type = string }
 variable "instance_type" {
@@ -314,6 +320,13 @@ locals {
           AWS_DEFAULT_REGION: ${var.region}
           RAW_BUCKET: ${var.raw_bucket}
           LAKE_BUCKET: ${var.lakehouse_bucket}
+          # Cities whose poller was stopped on purpose once they banked the 20
+          # judged days a score needs. The scorecard reads stored history with no
+          # recency filter, so a retired city keeps its score while its feed stops
+          # costing raw S3, Kafka, EMR drain and warehouse build time. The
+          # freshness tripwire reads this and skips them; without it every retired
+          # endpoint reports as a killed feed four times an hour.
+          TP_POLLING_RETIRED: ${var.polling_retired}
           KAFKA_BOOTSTRAP: ${var.kafka_private_ip}:9092
           APP_ID: ${var.emr_application_id}
           EXEC_ROLE_ARN: ${var.emr_execution_role_arn}
