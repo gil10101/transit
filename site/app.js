@@ -149,17 +149,31 @@ async function renderStandings() {
   const byCity = {};
   for (const r of daily.rows) (byCity[r.city_key] ??= []).push(r);
   const head = `<div class="standing-row head"><span></span><span>city</span>` +
-    `<span class="optional">daily on-time</span><span class="num">on-time</span>` +
+    `<span class="optional">daily on-time</span><span class="num">score</span>` +
+    `<span class="num">on-time</span>` +
     `<span class="num">excess wait</span><span class="num optional">bunching</span>` +
     `<span class="num optional">cancelled</span><span class="num">judged</span></div>`;
-  const rows = s.standings.map((r, i) => {
+  // Rank by the composite, which is what the section claims to rank by. Cities
+  // still short of 20 judged days have no score and sort to the bottom on
+  // on-time rather than being hidden -- they are evidence, not a verdict.
+  const ranked = [...s.standings].sort((a, b) => {
+    const as = a.score_0_100, bs = b.score_0_100;
+    if (as != null && bs != null) return bs - as;
+    if (as != null) return -1;
+    if (bs != null) return 1;
+    return (b.otp_pct ?? 0) - (a.otp_pct ?? 0);
+  });
+  const rows = ranked.map((r, i) => {
     const color = cityColor(r.city_key);
     const name = CITIES[r.city_key]?.name ?? r.city_key;
     return `<div class="standing-row">
       <span class="rank mono">${i + 1}</span>
       <span class="city"><span class="dot" style="background:${color}"></span>${name}</span>
       <span class="optional">${sparkline(byCity[r.city_key] ?? [], color)}</span>
-      <span class="num mono otp">${r.otp_pct == null ? "—" : Number(r.otp_pct).toFixed(1) + "%"}</span>
+      <span class="num mono otp">${r.score_0_100 == null
+        ? `<span class="unscored" title="needs 20 judged days">—</span>`
+        : Number(r.score_0_100).toFixed(1)}</span>
+      <span class="num mono">${r.otp_pct == null ? "—" : Number(r.otp_pct).toFixed(1) + "%"}</span>
       <span class="num mono">${r.ewt_sec == null ? "—" : r.ewt_sec + "s"}</span>
       <span class="num mono optional">${r.bunching_pct == null ? "—" : r.bunching_pct + "%"}</span>
       <span class="num mono optional">${cancelCell(r)}</span>

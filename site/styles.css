@@ -387,7 +387,7 @@ h2 {
 /* ---------- standings ---------- */
 .standing-row {
   display: grid;
-  grid-template-columns: 26px minmax(120px, 1.2fr) 150px repeat(5, minmax(70px, 1fr));
+  grid-template-columns: 26px minmax(120px, 1.2fr) 150px repeat(6, minmax(66px, 1fr));
   gap: 16px;
   align-items: center;
   padding: 11px 4px;
@@ -406,6 +406,7 @@ h2 {
 .standing-row .city { display: flex; align-items: center; gap: 9px; font-weight: 500; font-size: 13.5px; }
 .standing-row .num { text-align: right; font-size: 13px; }
 .standing-row .otp { font-size: 17px; font-weight: 500; }
+.standing-row .unscored { font-size: 15px; color: var(--muted-foreground); }
 .spark { display: block; }
 .spark-empty { color: var(--muted-foreground); font-size: 11px; }
 

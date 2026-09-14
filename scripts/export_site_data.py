@@ -135,11 +135,18 @@ standings = q("""
         -- the raw count travels with the rate: round(pct, 2) turns Toronto's 4
         -- cancellations in 661,306 trips into 0.0 before the page can tell that
         -- apart from a feed that cancelled nothing
-        sum(e.trips_cancelled) as cancelled
+        sum(e.trips_cancelled) as cancelled,
+        -- The composite is the answer to the page's actual question, so it has to
+        -- be IN the table the page ranks by. Showing an on-time ranking beside a
+        -- sentence naming composite scores put Tokyo first at 97.0% next to text
+        -- saying Helsinki leads at 92.2, with the score nowhere on screen.
+        max(sc.score_0_100) as score_0_100
     from eligible e
     left join fct_route_reliability_daily r
       on r.city_key = e.city_key and r.route_id = e.route_id
      and r.service_date = e.service_date
+    left join fct_city_scorecard sc
+      on sc.city_key = e.city_key
     group by 1
     order by otp_pct desc
 """)
