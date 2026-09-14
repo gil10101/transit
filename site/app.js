@@ -116,7 +116,10 @@ function cancelCell(r) {
   if (r.cancel_pct == null) return "—";
   if (r.emits_cancels === false) return `<span title="feed never emits CANCELED">—</span>`;
   const v = Number(r.cancel_pct);
-  return v > 0 && v < 0.01 ? "&lt;0.01%" : v + "%";
+  // compare on the COUNT, not the rate: the rate arrives pre-rounded to two
+  // places, so a real handful of cancellations is already 0.0 by the time it
+  // gets here and would otherwise print as a flat 0%.
+  return Number(r.cancelled) > 0 && v < 0.01 ? "&lt;0.01%" : v + "%";
 }
 
 function sparkline(points, color) {

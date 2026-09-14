@@ -131,7 +131,11 @@ standings = q("""
         -- A feed that never emits CANCELED and a feed that emits it and cancelled
         -- nothing are different facts, and 0% renders them identically. The
         -- standings row shows a dash for the first (docs/06 Q6).
-        (sum(e.trips_cancelled) > 0) as emits_cancels
+        (sum(e.trips_cancelled) > 0) as emits_cancels,
+        -- the raw count travels with the rate: round(pct, 2) turns Toronto's 4
+        -- cancellations in 661,306 trips into 0.0 before the page can tell that
+        -- apart from a feed that cancelled nothing
+        sum(e.trips_cancelled) as cancelled
     from eligible e
     left join fct_route_reliability_daily r
       on r.city_key = e.city_key and r.route_id = e.route_id
