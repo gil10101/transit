@@ -71,6 +71,9 @@ variable "swiss_otd_sa_token" {
 # off, and the raw-feed freshness tripwire skips these prefixes instead of
 # reporting them as killed feeds four times an hour.
 variable "polling_retired" {
-  type    = string
-  default = ""
+  type = string
+  # Retired 2026-09-14/15 once each city banked its 20 judged days. Left as the
+  # default rather than a tfvars entry so `terraform apply` reproduces the live
+  # state instead of silently restarting six pollers that were stopped on purpose.
+  default = "nyc,boston,toronto,helsinki,dc,sf,zurich"
 }
