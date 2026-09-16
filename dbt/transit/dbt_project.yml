@@ -98,6 +98,7 @@ seeds:
         metrics_from: date
         schedule_matchable: boolean
         gap_regularity_measurable: boolean
+        retired_from: date
 
 models:
   transit:

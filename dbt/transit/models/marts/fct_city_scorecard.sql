@@ -80,11 +80,14 @@ eligible_route_days as (
     from {{ ref('fct_service_delivery_daily') }} d
     where d.service_day_closed
       and d.service_date >= d.metrics_from
+      and not d.retired_day
       and coalesce(d.completeness_pct, 0) >= {{ var('scorecard_min_completeness') }}
 
 ),
 
--- what we deliberately dropped, so the row can admit it rather than hide it
+-- what we deliberately dropped, so the row can admit it rather than hide it.
+-- A retired day is not a dropped day: nothing was polled, so it belongs to
+-- neither ledger (fct_service_delivery_daily.retired_day, 2026-09-16).
 excluded as (
 
     select
@@ -93,6 +96,7 @@ excluded as (
     from {{ ref('fct_service_delivery_daily') }} d
     where d.service_day_closed
       and d.service_date >= d.metrics_from
+      and not d.retired_day
       and coalesce(d.completeness_pct, 0) < {{ var('scorecard_min_completeness') }}
     group by 1
 

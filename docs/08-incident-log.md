@@ -624,3 +624,26 @@ so Saturday's late evening is computed on its own static before the rotation arr
 
 Toronto 09-03..05 stay volume-only: repairing them needs a recompute against the old
 static, which the delay path cannot address today.
+
+## 2026-09-16 · Retiring a poller told the tripwire nothing, so the first dark day went red
+01:51Z chain (manual relaunch) red: `completeness_above_error_50pct`, 1 row —
+helsinki/2026-09-15, the first fully dark service day of a city whose poller had been
+stopped on purpose (six cities retired 2026-09-14, Zurich 2026-09-15, each after banking
+20 judged days). Every downstream mart was skipped, so the scorecard did not rebuild. The
+freshness tripwire had been taught about retirement (`TP_POLLING_RETIRED`); dbt had not,
+and a 0% day on a retired city reads to it exactly like a dead feed — the one thing it
+exists to page about. Boston, DC, SF and Toronto would have followed at 11:05Z as their
+09-15 closed.
+
+Fix: `dim_city.retired_from` (first service date with no polling — nyc, boston, toronto,
+helsinki, dc, sf 2026-09-15; zurich 2026-09-16) → `fct_service_delivery_daily.retired_day`,
+excluded from both completeness tests and from the scorecard's eligible/excluded ledger.
+Retired days stay in the mart as rows (the schedule is a fact) and out of every judgment
+(the silence is ours). Scores do not move: the 50% floor already kept dark days out of
+`judged_days`; only `excluded_route_days` would have crept up by a city's route count per
+day. Rolled out as `dbt seed --full-refresh --select dim_city` on prod (a seed with a new
+column will not truncate-and-insert), image rebuilt, chain relaunched.
+
+Seeded in the same pass: the 2026-09-14 truncation rows in `incident_days` — five cities
+lost their final evening when the pollers stopped at 20:52Z (54-75% days, still above the
+floor, still judged; the seed only informs the tripwire).

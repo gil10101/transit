@@ -95,7 +95,8 @@ models:
               config:
                 severity: warn
                 where: "service_day_closed and service_date >= metrics_from
-                  and trips_scheduled >= {{ var('completeness_min_trips') }}"
+                  and trips_scheduled >= {{ var('completeness_min_trips') }}
+                  and not retired_day"
           # The error test additionally skips routes the agency publishes no realtime
           # for at all (seed known_coverage_gaps). Those cannot be fixed by us, so at
           # error severity they would be permanently red — and a check that is always
@@ -127,6 +128,14 @@ models:
           # something usable for, how many did we finalize? NULL capture_rate
           # means nothing was published at all, which is the agency's silence and
           # not our blindness, so it reads as 1 and never fires.
+          #
+          # [rev 2026-09-16] Retired cities. Once a city has banked its 20 judged
+          # days its poller is stopped (dim_city.retired_from = the first service
+          # date with no polling at all). From that date the feed is dark by OUR
+          # decision — neither the agency's silence nor our blindness — so neither
+          # completeness test reads the row. The first chain after Helsinki's
+          # first dark day closed (2026-09-16 01:51Z) went red on exactly this and
+          # skipped every downstream mart. docs/08.
           - value_within_range:
               name: completeness_above_error_50pct
               arguments: {min_value: 0.50}
@@ -137,5 +146,6 @@ models:
                   and trips_scheduled >= {{ var('completeness_min_trips') }}
                   and not known_coverage_gap
                   and not incident_day
+                  and not retired_day
                   and trips_observed < trips_scheduled * 0.50
                   and coalesce(capture_rate, 1) < 0.90"

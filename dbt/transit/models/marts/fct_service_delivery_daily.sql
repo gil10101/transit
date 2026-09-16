@@ -265,7 +265,13 @@ select
     g.route_id is not null as known_coverage_gap,
     -- dated our-outage marker (seed incident_days): the executable form of a
     -- docs/08 incident entry. Only the error tripwire reads it.
-    i.city_key is not null as incident_day
+    i.city_key is not null as incident_day,
+    -- [rev 2026-09-16] the poller was stopped on purpose (dim_city.retired_from is
+    -- the first service date with no polling at all). A dark day after it is our
+    -- decision, not the agency's silence and not our blindness, so neither
+    -- completeness test nor the scorecard's eligible/excluded ledger reads it.
+    -- The row stays: the schedule is still a fact. docs/08, 2026-09-16.
+    c.retired_from is not null and r.service_date >= c.retired_from as retired_day
 from rolled r
 left join {{ ref('dim_city') }} c on c.city_key = r.city_key
 left join {{ ref('known_coverage_gaps') }} g

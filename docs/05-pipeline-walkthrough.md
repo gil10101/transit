@@ -276,16 +276,25 @@ Atomic fact unique key: `(city_key, service_date, trip_uid, stop_sequence)`.
 One dimension, six facts. `fct_stop_events` is the atomic fact — everything else is a
 rollup of it, so if a number looks wrong, start there.
 
-### `dim_city` (seed — 7 rows)
+### `dim_city` (seed — 8 rows)
 
 `city_key` · `city_name` · `country` · `iana_tz` · `peak_am_start/end` · `peak_pm_start/end` ·
-`rt_delay_source` · `crowding_usable` · `attribution_text` · `metrics_from` · `schedule_matchable`
+`rt_delay_source` · `crowding_usable` · `attribution_text` · `metrics_from` · `schedule_matchable` ·
+`gap_regularity_measurable` · `retired_from`
 
-Two columns carry policy, not description:
+Four columns carry policy, not description:
 - **`metrics_from`** — the city's first *full* service day of polling. Completeness is not
   judged before it (a poller that came up at 00:07 local scores a real but meaningless 2%).
 - **`schedule_matchable`** — false when a city's realtime stop ids don't share a namespace
   with its own published schedule (Toronto). False ⇒ no OTP band, ever.
+- **`gap_regularity_measurable`** — false when observed arrivals are reconstructed as
+  timetable + stated delay (Tokyo), so a headway ratio would measure the schedule against
+  itself. False ⇒ `gap_ratio`, bunching and excess wait are NULL.
+- **`retired_from`** — the first service date with no polling at all, set the night a city's
+  poller is stopped after it banks 20 judged days. From that date
+  `fct_service_delivery_daily.retired_day` is true: both completeness tests skip the row and
+  the scorecard counts it in neither its eligible nor its excluded ledger. Empty while a city
+  still polls. [rev 2026-09-16]
 
 ### `fct_stop_events` — atomic fact
 **Grain:** one finalized stop visit. **Unique key:** `(city_key, service_date, trip_uid, stop_sequence)`.
