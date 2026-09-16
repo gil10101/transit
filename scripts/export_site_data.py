@@ -291,7 +291,9 @@ ELIGIBLE = """
     )
 """
 
-weekday_weekend = q(ELIGIBLE + """
+weekday_weekend = q(
+    ELIGIBLE
+    + """
     select f.city_key,
            case when dayofweekiso(f.service_date) >= 6 then 'weekend'
                 else 'weekday' end as day_type,
@@ -306,13 +308,16 @@ weekday_weekend = q(ELIGIBLE + """
     group by 1, 2
     having count(f.otp_band) >= 1000
     order by 1, 2
-""")
+"""
+)
 
 # locked rule: bus departing a scheduled timepoint > 60s early = failure. Only
 # cities whose statics carry timepoint can appear. The flag is the fact's; the
 # timepoint column never reached the prod relation, so the denominator joins the
 # finalized int table at the same grain; mode joins dim_route (modes.json's join).
-early_departures = q(ELIGIBLE + """
+early_departures = q(
+    ELIGIBLE
+    + """
     select f.city_key,
            round(100 * count(case when f.early_departure_flag then 1 end)
                / count(*), 1) as early_dep_pct,
@@ -329,11 +334,14 @@ early_departures = q(ELIGIBLE + """
     group by 1
     having count(*) >= 1000
     order by early_dep_pct desc
-""")
+"""
+)
 
 # peak vs off-peak per each city's own seeded windows (dim_city peak_* columns,
 # local time by construction — fct_stop_events.local_hour is already local)
-peak_offpeak = q(ELIGIBLE + """
+peak_offpeak = q(
+    ELIGIBLE
+    + """
     select f.city_key,
            case when f.local_hour >= hour(to_time(c.peak_am_start))
                  and f.local_hour <  hour(to_time(c.peak_am_end))   then 'am_peak'
@@ -354,11 +362,14 @@ peak_offpeak = q(ELIGIBLE + """
     group by 1, 2
     having count(f.otp_band) >= 1000
     order by 1, 2
-""")
+"""
+)
 
 # cancel rate context: a 0.000% is a feed property (the feed never emits
 # CANCELED), not a service property — docs/06. emits_cancels makes that visible.
-cancellations = q(ELIGIBLE + """
+cancellations = q(
+    ELIGIBLE
+    + """
     select e.city_key,
            round(100 * cast(sum(d.trips_cancelled) as double)
                / nullif(sum(d.trips_scheduled), 0), 2) as cancel_pct,
@@ -370,15 +381,19 @@ cancellations = q(ELIGIBLE + """
      and d.service_date = e.service_date
     group by 1
     order by cancel_pct desc
-""")
+"""
+)
 
-dump("answers.json", {
-    "as_of": AS_OF,
-    "weekday_weekend": weekday_weekend,
-    "early_departures": early_departures,
-    "peak_offpeak": peak_offpeak,
-    "cancellations": cancellations,
-})
+dump(
+    "answers.json",
+    {
+        "as_of": AS_OF,
+        "weekday_weekend": weekday_weekend,
+        "early_departures": early_departures,
+        "peak_offpeak": peak_offpeak,
+        "cancellations": cancellations,
+    },
+)
 
 # --- maps/*.json -----------------------------------------------------------
 if "--skip-maps" in sys.argv:

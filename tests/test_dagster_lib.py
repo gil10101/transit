@@ -262,9 +262,10 @@ def test_retired_cities_drop_out_of_the_freshness_tripwire():
 def test_retiring_every_city_still_fails_loudly():
     """The tripwire must never probe nothing and pass."""
     with pytest.raises(RuntimeError, match="no live-city configs"):
-        city_feed_endpoints(retired=frozenset(NYC_FEED_ENDPOINTS) | frozenset(
-            {"nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich", "tokyo"}
-        ))
+        city_feed_endpoints(
+            retired=frozenset(NYC_FEED_ENDPOINTS)
+            | frozenset({"nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich", "tokyo"})
+        )
 
 
 # --- iceberg refresh --------------------------------------------------------

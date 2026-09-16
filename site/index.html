@@ -46,8 +46,9 @@
   </div>
   <div class="header-banner">Every figure is a warehouse snapshot captured
     <span id="as-of-banner" class="mono">—</span>. The warehouse still drains, re-pins and
-    re-scores twice a day; six cities stopped ingesting on 2026-09-14 once they had banked the
-    20 judged days a score needs, and Zurich and Tokyo keep polling until they reach it.</div>
+    re-scores twice a day. Seven cities have stopped ingesting — six on 2026-09-14 and Zurich on
+    2026-09-15 — each the night it banked the 20 judged days a score needs. Only Tokyo still
+    polls.</div>
 </header>
 
 <main id="top">
@@ -77,13 +78,13 @@
     <h2>Reliability, city by city</h2>
     <p class="section-note">Service-weighted across every closed judged day; routes below a 50%
     completeness floor are excluded rather than guessed. A composite 0&ndash;100 score requires 20
-    judged days across a city's judged window, and <strong>six of the eight have now cleared
-    it</strong> — New York got there first, but <strong>Helsinki leads at 92.2</strong>, ahead of
-    New York 85.9, Boston 81.2, Washington DC 79.9, Toronto 72.5 and SF Bay 61.3. Zurich sits one
-    judged day short and is still polling. Tokyo has 10 and accrues one a day, so it shows evidence
-    rather than a score — the bar refuses a thin number rather than dressing one up. Every city is
-    now rated on its full history: each service day is scored against the timetable that was live
-    that day, not the one published since.</p>
+    judged days across a city's judged window, and <strong>seven of the eight have now cleared
+    it</strong> — New York got there first, Zurich crossed last and went straight to the top:
+    <strong>Zurich leads at 93.8</strong>, ahead of Helsinki 92.2, New York 85.8, Boston 81.1,
+    Washington DC 80.1, Toronto 72.7 and SF Bay 60.5. Tokyo has 11 and cannot reach 20 before the
+    project closes on 2026-09-17, so it shows evidence rather than a score — the bar refuses a thin
+    number rather than dressing one up. Every city is rated on its full history: each service day
+    is scored against the timetable that was live that day, not the one published since.</p>
   </div>
   <div class="card">
     <div class="standings" id="standings-rows"></div>
@@ -441,7 +442,7 @@
     computed from predicted arrival vs schedule; Zurich and Tokyo state delays directly and
     are labeled as such. Frequent service is judged on excess wait time instead of the
     timetable — riders there experience headways, not clock times.</p>
-    <p>The scorecard refuses to rank a city on fewer than 20 closed judged days in a month;
+    <p>The scorecard refuses to rank a city on fewer than 20 closed judged days across its window;
     routes under 10 scheduled trips or a 50% completeness floor are excluded and counted,
     never guessed. Known coverage gaps (Helsinki ferries ride an AIS feed we don't poll;
     one tram line has never emitted realtime) are documented in the repo instead of

@@ -133,8 +133,7 @@ else:
     lo, hi = m.window_start.min(), m.window_end.max()
 
     st.subheader(
-        f"Composite score, {lo:%b %d} - {hi:%b %d} "
-        f"(methodology v{m.methodology_version.iloc[0]})"
+        f"Composite score, {lo:%b %d} - {hi:%b %d} (methodology v{m.methodology_version.iloc[0]})"
     )
     st.caption(
         "Each city is scored over its own judged window - window_start differs per "

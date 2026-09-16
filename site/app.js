@@ -382,7 +382,7 @@ function cityCell(key) {
   return `<span class="city-cell"><span class="dot" style="background:${cityColor(key)}"></span>${CITIES[key].name}</span>`;
 }
 async function renderAnswers() {
-  const raw = await loadJSON("data/answers.json");
+  const [raw, summary] = await Promise.all([loadJSON("data/answers.json"), loadJSON("data/summary.json")]);
   // a city can reach gold before this file's CITIES map learns it (tokyo did);
   // render what we know rather than throwing on the whole section
   const known = (rows) => rows.filter((r) => CITIES[r.city_key]);
@@ -436,13 +436,19 @@ async function renderAnswers() {
     `<tr><td>${cityCell(r.city_key)}</td>
      <td class="num mono">${r.emits_cancels ? cxPct(r) : "—"}</td>
      <td class="num mono">${r.emits_cancels ? fmt(r.cancelled) : "never emits"}</td></tr>`).join("");
+  // the Toronto sentence reads its count and day span from the data, so a
+  // regenerated snapshot cannot leave it quoting last week's numbers
+  const tor = a.cancellations.find((r) => r.city_key === "toronto");
+  const torDays = (summary.standings.find((r) => r.city_key === "toronto") || {}).judged_days;
+  const torNote = tor && torDays
+    ? ` Toronto is the third case: it can say it, and has, <b>${fmt(tor.cancelled)} times in ${torDays} judged days</b>.`
+    : "";
   $("answers-cancel").innerHTML =
     `<table class="data-table"><tr><th>city</th><th class="num">cancelled</th><th class="num">trips</th></tr>${cxRows}</table>` +
     `<p class="footnote">Three different things sit in this column. A dash means the feed has no
      CANCELED vocabulary at all — New York's 13.4M rows are every one SCHEDULED, and
      <span class="mono">odpt:Train</span> has no cancellation field — so it is a feed property, not
-     perfect service. A percentage means the feed says it and means it. Toronto is the third case:
-     it can say it, and has, <b>4 times in 19 judged days</b>.</p>`;
+     perfect service. A percentage means the feed says it and means it.${torNote}</p>`;
 }
 
 // ---------- best / worst routes ----------
