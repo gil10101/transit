@@ -83,6 +83,10 @@ judged as (
               "-cast(ceil(" ~ var('lookback_hours') ~ " / 24.0) as int)", 'current_date') }}
         -- our own outages are declared in the seed, not re-litigated here
         and i.city_key is null
+        -- [rev 2026-09-16] a retired city's dark days are ours too: feeds that publish
+        -- trips a day ahead (HSL up to three) leave silver rows for service days we
+        -- chose never to observe, and 0 gold against them is not a lost day
+        and (c.retired_from is null or s.service_date < c.retired_from)
         -- a day with almost no silver is a feed problem the freshness tripwire owns
         and s.silver_trips >= 100
 

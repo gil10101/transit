@@ -656,3 +656,10 @@ observed. "Clean local-day boundary" was true for regular service and not for a 
 that runs to 05:00. Seeded as an `incident_days` row for zurich/2026-09-15 (the day stays
 judged at 94.3%). Lesson for the next retirement: stop a poller after the service day's
 *last* scheduled trip, not after local midnight.
+
+Third red, 11:05Z chain the same morning: `assert_gold_reflects_silver_coverage`, 2 rows —
+boston/2026-09-15 (488 silver trips, 0 gold) and dc/2026-09-15 (460, 0). MBTA and WMATA
+publish next-day trips before midnight, so silver holds schedulable trips for a service day
+we chose never to observe; the coverage test read 0 gold against them as a lost day. It now
+skips days at or after `retired_from`, like the completeness tests. That is the third tripwire
+the retirement had to be taught; the checklist in docs/05 §10 lists all of them.
