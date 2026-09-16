@@ -80,8 +80,8 @@
     completeness floor are excluded rather than guessed. A composite 0&ndash;100 score requires 20
     judged days across a city's judged window, and <strong>seven of the eight have now cleared
     it</strong> — New York got there first, Zurich crossed last and went straight to the top:
-    <strong>Zurich leads at 93.8</strong>, ahead of Helsinki 92.2, New York 85.8, Boston 81.1,
-    Washington DC 80.1, Toronto 72.7 and SF Bay 60.5. Tokyo has 11 and cannot reach 20 before the
+    <strong>Zurich leads at 93.6</strong>, ahead of Helsinki 92.2, New York 85.8, Boston 81.1,
+    Washington DC 80.1, Toronto 72.7 and SF Bay 60.5. Tokyo has 12 and cannot reach 20 before the
     project closes on 2026-09-17, so it shows evidence rather than a score — the bar refuses a thin
     number rather than dressing one up. Every city is rated on its full history: each service day
     is scored against the timetable that was live that day, not the one published since.</p>
@@ -269,7 +269,7 @@
       <tr>
         <td><b>Gold</b><div class="sub">Snowflake + dbt</div></td>
         <td>Realtime matched to schedule, delays computed, metrics rolled up</td>
-        <td class="num">481.9M rows<div class="sub">50 models</div></td>
+        <td class="num">420.4M rows<div class="sub">50 models</div></td>
         <td>A metric with no evidence is NULL, never zero. 242 tests run on every build.</td>
       </tr>
       <tr>
@@ -292,26 +292,26 @@
     <p class="section-note">No two agencies publish the same thing. Volumes are the live 7-day raw
     window, and a feed's size says more about how it is published than about how much service the
     city runs — Zurich ships a whole national network on every poll, Tokyo ships one JSON array of
-    trains. The vehicle column is what was on the road at once: the most distinct vehicles
-    reporting in any single minute, by mode, across three weekdays. Two cities publish no positions
-    at all — there a trip that is live at the poll stands in for its vehicle — and where vehicles
-    run on routes missing from the static schedule they are listed separately rather than folded
-    in.</p>
+    trains. The vehicle column is what was in motion at once: the most trips in progress in any
+    single poll-minute, by mode, across three weekdays — a trip counts from its first scheduled
+    stop until its last prediction passes, one vehicle each. Where a city also publishes
+    positions, the small print says what those confirm; vehicles reporting with no trip (deadhead,
+    layover, yard) are noted and never folded in.</p>
   </div>
   <div class="chart-wrap">
   <table class="data-table">
     <thead>
-      <tr><th>City</th><th class="num">Feeds</th><th class="num">Cadence</th><th class="num">Raw / 7d</th><th class="num">Stops</th><th>Vehicles tracked at once</th><th>What it gives</th></tr>
+      <tr><th>City</th><th class="num">Feeds</th><th class="num">Cadence</th><th class="num">Raw / 7d</th><th class="num">Stops</th><th>In motion at once</th><th>What it gives</th></tr>
     </thead>
     <tbody>
-      <tr><td><b>New York</b><div class="sub">MTA</div></td><td class="num">8</td><td class="num">30s</td><td class="num">10.5 GB<div class="sub">182,280 obj</div></td><td class="num">1,488</td><td><b>472</b> subway trains · 7 SIR trains<div class="sub">the subway feed carries no vehicle ids — one active trip counted as one train</div></td><td>Eight subway feeds, trip updates + positions + alerts, no key required</td></tr>
-      <tr><td><b>Boston</b><div class="sub">MBTA</div></td><td class="num">3</td><td class="num">30s</td><td class="num">24.4 GB<div class="sub">68,360 obj</div></td><td class="num">10,309</td><td><b>663</b> bus · 61 tram · 49 metro · 45 rail<div class="sub">ids reliable across all four modes</div></td><td>Subway, bus, commuter rail, occupancy, and real cancellations — 5,748 on judged routes</td></tr>
-      <tr><td><b>Toronto</b><div class="sub">TTC</div></td><td class="num">3</td><td class="num">30s</td><td class="num">13.1 GB<div class="sub">65,943 obj</div></td><td class="num">9,135</td><td><b>1,435</b> bus · 205 tram · 1 ferry<div class="sub">+772 on routes absent from the static</div></td><td>Every surface vehicle, 100% of scheduled routes observed</td></tr>
-      <tr><td><b>Helsinki</b><div class="sub">HSL</div></td><td class="num">2</td><td class="num">30s</td><td class="num">16.1 GB<div class="sub">45,567 obj</div></td><td class="num">8,344</td><td><b>1,009</b> bus · 125 tram · 46 rail · 41 metro<div class="sub">HSL publishes no positions — a trip with a live prediction inside 15 min stands in for its vehicle</div></td><td>Tram, metro, rail and bus predictions, keyless — but trip_id ships empty on every row</td></tr>
-      <tr><td><b>Washington DC</b><div class="sub">WMATA</div></td><td class="num">6</td><td class="num">30s</td><td class="num">15.2 GB<div class="sub">136,724 obj</div></td><td class="num">9,708</td><td><b>950</b> bus · 114 metro<div class="sub">+259 on routes absent from the static</div></td><td>Rail and bus as separate feed families, every scheduled route observed</td></tr>
-      <tr><td><b>SF Bay</b><div class="sub">511.org</div></td><td class="num">3</td><td class="num">200s</td><td class="num">5.7 GB<div class="sub">10,239 obj</div></td><td class="num">21,420</td><td><b>1,528</b> bus · 107 tram · 33 rail · 24 cable car · 12 ferry<div class="sub">+631 on routes absent from the static</div></td><td>~30 operators behind one regional feed; six of them publish schedule and no realtime</td></tr>
-      <tr><td><b>Zurich</b><div class="sub">Swiss OTD</div></td><td class="num">2</td><td class="num">60s / 600s</td><td class="num">77.5 GB<div class="sub">12,524 obj</div></td><td class="num">14,188</td><td><b>744</b> bus · 150 tram · 104 rail<div class="sub">the Swiss feed carries delays, not positions — a trip inside its scheduled running window at the poll stands in for its vehicle</div></td><td>A national feed filtered to a 615-route allow-list — 5.8 MB per poll, delays only</td></tr>
-      <tr><td><b>Tokyo</b><div class="sub">ODPT</div></td><td class="num">3</td><td class="num">30s / 60s</td><td class="num">1.9 GB<div class="sub">56,934 obj</div></td><td class="num">5,514</td><td><b>155</b> trains · 586 bus<div class="sub">trains from odpt:Train, one record per train in motion; buses from ToeiBus positions</div></td><td>Operator-stated delays for four Toei subway lines, 52 KB per poll</td></tr>
+      <tr><td><b>New York</b><div class="sub">MTA</div></td><td class="num">8</td><td class="num">30s</td><td class="num">10.5 GB<div class="sub">182,280 obj</div></td><td class="num">1,488</td><td><b>391</b> subway trains · 7 SIR trains<div class="sub">the subway feed carries no vehicle ids, so a trip is a train; 472 trains hold a trip at the same moment, 81 of them still at their origin</div></td><td>Eight subway feeds, trip updates + positions + alerts, no key required</td></tr>
+      <tr><td><b>Boston</b><div class="sub">MBTA</div></td><td class="num">3</td><td class="num">30s</td><td class="num">24.4 GB<div class="sub">68,360 obj</div></td><td class="num">10,309</td><td><b>600</b> bus · 57 tram · 51 metro · 38 rail<div class="sub">positions agree: 663 buses report on a trip at the peak, the rest waiting at a terminal; none report without one</div></td><td>Subway, bus, commuter rail, occupancy, and real cancellations — 5,748 on judged routes</td></tr>
+      <tr><td><b>Toronto</b><div class="sub">TTC</div></td><td class="num">3</td><td class="num">30s</td><td class="num">13.1 GB<div class="sub">65,943 obj</div></td><td class="num">9,135</td><td><b>1,395</b> bus · 176 tram · 1 ferry<div class="sub">positions agree: 1,434 buses on a trip at the peak, plus 769 reporting with no trip at all — deadhead, layover, yard</div></td><td>Every surface vehicle, 100% of scheduled routes observed</td></tr>
+      <tr><td><b>Helsinki</b><div class="sub">HSL</div></td><td class="num">2</td><td class="num">30s</td><td class="num">16.1 GB<div class="sub">45,567 obj</div></td><td class="num">8,344</td><td><b>884</b> bus · 98 tram · 37 metro · 34 rail<div class="sub">HSL publishes no positions — trips in progress in the prediction feed, one vehicle each</div></td><td>Tram, metro, rail and bus predictions, keyless — but trip_id ships empty on every row</td></tr>
+      <tr><td><b>Washington DC</b><div class="sub">WMATA</div></td><td class="num">6</td><td class="num">30s</td><td class="num">15.2 GB<div class="sub">136,724 obj</div></td><td class="num">9,708</td><td><b>820</b> bus · 111 metro<div class="sub">positions agree: 950 buses on a trip at the peak, plus 258 reporting with no trip</div></td><td>Rail and bus as separate feed families, every scheduled route observed</td></tr>
+      <tr><td><b>SF Bay</b><div class="sub">511.org</div></td><td class="num">3</td><td class="num">200s</td><td class="num">5.7 GB<div class="sub">10,239 obj</div></td><td class="num">21,420</td><td><b>1,376</b> bus · 95 tram · 49 BART · 27 rail · 26 cable car · 9 ferry<div class="sub">positions agree: 1,528 buses on a trip at the peak, plus 622 reporting with no trip; BART publishes predictions, not positions</div></td><td>~30 operators behind one regional feed; six of them publish schedule and no realtime</td></tr>
+      <tr><td><b>Zurich</b><div class="sub">Swiss OTD</div></td><td class="num">2</td><td class="num">60s / 600s</td><td class="num">77.5 GB<div class="sub">12,524 obj</div></td><td class="num">14,188</td><td><b>700</b> bus · 144 tram · 103 rail<div class="sub">the Swiss feed carries delays, not positions or times — a trip inside its scheduled span at the poll, one vehicle each</div></td><td>A national feed filtered to a 615-route allow-list — 5.8 MB per poll, delays only</td></tr>
+      <tr><td><b>Tokyo</b><div class="sub">ODPT</div></td><td class="num">3</td><td class="num">30s / 60s</td><td class="num">1.9 GB<div class="sub">56,934 obj</div></td><td class="num">5,514</td><td><b>155</b> trains · 586 bus<div class="sub">trains from odpt:Train, one record per train in motion; buses from ToeiBus positions no older than 2 min and on a trip</div></td><td>Operator-stated delays for four Toei subway lines, 52 KB per poll</td></tr>
     </tbody>
   </table>
   </div>
