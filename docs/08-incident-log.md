@@ -647,3 +647,12 @@ column will not truncate-and-insert), image rebuilt, chain relaunched.
 Seeded in the same pass: the 2026-09-14 truncation rows in `incident_days` — five cities
 lost their final evening when the pollers stopped at 20:52Z (54-75% days, still above the
 floor, still judged; the seed only informs the tripwire).
+
+Second red after the fix, same chain family: zurich/2026-09-15, route `92-991` (a night
+bus) — 74 scheduled, 28 published, 16 finalized, capture 0.57. Zurich was retired at
+23:18Z = 01:18 local, past its last regular trip but inside the night-bus tail of service
+day 09-15, so the trips scheduled after the cut were published as upcoming and never
+observed. "Clean local-day boundary" was true for regular service and not for a GTFS day
+that runs to 05:00. Seeded as an `incident_days` row for zurich/2026-09-15 (the day stays
+judged at 94.3%). Lesson for the next retirement: stop a poller after the service day's
+*last* scheduled trip, not after local midnight.
