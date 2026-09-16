@@ -60,6 +60,7 @@ function persistTheme(theme) {
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => {
   n = Number(n);
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
   if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
   if (n >= 1e4) return Math.round(n / 1e3) + "k";
   return n.toLocaleString("en-US");
@@ -419,9 +420,20 @@ async function renderAnswers() {
   const earlyRows = a.early_departures.map((r) =>
     `<tr><td>${cityCell(r.city_key)}</td>
      <td class="num mono"><span title="${fmt(r.measured)} measured timepoint departures">${Number(r.early_dep_pct).toFixed(1)}%</span></td></tr>`).join("");
+  // Three feeds cannot answer this one. The reason is a property of the feed,
+  // not a hole in the data, so it sits on the same rows the measured cities use.
+  const EARLY_NA = {
+    nyc: "subway only — no bus feed to measure",
+    zurich: "schedule marks no timepoints; the feed states delays, never a departure",
+    tokyo: "rail only — ToeiBus publishes positions, not trip updates",
+  };
+  const earlyDone = new Set(a.early_departures.map((r) => r.city_key));
+  const earlyNaRows = Object.entries(EARLY_NA)
+    .filter(([c]) => CITIES[c] && !earlyDone.has(c))
+    .map(([c, why]) => `<tr><td>${cityCell(c)}</td><td class="num"><span class="na">${why}</span></td></tr>`).join("");
   $("answers-early").innerHTML = a.early_departures.length
-    ? `<table class="data-table"><tr><th>city</th><th class="num">left early</th></tr>${earlyRows}</table>` +
-      `<p class="footnote">Only cities whose static schedules mark timepoints can be measured. Hover for evidence counts.</p>`
+    ? `<table class="data-table"><tr><th>city</th><th class="num">left early</th></tr>${earlyRows}${earlyNaRows}</table>` +
+      `<p class="footnote">Only bus timepoints marked in a static schedule can be measured; the rest say why. Hover for evidence counts.</p>`
     : `<p class="footnote">No timepoint-bearing statics in gold yet.</p>`;
 
   // Toronto cancels 4 trips in 661,306. Rounded to two places that prints
