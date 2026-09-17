@@ -22,6 +22,12 @@ const VP_ABSENT = {
   zurich: "The Swiss LA API is trip-updates only — no vehicle positions — so Zurich shows routes and stop delays only.",
 };
 
+// modes are a second axis, so they get their own hues — none of them a city's
+const MODE_COLORS = {
+  light: { metro: "#4f46e5", rail: "#0e7490", tram: "#b45309", bus: "#64748b", ferry: "#0284c7", other: "#a16207", unknown: "#b8bcc4" },
+  dark:  { metro: "#818cf8", rail: "#22d3ee", tram: "#f59e0b", bus: "#94a3b8", ferry: "#38bdf8", other: "#fbbf24", unknown: "#5b616b" },
+};
+
 const MAP_STYLES = {
   light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
   dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
@@ -378,6 +384,89 @@ async function renderModes() {
     `<p class="footnote">Cells under 5,000 scored events are suppressed. Hover a cell for its evidence count.</p>`;
 }
 
+// ---------- storage: what each city put in the warehouse ----------
+function donut(parts, colors, size = 92, stroke = 14) {
+  const r = (size - stroke) / 2, C = 2 * Math.PI * r, cx = size / 2;
+  const total = parts.reduce((a, p) => a + p.value, 0) || 1;
+  let off = 0;
+  const arcs = parts.map((p) => {
+    const len = (p.value / total) * C;
+    const s = `<circle r="${r}" cx="${cx}" cy="${cx}" fill="none" stroke="${colors[p.key] ?? colors.unknown}" stroke-width="${stroke}"
+      stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${cx} ${cx})">
+      <title>${esc(p.key)}: ${(100 * p.value / total).toFixed(1)}% · ${fmt(p.value)} stop events</title></circle>`;
+    off += len;
+    return s;
+  }).join("");
+  return `<svg class="donut" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="share of stop events by mode">${arcs}</svg>`;
+}
+
+function daybars(days, color) {
+  if (!days.length) return "";
+  const W = 300, H = 40, n = days.length, bw = W / n;
+  const peak = Math.max(...days.map((d) => +d.events)) || 1;
+  const bars = days.map((d, i) => {
+    const h = Math.max(1, (+d.events / peak) * (H - 2));
+    const x = i * bw, w = Math.max(0.8, bw - 1);
+    return d.judged
+      ? `<rect x="${x.toFixed(1)}" y="${(H - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" opacity="0.9"><title>${esc(d.service_date)}: ${fmt(d.events)} stop events · ${fmt(d.trips)} trips · judged</title></rect>`
+      : `<rect x="${(x + 0.5).toFixed(1)}" y="${(H - h + 0.5).toFixed(1)}" width="${Math.max(0.5, w - 1).toFixed(1)}" height="${Math.max(0.5, h - 1).toFixed(1)}" fill="none" stroke="${color}" stroke-width="1" opacity="0.7"><title>${esc(d.service_date)}: ${fmt(d.events)} stop events · ${fmt(d.trips)} trips · not judged</title></rect>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="daybars" role="img" aria-label="stop events per service day">${bars}</svg>` +
+    `<div class="daybars-label"><span>${esc(days[0].service_date)}</span><span>${esc(days[days.length - 1].service_date)}</span></div>`;
+}
+
+async function renderStorage() {
+  const [st, fleet, summary] = await Promise.all([
+    loadJSON("data/storage.json"),
+    loadJSON("data/fleet.json").catch(() => null), // a heavier, on-demand export; the cards stand without it
+    loadJSON("data/summary.json"),
+  ]);
+  const order = summary.standings.map((r) => r.city_key).filter((c) => st.cities[c]);
+  const mc = MODE_COLORS[currentTheme()];
+  $("storage-grid").innerHTML = order.map((c) => {
+    const d = st.cities[c];
+    const parts = d.modes.filter((m) => m.events > 0).sort((a, b) => b.events - a.events)
+      .map((m) => ({ key: m.mode, value: +m.events, routes: m.routes }));
+    const legend = parts.map((p) =>
+      `<li><span class="dot" style="background:${mc[p.key] ?? mc.unknown}"></span>${esc(p.key)} <span class="mono">${(100 * p.value / d.events).toFixed(1)}%</span></li>`).join("");
+    const silverTotal = Object.values(d.silver).reduce((a, b) => a + b, 0);
+    const silverBits = ["predictions", "positions", "trains", "alerts"].filter((k) => d.silver[k])
+      .map((k) => `${fmt(d.silver[k])} ${k}`).join(" · ");
+    // fleet at the peak minute: trips in motion per mode, plus any mode the city
+    // publishes positions for and no trip updates (ToeiBus)
+    const f = fleet?.cities?.[c];
+    const motion = {};
+    if (f) {
+      for (const [m, v] of Object.entries(f.in_motion)) if (m !== "unknown") motion[m] = v.peak;
+      for (const [m, v] of Object.entries(f.positions)) if (!(m in motion) && m !== "unknown" && m !== "no_route") motion[m] = v.on_trip_fresh;
+    }
+    const motionTotal = Object.values(motion).reduce((a, b) => a + b, 0);
+    const motionBits = Object.entries(motion).sort((a, b) => b[1] - a[1])
+      .map(([m, v]) => `${fmt(v)} ${m === "metro" && c === "nyc" ? "subway" : m}`).join(" · ");
+    const noTrip = f ? (f.positions.no_route?.no_trip ?? 0) : 0;
+    const vehicles = d.vehicles != null
+      ? `${fmt(d.vehicles)} distinct vehicle ids`
+      : c === "nyc" ? "no vehicle ids — a trip stands in for a train" : "no positions feed";
+    return `<div class="card storage-card">
+      <div class="storage-head"><span class="city-cell"><span class="dot" style="background:${cityColor(c)}"></span><b>${CITIES[c].name}</b></span><span class="sub">${esc(CITIES[c].src)} · ${d.days} service days</span></div>
+      <div class="storage-body">
+        ${donut(parts, mc)}
+        <ul class="mode-legend">${legend}</ul>
+        <div class="tile-grid storage-tiles">
+          <div class="tile"><b>${fmt(d.events)}</b><span>stop events</span></div>
+          <div class="tile"><b>${fmt(silverTotal)}</b><span>silver rows</span></div>
+          <div class="tile"><b>${fmt(d.headways)}</b><span>headways</span></div>
+          <div class="tile"><b>${fmt(d.trips)}</b><span>trips</span></div>
+          <div class="tile"><b>${d.routes.toLocaleString("en-US")}</b><span>routes</span></div>
+          <div class="tile"><b>${fmt(d.stops)}</b><span>stops</span></div>
+        </div>
+      </div>
+      <p class="storage-fleet">${silverBits} · ${vehicles}${f ? ` · <b>${fmt(motionTotal)} in motion at the peak minute</b> (${motionBits})${noTrip ? ` · ${fmt(noTrip)} more reporting with no trip` : ""}` : ""}</p>
+      ${daybars(d.days_series, cityColor(c))}
+    </div>`;
+  }).join("");
+}
+
 // ---------- measured answers ----------
 function cityCell(key) {
   return `<span class="city-cell"><span class="dot" style="background:${cityColor(key)}"></span>${CITIES[key].name}</span>`;
@@ -417,23 +506,34 @@ async function renderAnswers() {
   $("answers-peak").innerHTML =
     `<table class="data-table"><tr><th>city</th>${PARTS.map((p) => `<th class="num">${LABEL[p]}</th>`).join("")}</tr>${pkRows}</table>`;
 
-  const earlyRows = a.early_departures.map((r) =>
-    `<tr><td>${cityCell(r.city_key)}</td>
-     <td class="num mono"><span title="${fmt(r.measured)} measured timepoint departures">${Number(r.early_dep_pct).toFixed(1)}%</span></td></tr>`).join("");
+  // rows arrive per city × mode; the city figure is the measured-weighted total
+  // and the modes sit under it, so a rail-heavy early habit is visible as such
+  const early = {};
+  for (const r of a.early_departures) {
+    const e = (early[r.city_key] ??= { early: 0, measured: 0, modes: [] });
+    e.early += (Number(r.early_dep_pct) / 100) * Number(r.measured);
+    e.measured += Number(r.measured);
+    e.modes.push(r);
+  }
+  const earlyRows = Object.entries(early)
+    .map(([c, e]) => ({ c, pct: (100 * e.early) / e.measured, measured: e.measured, modes: e.modes.sort((x, y) => Number(y.measured) - Number(x.measured)) }))
+    .sort((x, y) => y.pct - x.pct)
+    .map((r) => `<tr><td>${cityCell(r.c)}</td>
+     <td class="num mono"><span title="${fmt(r.measured)} measured timepoint departures">${r.pct.toFixed(1)}%</span>
+     <span class="mode-split">${r.modes.map((m) => `${esc(m.mode)} ${Number(m.early_dep_pct).toFixed(1)}%`).join(" · ")}</span></td></tr>`).join("");
   // Three feeds cannot answer this one. The reason is a property of the feed,
   // not a hole in the data, so it sits on the same rows the measured cities use.
   const EARLY_NA = {
-    nyc: "subway only — no bus feed to measure",
+    nyc: "MTA's schedule marks no timepoints",
     zurich: "schedule marks no timepoints; the feed states delays, never a departure",
-    tokyo: "rail only — ToeiBus publishes positions, not trip updates",
+    tokyo: "no timepoints — Toei states a delay, never a departure",
   };
-  const earlyDone = new Set(a.early_departures.map((r) => r.city_key));
   const earlyNaRows = Object.entries(EARLY_NA)
-    .filter(([c]) => CITIES[c] && !earlyDone.has(c))
+    .filter(([c]) => CITIES[c] && !early[c])
     .map(([c, why]) => `<tr><td>${cityCell(c)}</td><td class="num"><span class="na">${why}</span></td></tr>`).join("");
   $("answers-early").innerHTML = a.early_departures.length
     ? `<table class="data-table"><tr><th>city</th><th class="num">left early</th></tr>${earlyRows}${earlyNaRows}</table>` +
-      `<p class="footnote">Only bus timepoints marked in a static schedule can be measured; the rest say why. Hover for evidence counts.</p>`
+      `<p class="footnote">Every mode whose static schedule marks timepoints; the rest say why. Hover for evidence counts.</p>`
     : `<p class="footnote">No timepoint-bearing statics in gold yet.</p>`;
 
   // Toronto cancels 4 trips in 661,306. Rounded to two places that prints
@@ -653,6 +753,7 @@ function rethemeAll() {
   renderDist();
   renderModes();
   renderAnswers();
+  renderStorage();
   renderRoutes();
   renderHero();
   renderCityMap(activeCity, false);
@@ -701,6 +802,7 @@ renderChartLegend().then(renderLineCharts);
 renderDist();
 renderModes();
 renderAnswers();
+renderStorage();
 renderRoutes();
 renderHero();
 renderTabs();

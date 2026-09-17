@@ -482,6 +482,29 @@ h2 {
 .data-table .city-cell { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .data-table .route-name { color: var(--muted-foreground); font-size: 11.5px; }
 .data-table .na { color: var(--muted-foreground); font-size: 11.5px; }
+.data-table .mode-split { display: block; color: var(--muted-foreground); font-size: 10.5px; font-family: "Geist Mono", ui-monospace, monospace; }
+
+/* ---------- storage cards ---------- */
+.storage-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.storage-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.storage-head b { font-size: 15px; }
+.storage-body { display: grid; grid-template-columns: 92px minmax(96px, 130px) 1fr; gap: 14px 18px; align-items: center; margin-top: 12px; }
+.donut { display: block; }
+.mode-legend { list-style: none; margin: 0; padding: 0; font-size: 11.5px; display: grid; gap: 3px; }
+.mode-legend li { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.mode-legend .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.mode-legend .mono { color: var(--muted-foreground); }
+.storage-tiles { margin: 0; gap: 8px 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.storage-tiles .tile b { font-size: 17px; }
+.storage-fleet { margin-top: 10px; font-size: 11.5px; color: var(--muted-foreground); line-height: 1.5; }
+.storage-fleet b { color: var(--foreground); font-weight: 500; }
+.daybars { display: block; width: 100%; height: 40px; margin-top: 12px; }
+.daybars-label { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted-foreground); font-family: "Geist Mono", ui-monospace, monospace; margin-top: 2px; }
+@media (max-width: 760px) {
+  .storage-grid { grid-template-columns: 1fr; }
+  .storage-body { grid-template-columns: 92px 1fr; }
+  .storage-tiles { grid-column: 1 / -1; }
+}
 
 /* ---------- network maps ---------- */
 .city-tabs { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -89,6 +89,12 @@ look before it goes in a scorecard: 36% is high enough to suspect the TTC
 static's timepoints as well as TTC's driving — and the timepoint-scoped cut
 agrees: 18% of Toronto's measured bus timepoint departures leave more than 60s
 early, ninety times Helsinki's rate (site: "Who leaves early?").
+[rev 2026-09-17] The same cut now runs for every mode whose static marks
+timepoints, not only bus, and the modes are the story: Toronto's streetcars leave
+early at 22.5% of measured timepoint departures against 17.6% for its buses, and
+Boston's commuter rail at 15.5% against 1.8% for its buses — a rail early-departure
+rate no other city comes near (Helsinki rail 0.0%, SF rail 0.0%). The mart's
+`early_departure_flag` keeps the locked bus rule; the finding widens the question.
 
 By local hour, the 8am and 5pm peaks (routes with ≥500 events in the hour):
 

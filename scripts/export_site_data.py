@@ -19,66 +19,9 @@ Usage: uv run python scripts/export_site_data.py [--skip-maps]
 
 from __future__ import annotations
 
-import json
-import os
 import sys
-from datetime import UTC, datetime
-from pathlib import Path
 
-import snowflake.connector
-from cryptography.hazmat.primitives import serialization
-
-ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "site" / "data"
-# [rev 2026-09-03] tokyo added — its poller is live and it reaches every gold
-# mart. Chicago stays out until CTA activates the beta key (docs/04). Note when
-# reading tokyo's standings: its delay is operator-stated and rounded to whole
-# minutes, so its OTP is not measured the same way as the other seven
-# (docs/06 "Tokyo's punctuality number"). The site must say so wherever it ranks.
-CITIES = ["nyc", "boston", "dc", "sf", "toronto", "helsinki", "zurich", "tokyo"]
-
-
-def connect() -> snowflake.connector.SnowflakeConnection:
-    key_path = Path(
-        os.environ.get(
-            "SNOWFLAKE_PRIVATE_KEY_PATH",
-            Path.home() / ".snowflake/keys/transit_terraform_key.p8",
-        )
-    )
-    pk = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
-    pkb = pk.private_bytes(
-        encoding=serialization.Encoding.DER,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-    return snowflake.connector.connect(
-        account=os.environ.get("SNOWFLAKE_ACCOUNT", "wqteqyy-ib47757"),
-        user=os.environ.get("SNOWFLAKE_USER", "TERRAFORM_SVC"),
-        private_key=pkb,
-        role=os.environ.get("SNOWFLAKE_ROLE", "TRANSIT_PIPELINE"),
-        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "TRANSFORM_XS"),
-        database="TRANSIT",
-        schema="GOLD",
-    )
-
-
-CUR = connect().cursor()
-
-
-def q(sql: str) -> list[dict]:
-    CUR.execute(sql)
-    cols = [c[0].lower() for c in CUR.description]
-    return [dict(zip(cols, r, strict=True)) for r in CUR.fetchall()]
-
-
-def dump(name: str, obj) -> None:
-    path = OUT / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj, default=str, separators=(",", ":")))
-    print(f"{name}: {path.stat().st_size:,} bytes", flush=True)
-
-
-AS_OF = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+from sitedata_lib import AS_OF, CITIES, dump, q  # noqa: E402
 
 # --- summary.json ----------------------------------------------------------
 census = q("""
@@ -315,11 +258,16 @@ weekday_weekend = q(
 # cities whose statics carry timepoint can appear. The flag is the fact's; the
 # timepoint column never reached the prod relation, so the denominator joins the
 # finalized int table at the same grain; mode joins dim_route (modes.json's join).
+# [rev 2026-09-17] every mode whose static marks timepoints, not just bus. The
+# mart's early_departure_flag keeps the locked bus rule; this finding asks the
+# wider question with the same inputs (timepoint, departure delay, 60s grace —
+# mirrors dbt var early_departure_grace_sec) and carries the mode so the page
+# can show the split.
 early_departures = q(
     ELIGIBLE
     + """
-    select f.city_key,
-           round(100 * count(case when f.early_departure_flag then 1 end)
+    select f.city_key, dr.mode,
+           round(100 * count(case when f.delay_dep_sec < -60 then 1 end)
                / count(*), 1) as early_dep_pct,
            count(*) as measured
     from fct_stop_events f
@@ -330,10 +278,10 @@ early_departures = q(
     join eligible e
       on e.city_key = f.city_key and e.route_id = f.route_id
      and e.service_date = f.service_date
-    where dr.mode = 'bus' and i.timepoint = 1 and f.delay_dep_sec is not null
-    group by 1
+    where i.timepoint = 1 and f.delay_dep_sec is not null
+    group by 1, 2
     having count(*) >= 1000
-    order by early_dep_pct desc
+    order by 1, 2
 """
 )
 
@@ -394,6 +342,95 @@ dump(
         "cancellations": cancellations,
     },
 )
+
+# --- storage.json: what each city put in the warehouse ----------------------
+# Per city: the mode mix of its finalized stop events, its silver and gold row
+# counts, distinct trips/routes/stops/vehicles, and every service day of data.
+# Whole-history counts, no eligibility gate — this is the inventory, not a
+# judgment; the judged flag on each day says which ones the standings use.
+storage_modes = q("""
+    select f.city_key, coalesce(r.mode, 'unknown') as mode,
+           count(*) as events, count(f.otp_band) as scored,
+           count(distinct f.route_key) as routes
+    from fct_stop_events f
+    left join dim_route r on r.route_key = f.route_key
+    group by 1, 2
+    order by 1, 2
+""")
+storage_days = q("""
+    with judged as (
+        select distinct city_key, service_date
+        from fct_service_delivery_daily
+        where service_day_closed and service_date >= metrics_from
+          and not retired_day and coalesce(completeness_pct, 0) >= 0.50
+    )
+    select f.city_key, f.service_date,
+           count(*) as events, count(distinct f.trip_uid) as trips,
+           max(case when j.city_key is not null then 1 else 0 end) = 1 as judged
+    from fct_stop_events f
+    left join judged j on j.city_key = f.city_key and j.service_date = f.service_date
+    group by 1, 2
+    order by 1, 2
+""")
+storage_totals = q("""
+    select city_key, count(*) as events, count(otp_band) as scored,
+           count(distinct trip_uid) as trips, count(distinct route_key) as routes,
+           count(distinct stop_key) as stops, count(distinct service_date) as days
+    from fct_stop_events
+    group by 1
+""")
+storage_headways = q("select city_key, count(*) as headways from fct_headways group by 1")
+storage_silver = q("""
+    select 'predictions' as t, city as city_key, count(*) as n
+    from silver.stop_time_predictions group by 1, 2
+    union all select 'positions', city, count(*) from silver.vehicle_positions group by 1, 2
+    union all select 'alerts', city, count(*) from silver.alerts group by 1, 2
+    union all select 'trains', city, count(*) from silver.odpt_trains group by 1, 2
+""")
+storage_vehicles = q("""
+    select city as city_key, count(distinct vehicle_id) as vehicles
+    from silver.vehicle_positions where vehicle_id is not null group by 1
+""")
+storage: dict[str, dict] = {}
+for r in storage_totals:
+    storage[r["city_key"]] = {
+        "events": int(r["events"]),
+        "scored": int(r["scored"]),
+        "trips": int(r["trips"]),
+        "routes": int(r["routes"]),
+        "stops": int(r["stops"]),
+        "days": int(r["days"]),
+        "headways": 0,
+        "vehicles": None,
+        "silver": {},
+        "modes": [],
+        "days_series": [],
+    }
+for r in storage_headways:
+    storage[r["city_key"]]["headways"] = int(r["headways"])
+for r in storage_vehicles:
+    storage[r["city_key"]]["vehicles"] = int(r["vehicles"])
+for r in storage_silver:
+    storage[r["city_key"]]["silver"][r["t"]] = int(r["n"])
+for r in storage_modes:
+    storage[r["city_key"]]["modes"].append(
+        {
+            "mode": r["mode"],
+            "events": int(r["events"]),
+            "scored": int(r["scored"]),
+            "routes": int(r["routes"]),
+        }
+    )
+for r in storage_days:
+    storage[r["city_key"]]["days_series"].append(
+        {
+            "service_date": str(r["service_date"]),
+            "events": int(r["events"]),
+            "trips": int(r["trips"]),
+            "judged": bool(r["judged"]),
+        }
+    )
+dump("storage.json", {"as_of": AS_OF, "cities": storage})
 
 # --- maps/*.json -----------------------------------------------------------
 if "--skip-maps" in sys.argv:
