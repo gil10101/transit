@@ -184,18 +184,35 @@ modes = q("""
 """)
 dump("modes.json", {"as_of": AS_OF, "rows": modes})
 
-# --- hexes.json: stop delay aggregated to H3 r8, last 7 days ----------------
+# --- hexes.json: stop delay aggregated to H3 r8, each city's last 7 judged days
 # same aggregation as the dashboard delay-map page: scored events only, hexes
-# under 20 events dropped, ONE shared scale across cities
+# under 20 events dropped, ONE shared scale across cities.
+# [rev 2026-09-20] The window was `current_date - 7`, which only worked while
+# every city was still polling. Seven pollers retired on 09-15/16, so a wall-clock
+# window slides off their last service day and empties the map city by city —
+# NYC and Toronto (last day 09-14) were four days from vanishing. Anchoring to
+# each city's own last seven JUDGED days (the standings' definition: closed, at
+# or after metrics_from, not retired, completeness over the floor) makes the map
+# a fixed picture of each city's final week instead of a decaying one.
 hexes = q("""
+    with judged as (
+        select city_key, service_date,
+               row_number() over (partition by city_key order by service_date desc) as rn
+        from fct_service_delivery_daily
+        where service_day_closed
+          and service_date >= metrics_from
+          and not retired_day
+          and coalesce(completeness_pct, 0) >= 0.5
+        group by 1, 2
+    )
     select e.city_key, s.h3_r8,
            round(avg(e.delay_arr_sec)) as mean_delay_sec,
            count(*) as events
     from fct_stop_events e
     join dim_stop s on s.stop_key = e.stop_key
+    join judged j on j.city_key = e.city_key and j.service_date = e.service_date and j.rn <= 7
     where e.otp_band is not null
       and s.h3_r8 is not null
-      and e.service_date >= dateadd(day, -7, current_date)
     group by 1, 2
     having count(*) >= 20
 """)

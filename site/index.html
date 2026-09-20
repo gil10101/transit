@@ -81,9 +81,9 @@
     judged days across a city's judged window, and <strong>seven of the eight have now cleared
     it</strong> — New York got there first, Zurich crossed last and went straight to the top:
     <strong>Zurich leads at 93.6</strong>, ahead of Helsinki 92.2, New York 85.8, Boston 81.1,
-    Washington DC 80.1, Toronto 72.7 and SF Bay 60.5. Tokyo has 13 and cannot reach 20 before the
-    project closes on 2026-09-17, so it shows evidence rather than a score — the bar refuses a thin
-    number rather than dressing one up. Every city is rated on its full history: each service day
+    Washington DC 80.1, Toronto 72.7 and SF Bay 60.5. Tokyo has 16: it is the only feed still
+    polling, so it banks its twentieth judged day on 2026-09-23 and until then shows evidence
+    rather than a score — the bar refuses a thin number rather than dressing one up. Every city is rated on its full history: each service day
     is scored against the timetable that was live that day, not the one published since.</p>
   </div>
   <div class="card">
@@ -251,31 +251,32 @@
       <tr>
         <td><b>Raw</b><div class="sub">S3, verbatim</div></td>
         <td>Every poll exactly as the agency returned it — protobuf for GTFS-RT, JSON for ODPT</td>
-        <td class="num">161 GB<div class="sub">515,314 objects</div></td>
-        <td>Immutable and replayable. A 7-day expiry rule holds it flat instead of unbounded.</td>
+        <td class="num">161 GB<div class="sub">515,314 objects at eight-city peak</div></td>
+        <td>Immutable and replayable. A 7-day expiry rule holds it flat instead of unbounded — so
+        it is draining as the seven retired feeds age out: 63 GB across 182,486 objects today.</td>
       </tr>
       <tr>
         <td><b>Bronze</b><div class="sub">Iceberg on S3</div></td>
         <td>Decoded envelopes, one row per record, still untyped and undeduplicated</td>
-        <td class="num">122 GB<div class="sub">107,126 objects</div></td>
+        <td class="num">139 GB<div class="sub">119,503 objects</div></td>
         <td>Keeps everything. No watermark, so nothing here can arrive too late to be kept.</td>
       </tr>
       <tr>
         <td><b>Silver</b><div class="sub">Iceberg on S3</div></td>
         <td>One schema for eight cities: typed, deduplicated, service-date resolved</td>
-        <td class="num">2.87B rows<div class="sub">41.7 GB · 16 tables</div></td>
+        <td class="num">2.95B rows<div class="sub">48.4 GB · 16 tables</div></td>
         <td>Exact-duplicate drop inside a 2-hour watermark, which is why drains run every 2 hours.</td>
       </tr>
       <tr>
         <td><b>Gold</b><div class="sub">Snowflake + dbt</div></td>
         <td>Realtime matched to schedule, delays computed, metrics rolled up</td>
-        <td class="num">420.7M rows<div class="sub">50 models</div></td>
+        <td class="num">421.7M rows<div class="sub">50 models</div></td>
         <td>A metric with no evidence is NULL, never zero. 242 tests run on every build.</td>
       </tr>
       <tr>
         <td><b>Site</b><div class="sub">static JSON</div></td>
-        <td>The eight snapshots this page reads</td>
-        <td class="num">8 files</td>
+        <td>The snapshots this page reads — ten metric files plus one map per city</td>
+        <td class="num">18 files<div class="sub">13 MB</div></td>
         <td>Built from gold, committed to the repo, so a deploy is a plain static publish.</td>
       </tr>
     </tbody>
@@ -289,9 +290,10 @@
   <div class="section-head">
     <div class="eyebrow">FEEDS · WHAT EACH CITY SENDS</div>
     <h2>Thirty endpoints, eight shapes</h2>
-    <p class="section-note">No two agencies publish the same thing. Volumes are the live 7-day raw
-    window, and a feed's size says more about how it is published than about how much service the
-    city runs — Zurich ships a whole national network on every poll, Tokyo ships one JSON array of
+    <p class="section-note">No two agencies publish the same thing. Volumes are each city's last
+    full seven days of raw polling — the 7-day expiry rule is draining the retired cities' archives
+    now, so these are the figures from while each was live — and a feed's size says more about how
+    it is published than about how much service the city runs — Zurich ships a whole national network on every poll, Tokyo ships one JSON array of
     trains. The vehicle column is what was in motion at once: the most trips in progress in any
     single poll-minute, by mode, across three weekdays — a trip counts from its first scheduled
     stop until its last prediction passes, one vehicle each. Where a city also publishes
@@ -493,8 +495,8 @@
     two hours, the dbt chain at 11:05 and 23:05 UTC, a feed-freshness tripwire four times an hour,
     hourly weather, and a schedule refresh on Sunday mornings.</p></div>
   </div>
-  <p class="footnote">Gross AWS usage was <b>$46.92</b> for 1–12 September 2026 — EMR Serverless
-  $16.86, S3 $14.60, EC2 $8.96, the remainder networking and registry. Credits cover it, so the
+  <p class="footnote">Gross AWS usage was <b>$67.45</b> for 1–20 September 2026 — S3 $20.63, EMR
+  Serverless $20.62, EC2 $20.21, the remainder networking and registry. Credits cover it, so the
   invoice is $0.00. Every figure on this page is read from the Snowflake catalog, the AWS API or
   the orchestrator's own run log rather than estimated.</p>
 </section>
