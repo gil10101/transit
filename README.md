@@ -10,28 +10,30 @@ GTFS-RT, and its delay is operator-stated and rounded to the minute — read its
 rate with that caveat (docs/06). Full plan, verified per-feed facts, and the business
 answers live in [`docs/`](docs/).
 
-**Status: Phase 6 — scorecard + dashboard.** Phases 0–5 (NYC slice, cloud deploy,
-7-city fan-out, metrics marts) are done and verified; the pipeline has run unattended
-since 2026-08-23.
+**Status: Phase 6 done — scorecard + dashboard; Phase 7 is accrual.** Phases 0–5 (NYC
+slice, cloud deploy, 7-city fan-out, metrics marts) are done and verified; the pipeline
+has run unattended since 2026-08-23. **Seven of the eight pollers were retired on
+2026-09-15/16**, each the night its city banked the 20 judged days a score needs — their
+numbers are frozen and their scores stand. Tokyo is the only feed still ingesting.
 
 ```
-7 city pollers (GTFS-RT, per-endpoint cadence)          EC2, Docker Compose
+8 city pollers (GTFS-RT, per-endpoint cadence)          EC2, Docker Compose
         │ raw bytes ─────────────► S3 raw/ (replay archive)
         ▼
 Kafka (KRaft, EC2) ── canonical envelopes ── transit.{trip_updates,vehicle_positions,alerts}
         ▼
-EMR Serverless drains every 15 min (Spark Structured Streaming, availableNow, checkpointed)
+EMR Serverless drains every 2 h (Spark Structured Streaming, availableNow, checkpointed)
     bronze_writer     Kafka ──► Iceberg bronze.envelopes
     silver_normalize  Kafka ──► Iceberg silver.* — typing · exact-dup drop ·
                                 canonical trip_uid · national-feed allow-list
         ▼
 Iceberg on S3 (Glue catalog) ── Snowflake external tables (TRANSIT.SILVER)
         ▼
-dbt (dagster-dbt, 2-hourly chain: drain → refresh → build → test)
+dbt (dagster-dbt, twice-daily chain at 11:05/23:05 UTC: drain → refresh → build → test)
     staging → per-city trip matching → finalized stop events →
     TRANSIT.GOLD: fct_stop_events (atomic) · headways/EWT · service delivery ·
     route reliability · alerts · SCD2 dims (route/stop/date/time) ·
-    fct_city_scorecard_monthly (0-100, refuses <20 judged days)
+    fct_city_scorecard (0-100, refuses <20 judged days)
         ▼
 Streamlit + pydeck dashboard (scorecard · H3 delay hexmaps · route explorer ·
 live map · pipeline ops)          SNS alerting on chain failure
@@ -42,7 +44,7 @@ snapshot data via `make site-data`, deployed on Vercel
 
 Local dev is the same code against Redpanda + MinIO + duckdb (`make up`, dbt
 `--target dev`); cloud is a profile switch. `infra/` is the Terraform for all of it,
-behind a $50 budget alarm; real August cost ran **under $10/week** after the checkpoint-
+behind a $90 budget alarm; real August cost ran **under $10/week** after the checkpoint-
 churn and national-feed cost bugs were found and fixed (the hunt is documented in
 `docs/10-production-gates.md`).
 
@@ -52,7 +54,7 @@ The design rule for gold is **contract over cleanup**: every defect that ever re
 gold got a contract test that fails on the bad shape before the fix counted as done —
 degenerate `trip_uid`s, direction-grain double counts, misdated service days, schedule
 echoes scored as observations. The scorecard itself refuses to emit a number for any
-city with fewer than 20 closed, judged service days in a month; sub-scores with no
+city with fewer than 20 closed, judged service days in its judged window; sub-scores with no
 evidence stay NULL and their weight is renormalised rather than faked. Where a feed
 simply does not publish something (Toronto's disjoint stop namespace, Helsinki's
 AIS-only ferries, agencies that never emit CANCELED), the gap is measured, seeded as a
@@ -106,6 +108,7 @@ architecture:
 | `docs/05-pipeline-walkthrough.md` | end-to-end onboarding, every filter and why |
 | `docs/06-business-answers.md` | the 8 sub-questions with measured answers |
 | `docs/07-plain-english-guide.md` | the whole system in plain language |
+| `docs/08-incident-log.md` | every failure, what it cost, and what was changed |
 | `docs/10-production-gates.md` | quality gates A–G, incident log, verification evidence |
 | `docs/09-backfill-feasibility.md` | why GTFS-RT history cannot be backfilled, only accrued |
 
@@ -116,7 +119,7 @@ architecture:
 | `ingestion/` | config-driven adapters (`config/cities/*.yaml`), poller, fixture recorder |
 | `spark_jobs/` | bronze/silver streaming, static GTFS parser, shared time semantics |
 | `dbt/transit/` | staging → intermediate → marts; macros; contract tests |
-| `orchestration/` | Dagster: 2-hourly chain, freshness tripwire, weather, failure alerting |
+| `orchestration/` | Dagster: 2-hourly drains, twice-daily dbt chain, freshness tripwire, weather, failure alerting |
 | `dashboard/` | Streamlit + pydeck, five pages (internal) |
 | `site/` | Static public site for Vercel; data snapshots from `make site-data` |
 | `tests/` | fixture-decode + unit tests; no live calls |
