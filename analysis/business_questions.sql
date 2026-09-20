@@ -189,6 +189,13 @@ order by 1, 2
 -- Q8. Data completeness — measuring our own sources. Judged only on closed
 -- local days at/after metrics_from, and (since 2026-08-25) only on route-days
 -- scheduling at least var('completeness_min_trips') trips.
+-- [rev 2026-09-20] and only on days the city was still polling. Seven pollers
+-- were retired on 2026-09-15/16; an agency keeps publishing next-day trips for
+-- days nobody watched, so those route-days arrive scheduled and unobserved and
+-- drag the mean down by up to 12 points (Helsinki read 80.7% with them and
+-- 93.1% without). That is a fact about the retirement, not about the feed, so
+-- `retired_day` — the same flag both completeness tests and the scorecard use —
+-- excludes them here too.
 -- ---------------------------------------------------------------------------
 select c.city_name,
        count(*)                                as route_days,
@@ -201,6 +208,7 @@ from TRANSIT.GOLD.FCT_SERVICE_DELIVERY_DAILY d
 join TRANSIT.GOLD.DIM_CITY c on c.city_key = d.city_key
 where d.service_day_closed
   and d.service_date >= d.metrics_from
+  and not d.retired_day
 group by 1
 order by mean_completeness_pct desc
 ;--split--
@@ -213,6 +221,7 @@ with sched as (
            sum(trips_scheduled) as sched,
            sum(trips_observed)  as obs
     from TRANSIT.GOLD.FCT_SERVICE_DELIVERY_DAILY
+    where not retired_day          -- [rev 2026-09-20] see Q8
     group by 1, 2
 )
 select r.city_key, r.route_type,
@@ -232,6 +241,7 @@ with sched as (
     select route_id, sum(trips_scheduled) as sched, sum(trips_observed) as obs
     from TRANSIT.GOLD.FCT_SERVICE_DELIVERY_DAILY
     where city_key = 'sf'
+      and not retired_day          -- [rev 2026-09-20] see Q8
     group by 1
 )
 select split_part(r.route_id, ':', 1)                        as agency,
