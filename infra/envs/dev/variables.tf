@@ -72,8 +72,9 @@ variable "swiss_otd_sa_token" {
 # reporting them as killed feeds four times an hour.
 variable "polling_retired" {
   type = string
-  # Retired 2026-09-14/15 once each city banked its 20 judged days. Left as the
-  # default rather than a tfvars entry so `terraform apply` reproduces the live
-  # state instead of silently restarting six pollers that were stopped on purpose.
-  default = "nyc,boston,toronto,helsinki,dc,sf,zurich"
+  # Retired 2026-09-14/15 once each city banked its 20 judged days; tokyo
+  # followed 2026-09-25 01:01Z at 21. Left as the default rather than a tfvars
+  # entry so `terraform apply` reproduces the live state instead of silently
+  # restarting pollers that were stopped on purpose.
+  default = "nyc,boston,toronto,helsinki,dc,sf,zurich,tokyo"
 }

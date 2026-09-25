@@ -229,7 +229,15 @@ resource "aws_iam_instance_profile" "services" {
 
 locals {
   registry = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com"
-  compose  = <<-YAML
+  # A retired poller keeps its service definition, so `docker compose --profile
+  # retired up -d poller-<city>` can revive it, but leaves the default profile
+  # and never auto-restarts. Without both, transit.service's `compose up -d` at
+  # every boot (and docker's own `restart: always` on daemon start) quietly
+  # restarts every poller that was stopped on purpose.
+  retired_pollers = toset([for c in split(",", var.polling_retired) : trimspace(c) if trimspace(c) != ""])
+  poller_restart  = { for c in ["nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich", "tokyo"] : c => contains(local.retired_pollers, c) ? "\"no\"" : "always" }
+  poller_profiles = { for c in ["nyc", "boston", "toronto", "helsinki", "dc", "sf", "zurich", "tokyo"] : c => contains(local.retired_pollers, c) ? "[\"retired\"]" : "[]" }
+  compose         = <<-YAML
     services:
       # P3: one poller container per live city, same image, city as the only arg
       # (python -m ingestion.poller <city>). Keep in sync with LIVE_CITIES in
@@ -238,7 +246,8 @@ locals {
       poller:
         image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
         command: ["nyc"]
-        restart: always
+        restart: ${local.poller_restart["nyc"]}
+        profiles: ${local.poller_profiles["nyc"]}
         environment: &penv
           KAFKA_BOOTSTRAP: ${var.kafka_private_ip}:9092
           RAW_BUCKET: ${var.raw_bucket}
@@ -246,17 +255,20 @@ locals {
       poller-boston:
         image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
         command: ["boston"]
-        restart: always
+        restart: ${local.poller_restart["boston"]}
+        profiles: ${local.poller_profiles["boston"]}
         environment: *penv
       poller-toronto:
         image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
         command: ["toronto"]
-        restart: always
+        restart: ${local.poller_restart["toronto"]}
+        profiles: ${local.poller_profiles["toronto"]}
         environment: *penv
       poller-helsinki:
         image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
         command: ["helsinki"]
-        restart: always
+        restart: ${local.poller_restart["helsinki"]}
+        profiles: ${local.poller_profiles["helsinki"]}
         environment: *penv
       # P3 batch 2 — keyed cities. API keys come from /opt/transit/secrets.env
       # (WMATA_API_KEY / BAY511_API_TOKEN / SWISS_OTD_TOKEN / SWISS_OTD_SA_TOKEN),
@@ -266,13 +278,15 @@ locals {
       poller-dc:
         image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
         command: ["dc"]
-        restart: always
+        restart: ${local.poller_restart["dc"]}
+        profiles: ${local.poller_profiles["dc"]}
         environment: *penv
         env_file: [/opt/transit/secrets.env]
       poller-sf:
         image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
         command: ["sf"]
-        restart: always
+        restart: ${local.poller_restart["sf"]}
+        profiles: ${local.poller_profiles["sf"]}
         environment: *penv
         env_file: [/opt/transit/secrets.env]
       # [rev 2026-08-25] poller-zurich lands now that the prerequisite chain is
@@ -286,7 +300,8 @@ locals {
       poller-zurich:
         image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
         command: ["zurich"]
-        restart: always
+        restart: ${local.poller_restart["zurich"]}
+        profiles: ${local.poller_profiles["zurich"]}
         environment: *penv
         env_file: [/opt/transit/secrets.env]
       # P4 tokyo: ODPT consumerKey via secrets.env (acl:consumerKey query auth).
@@ -295,7 +310,8 @@ locals {
       poller-tokyo:
         image: ${local.registry}/${aws_ecr_repository.ingestion.name}:latest
         command: ["tokyo"]
-        restart: always
+        restart: ${local.poller_restart["tokyo"]}
+        profiles: ${local.poller_profiles["tokyo"]}
         environment: *penv
         env_file: [/opt/transit/secrets.env]
       postgres:
