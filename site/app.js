@@ -173,14 +173,19 @@ async function renderStandings() {
   const rows = ranked.map((r, i) => {
     const color = cityColor(r.city_key);
     const name = CITIES[r.city_key]?.name ?? r.city_key;
+    // An operator-stated, minute-rounded delay is not measured the way the
+    // others are, so the mark travels with every figure it feeds (docs/06).
+    const star = r.delay_operator_stated
+      ? `<sup class="stated" title="operator-stated delay, rounded to whole minutes — not measured the way the other cities are">*</sup>`
+      : "";
     return `<div class="standing-row">
       <span class="rank mono">${i + 1}</span>
       <span class="city"><span class="dot" style="background:${color}"></span>${name}</span>
       <span class="optional">${sparkline(byCity[r.city_key] ?? [], color)}</span>
       <span class="num mono otp">${r.score_0_100 == null
         ? `<span class="unscored" title="needs 20 judged days">—</span>`
-        : Number(r.score_0_100).toFixed(1)}</span>
-      <span class="num mono">${r.otp_pct == null ? "—" : Number(r.otp_pct).toFixed(1) + "%"}</span>
+        : Number(r.score_0_100).toFixed(1) + star}</span>
+      <span class="num mono">${r.otp_pct == null ? "—" : Number(r.otp_pct).toFixed(1) + "%" + star}</span>
       <span class="num mono">${r.ewt_sec == null ? "—" : r.ewt_sec + "s"}</span>
       <span class="num mono optional">${r.bunching_pct == null ? "—" : r.bunching_pct + "%"}</span>
       <span class="num mono optional">${cancelCell(r)}</span>

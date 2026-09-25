@@ -45,10 +45,9 @@
     </div>
   </div>
   <div class="header-banner">Every figure is a warehouse snapshot captured
-    <span id="as-of-banner" class="mono">—</span>. The warehouse still drains, re-pins and
-    re-scores twice a day. Seven cities have stopped ingesting — six on 2026-09-14 and Zurich on
-    2026-09-15 — each the night it banked the 20 judged days a score needs. Only Tokyo still
-    polls.</div>
+    <span id="as-of-banner" class="mono">—</span>. Ingestion is finished: all eight pollers are
+    stopped — six on 2026-09-14, Zurich on 2026-09-15 and Tokyo on 2026-09-25 — each once its city
+    had banked the 20 judged days a score needs, so every city on this page holds a score.</div>
 </header>
 
 <main id="top">
@@ -78,13 +77,15 @@
     <h2>Reliability, city by city</h2>
     <p class="section-note">Service-weighted across every closed judged day; routes below a 50%
     completeness floor are excluded rather than guessed. A composite 0&ndash;100 score requires 20
-    judged days across a city's judged window, and <strong>seven of the eight have now cleared
-    it</strong> — New York got there first, Zurich crossed last and went straight to the top:
-    <strong>Zurich leads at 93.6</strong>, ahead of Helsinki 92.2, New York 85.8, Boston 81.1,
-    Washington DC 80.1, Toronto 72.7 and SF Bay 60.5. Tokyo has 16: it is the only feed still
-    polling, so it banks its twentieth judged day on 2026-09-23 and until then shows evidence
-    rather than a score — the bar refuses a thin number rather than dressing one up. Every city is rated on its full history: each service day
-    is scored against the timetable that was live that day, not the one published since.</p>
+    judged days across a city's judged window, and <strong>all eight have now cleared it</strong>
+    — New York got there first, Tokyo last. <strong>Tokyo tops the table at 98.8*</strong>, and the
+    asterisk carries the weight: Toei states its own delay and rounds it to whole minutes, and with
+    excess wait and bunching nulled by design its score rests on on-time alone plus a cancellation
+    component its feed cannot fail. <strong>Among the seven cities measured against their own
+    timetable to the second, Zurich leads at 93.6</strong>, ahead of Helsinki 92.2, New York 85.8,
+    Boston 81.1, Washington DC 80.1, Toronto 72.7 and SF Bay 60.5. Every city is rated on its full
+    history: each service day is scored against the timetable that was live that day, not the one
+    published since.</p>
   </div>
   <div class="card">
     <div class="standings" id="standings-rows"></div>
@@ -94,13 +95,18 @@
     <p class="footnote"><b>Tokyo shows a dash for excess wait and bunching on purpose.</b> Both
     compare observed arrivals against the timetable, which only measures something when the two are
     independent. Toei publishes a stated delay instead of an arrival time, so an arrival is
-    reconstructed as schedule&nbsp;+&nbsp;stated delay — and because 91% of those stated delays are
-    exactly zero, <b>90.4% of Tokyo's gaps between consecutive trains are identical to the scheduled
+    reconstructed as schedule&nbsp;+&nbsp;stated delay — and because 92.6% of those stated delays are
+    exactly zero, <b>88.7% of Tokyo's gaps between consecutive trains are identical to the scheduled
     gap</b>, against 0.2&ndash;4.1% everywhere else. Computed anyway it would read 0.7% bunching and
     a 2s wait, best in the fleet, on what is very nearly its own timetable handed back — so it is
     nulled at the fact layer instead, the same way every metric without evidence is. Cancellations
     are blank for an unrelated reason: <span class="mono">odpt:Train</span> has no cancellation
     field at all.</p>
+    <p class="footnote"><b>A feed with no cancellation vocabulary scores a perfect cancellation
+    component.</b> The composite renormalises over the sub-scores that have evidence, but a cancel
+    rate of zero from a feed that cannot say "cancelled" still counts as evidence — New York's and
+    Tokyo's both read 100 on a component worth 20%. Dropped as the unmeasured component it is,
+    New York reads 82.2 and Tokyo 98.1; the order of the table does not change.</p>
   </div>
 </section>
 
@@ -132,7 +138,7 @@
     </div>
     <div class="card">
       <h3>Where the delay mass sits</h3>
-      <div class="sub">Distribution of arrival delay, 30-second bins, share of each city's scored events. Tokyo is the exception to read carefully: Toei states delay rounded to whole minutes, so 90.7% of its 358k scored events land in the zero bin by construction — a coarse ruler, not a thin sample</div>
+      <div class="sub">Distribution of arrival delay, 30-second bins, share of each city's scored events. Tokyo is the exception to read carefully: Toei states delay rounded to whole minutes, so 92.6% of its 821k scored events land in the zero bin by construction — a coarse ruler, not a thin sample</div>
       <div id="dist-grid" class="dist-grid"></div>
     </div>
     <div class="card">
@@ -253,24 +259,25 @@
         <td>Every poll exactly as the agency returned it — protobuf for GTFS-RT, JSON for ODPT</td>
         <td class="num">161 GB<div class="sub">515,314 objects at eight-city peak</div></td>
         <td>Immutable and replayable. A 7-day expiry rule holds it flat instead of unbounded — so
-        it is draining as the seven retired feeds age out: 63 GB across 182,486 objects today.</td>
+        it is draining now that every feed is retired: 8.8 GB across 57,948 objects today, and empty
+        by 2026-10-02.</td>
       </tr>
       <tr>
         <td><b>Bronze</b><div class="sub">Iceberg on S3</div></td>
         <td>Decoded envelopes, one row per record, still untyped and undeduplicated</td>
-        <td class="num">139 GB<div class="sub">119,503 objects</div></td>
+        <td class="num">139 GB<div class="sub">119,770 objects</div></td>
         <td>Keeps everything. No watermark, so nothing here can arrive too late to be kept.</td>
       </tr>
       <tr>
         <td><b>Silver</b><div class="sub">Iceberg on S3</div></td>
         <td>One schema for eight cities: typed, deduplicated, service-date resolved</td>
-        <td class="num">2.95B rows<div class="sub">48.4 GB · 16 tables</div></td>
+        <td class="num">2.96B rows<div class="sub">48.8 GB · 16 tables</div></td>
         <td>Exact-duplicate drop inside a 2-hour watermark, which is why drains run every 2 hours.</td>
       </tr>
       <tr>
         <td><b>Gold</b><div class="sub">Snowflake + dbt</div></td>
         <td>Realtime matched to schedule, delays computed, metrics rolled up</td>
-        <td class="num">421.7M rows<div class="sub">50 models</div></td>
+        <td class="num">422.9M rows<div class="sub">50 models</div></td>
         <td>A metric with no evidence is NULL, never zero. 242 tests run on every build.</td>
       </tr>
       <tr>
@@ -441,7 +448,7 @@
         <li><b>Silver</b><span>Train <span class="mono">Toei.Mita.2031K</span> with <span class="mono">odpt:delay</span> = 0 and a <span class="mono">fromStation</span>. There is no arrival time in the feed at all</span></li>
         <li><b>Match</b><span>Station URNs map to GTFS stop ids, and the train matches its published timetable <span class="mono">…Mita.2031K.Weekday</span>. Arrival is detected by watching <span class="mono">fromStation</span> advance along the line across 16 snapshots</span></li>
         <li><b>Gold</b><span>Stop <span class="mono">226</span>, sequence 2, scheduled <span class="mono">11:52:00</span>, actual = schedule + stated delay → <span class="mono">11:52:00</span>, <b>on time</b>, method <span class="mono">odpt_stated</span></span></li>
-        <li><b>Chart</b><span>Tokyo's delay distribution is a single spike: <b>91.1% of its events are exactly 0 seconds</b> and none are negative, because Toei reports punctuality in whole minutes and calls on-time zero</span></li>
+        <li><b>Chart</b><span>Tokyo's delay distribution is a single spike: <b>92.6% of its events are exactly 0 seconds</b> and none are negative, because Toei reports punctuality in whole minutes and calls on-time zero</span></li>
       </ol>
     </details>
 

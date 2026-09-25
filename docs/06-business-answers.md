@@ -38,13 +38,31 @@ joined into gold (Q7 is live).
 > Which cities run the most reliable public transit — and what makes them
 > reliable?
 
-Not answerable yet as a single score — and now that is a *design guarantee*
-rather than a gap: `fct_city_scorecard` exists, is built by every
-chain run, and deliberately holds ZERO rows until a city accrues 20 closed
-judged days across its judged window ([rev 2026-09-10] window grain — the month
-boundary was measuring the calendar, not the evidence; first cities cross 20
-around Sep 12-14). Every input to it exists and is measured below, each
-of the eight sub-questions from `docs/transit-pulse-plan.md` §1 with its
+**[rev 2026-09-25] Answered for all eight cities.** `fct_city_scorecard` holds no row
+until a city has 20 closed judged days across its judged window; New York crossed first
+on 09-11, Tokyo last on 09-24, and every poller is now retired. From the Headline query
+at the end of `analysis/business_questions.sql`:
+
+| City | Score | Judged days | Window | Wait | On-time | Cancel | Bunching |
+|---|---:|---:|---|---:|---:|---:|---:|
+| Tokyo* | **98.8** | 21 | 09-04 – 09-24 | — | 98.1 | 100.0 | — |
+| Zurich | **93.6** | 21 | 08-26 – 09-15 | 87.5 | 96.4 | 99.4 | 94.3 |
+| Helsinki | 92.2 | 22 | 08-24 – 09-14 | 94.9 | 81.3 | 100.0 | 97.4 |
+| New York | 85.8 | 23 | 08-23 – 09-14 | 92.1 | 67.8 | 100.0 | 87.9 |
+| Boston | 81.1 | 22 | 08-24 – 09-14 | 89.3 | 56.6 | 98.2 | 88.3 |
+| Washington DC | 80.1 | 21 | 08-25 – 09-14 | 85.4 | 55.0 | 100.0 | 91.6 |
+| Toronto | 72.7 | 22 | 08-24 – 09-14 | 70.9 | 50.0 | 100.0 | 86.0 |
+| SF Bay Area | 60.5 | 21 | 08-25 – 09-14 | 26.1 | 59.9 | 97.2 | 93.4 |
+
+Two readings before quoting the table. **Tokyo's 98.8 is not comparable** in the way the
+others are: its delay is operator-stated and minute-rounded (see "Tokyo's punctuality
+number" below), its wait and bunching are NULL by design, so its score rests on on-time
+and a cancellation component. **And a cancellation sub-score of 100 is not always
+evidence**: New York's and Tokyo's feeds have no CANCELED vocabulary, so their zero cancel
+rate is a feed property, yet it still counts. Dropped as unmeasured, New York reads 82.2
+and Tokyo 98.1 — the order does not change. Among the seven cities measured against
+their own timetable to the second, **Zurich leads at 93.6**. Every input is measured
+below, each of the eight sub-questions from `docs/transit-pulse-plan.md` §1 with its
 current answer.
 
 ---

@@ -254,4 +254,24 @@ where r.city_key = 'sf'
 group by 1
 having sum(case when s.sched > 0 then 1 else 0 end) > 0
 order by scheduled desc
+;--split--
+
+-- ---------------------------------------------------------------------------
+-- Headline. The composite 0-100 per city, straight from fct_city_scorecard, with
+-- the four sub-scores it was built from so a reader can see what each city's
+-- number rests on (a NULL sub-score took no part in it). [rev 2026-09-25] All
+-- eight cities hold a row: every poller is retired, the last (Tokyo) on 09-25.
+-- ---------------------------------------------------------------------------
+select c.city_name,
+       s.score_0_100,
+       s.judged_days,
+       s.window_start,
+       s.window_end,
+       s.s_wait,
+       s.s_otp,
+       s.s_cancel,
+       s.s_bunch
+from TRANSIT.GOLD.FCT_CITY_SCORECARD s
+join TRANSIT.GOLD.DIM_CITY c on c.city_key = s.city_key
+order by s.score_0_100 desc
 ;

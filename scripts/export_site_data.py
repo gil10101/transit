@@ -43,15 +43,20 @@ trips = q("""
     from fct_service_delivery_daily
 """)[0]
 
-# identical definitions to dashboard/app/Home.py "provisional metrics"
+# identical definitions to dashboard/app/Home.py "provisional metrics".
+# [rev 2026-09-25] every eligibility set here carries `not retired_day`, the
+# same gate as fct_city_scorecard: with all eight pollers retired, a day cut
+# short by our own decision must never count as a judged day.
 standings = q("""
     with eligible as (
         select d.city_key, d.route_id, d.service_date,
                d.trips_scheduled, d.trips_observed, d.trips_cancelled,
+               d.trips_cancelled_unscheduled,
                d.completeness_pct
         from fct_service_delivery_daily d
         where d.service_day_closed
           and d.service_date >= d.metrics_from
+          and not d.retired_day
           and coalesce(d.completeness_pct, 0) >= 0.50
     )
     select
@@ -74,7 +79,13 @@ standings = q("""
         -- A feed that never emits CANCELED and a feed that emits it and cancelled
         -- nothing are different facts, and 0% renders them identically. The
         -- standings row shows a dash for the first (docs/06 Q6).
-        (sum(e.trips_cancelled) > 0) as emits_cancels,
+        -- [rev 2026-09-25] counted over BOTH buckets. The cancelled numerator
+        -- matches through the newest timetable, so after a static rotation a
+        -- historical cancel can land in _unscheduled instead — Helsinki and DC
+        -- read zero matched cancels after the 09-20 rotation while their feeds
+        -- still carry 1,389 and 415 CANCELED trips. Whether a feed SAYS
+        -- cancelled is feed truth, independent of which timetable matched it.
+        (sum(e.trips_cancelled + e.trips_cancelled_unscheduled) > 0) as emits_cancels,
         -- the raw count travels with the rate: round(pct, 2) turns Toronto's 4
         -- cancellations in 661,306 trips into 0.0 before the page can tell that
         -- apart from a feed that cancelled nothing
@@ -83,8 +94,14 @@ standings = q("""
         -- be IN the table the page ranks by. Showing an on-time ranking beside a
         -- sentence naming composite scores put Tokyo first at 97.0% next to text
         -- saying Helsinki leads at 92.2, with the score nowhere on screen.
-        max(sc.score_0_100) as score_0_100
+        max(sc.score_0_100) as score_0_100,
+        -- Tokyo's delay is the operator's own, rounded to whole minutes, so its
+        -- on-time rate is not measured the way the other seven are. The row must
+        -- say so wherever the city is ranked (docs/06); the flag comes from
+        -- dim_city rather than a hard-coded city name.
+        max(c.rt_delay_source) = 'odpt_stated' as delay_operator_stated
     from eligible e
+    join dim_city c on c.city_key = e.city_key
     left join fct_route_reliability_daily r
       on r.city_key = e.city_key and r.route_id = e.route_id
      and r.service_date = e.service_date
@@ -117,6 +134,7 @@ daily = q("""
         from fct_service_delivery_daily d
         where d.service_day_closed
           and d.service_date >= d.metrics_from
+          and not d.retired_day
           and coalesce(d.completeness_pct, 0) >= 0.50
     )
     select e.city_key, e.service_date,
@@ -247,6 +265,7 @@ ELIGIBLE = """
         from fct_service_delivery_daily d
         where d.service_day_closed
           and d.service_date >= d.metrics_from
+          and not d.retired_day
           and coalesce(d.completeness_pct, 0) >= 0.50
     )
 """
@@ -339,7 +358,7 @@ cancellations = q(
            round(100 * cast(sum(d.trips_cancelled) as double)
                / nullif(sum(d.trips_scheduled), 0), 2) as cancel_pct,
            sum(d.trips_cancelled) as cancelled,
-           (sum(d.trips_cancelled) > 0) as emits_cancels
+           (sum(d.trips_cancelled + d.trips_cancelled_unscheduled) > 0) as emits_cancels
     from eligible e
     join fct_service_delivery_daily d
       on d.city_key = e.city_key and d.route_id = e.route_id

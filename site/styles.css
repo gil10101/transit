@@ -407,6 +407,7 @@ h2 {
 .standing-row .num { text-align: right; font-size: 13px; }
 .standing-row .otp { font-size: 17px; font-weight: 500; }
 .standing-row .unscored { font-size: 15px; color: var(--muted-foreground); }
+.standing-row .stated { font-size: 0.7em; margin-left: 1px; color: var(--muted-foreground); cursor: help; }
 .spark { display: block; }
 .spark-empty { color: var(--muted-foreground); font-size: 11px; }
 
