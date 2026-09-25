@@ -294,7 +294,13 @@ Four columns carry policy, not description:
   poller is stopped after it banks 20 judged days. From that date
   `fct_service_delivery_daily.retired_day` is true: both completeness tests skip the row and
   the scorecard counts it in neither its eligible nor its excluded ledger. Empty while a city
-  still polls. [rev 2026-09-16]
+  still polls. [rev 2026-09-16] [rev 2026-09-25] It also caps the static-version pin
+  (`static_version_pin`): a retired city's schedule stays the newest version staged before
+  this date, so a later Sunday refresh cannot re-match its history. Tokyo, the last city,
+  retired 2026-09-25 mid-service-day, so that partial day is retired rather than judged.
+  The seed ships inside the Dagster image — every chain re-seeds from it — so a retirement
+  is live only once the image is rebuilt and deployed, not when `dbt seed` runs from a
+  laptop.
 
 ### `fct_stop_events` — atomic fact
 **Grain:** one finalized stop visit. **Unique key:** `(city_key, service_date, trip_uid, stop_sequence)`.

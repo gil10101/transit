@@ -663,3 +663,42 @@ publish next-day trips before midnight, so silver holds schedulable trips for a 
 we chose never to observe; the coverage test read 0 gold against them as a lost day. It now
 skips days at or after `retired_from`, like the completeness tests. That is the third tripwire
 the retirement had to be taught; the checklist in docs/05 §10 lists all of them.
+
+## 2026-09-25 · Tokyo retired, and the retirement found three more things
+Tokyo banked its 21st judged day on 2026-09-24 and scored 98.8; its poller was stopped
+2026-09-25 01:01Z (10:01 local), so `retired_from` = 2026-09-25 and that partial day is
+retired rather than judged. Every poller is now retired.
+
+**The seed ships in the image.** The first chain after the retirement re-seeded `dim_city`
+from the CSV baked into the Dagster image and quietly erased Tokyo's `retired_from`; a
+`dbt seed` from a laptop lasts only until the next chain. Left alone, the 23:05Z chain would
+have read the closed partial 09-25 as a dead feed and gone red. A retirement is live only
+once the image is rebuilt and deployed (docs/05 §`retired_from`).
+
+**The image was unpinned.** Rebuilding it pulled SQLAlchemy 2.1, whose `postgresql://`
+default driver is now psycopg 3 — not installed — so daemon and webserver crash-looped on
+boot and every schedule stopped for about ten minutes, until the box was rolled back to the
+previous image by re-tagging it. Dependencies are now pinned to the versions that ran green,
+and the built image is checked for the psycopg2 driver before it is pushed.
+
+**A static refresh after retirement moved retired cities' scores.** The Sunday 2026-09-20
+refresh landed five days after seven cities retired. Stop events were safe
+(`int_stop_events_finalized` is incremental and frozen), but `int_trip_matching` is rebuilt
+every chain against the newest static, so a timetable none of those cities was ever observed
+against became the one their history was matched through: 142k historical trips stopped
+resolving, Boston's matched cancellations fell by more than half and its score moved
+81.1 → 81.3, and Helsinki's and DC's cancels dropped out of the rate entirely (the site then
+showed them as feeds that never emit CANCELED). Fix: `static_version_pin` caps a retired
+city's version at the newest staged before its `retired_from`. After one chain every figure
+came back exactly — `int_trip_matching` 2,091,844 rows, `int_gtfs_scheduled_stop_times`
+58,317,471, Boston 7,409 matched cancels and 81.1, Helsinki 168, DC 11, Zurich 4,642.
+Future refreshes can no longer touch a retired city.
+
+Also: every retired poller now carries `restart: "no"` and `profiles: ["retired"]` in the
+compose file, and the eight stopped containers were set `--restart=no`. Before, a reboot —
+which the box does on its own when impaired — would have restarted all eight via
+`transit.service`'s `compose up -d`.
+
+Still open, not ours to decide: with every city retired the freshness tripwire fails four
+times an hour by design (it refuses to probe nothing and pass), and stopping its schedule is
+an operator action.

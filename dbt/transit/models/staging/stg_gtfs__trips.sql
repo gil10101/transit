@@ -2,8 +2,9 @@
 -- origin-time token RT uses: <schedule>_<HHMMSS-centimin>_<route>..<dir><track>.
 
 with latest as (
-    select city, {{ static_version_pin('city', 'max(gtfs_version_id)') }} as gtfs_version_id
-    from {{ source('silver', 'gtfs_static_trips') }}
+    select v.city, {{ static_version_pin('v.city', 'rc.retired_from', 'v.gtfs_version_id') }} as gtfs_version_id
+    from {{ source('silver', 'gtfs_static_trips') }} v
+    left join {{ ref('dim_city') }} rc on rc.city_key = v.city
     group by 1
 )
 

@@ -19,9 +19,10 @@ with observed_dates as (
 ),
 
 latest as (
-    select city_key, {{ static_version_pin('city_key', 'max(gtfs_version_id)') }} as gtfs_version_id
-    from {{ ref('int_gtfs_versions') }}
-    group by city_key
+    select v.city_key, {{ static_version_pin('v.city_key', 'rc.retired_from', 'v.gtfs_version_id') }} as gtfs_version_id
+    from {{ ref('int_gtfs_versions') }} v
+    left join {{ ref('dim_city') }} rc on rc.city_key = v.city_key
+    group by v.city_key
 ),
 
 by_calendar as (
