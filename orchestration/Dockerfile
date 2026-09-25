@@ -8,10 +8,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl git && rm 
 # uv resolves the whole set in one shot. dagster-dbt drives dbt-snowflake for
 # the prod target; boto3 talks to EMR Serverless / S3 / SSM; the snowflake
 # connector serves the refresh + weather assets.
+# [rev 2026-09-25] Pinned to the versions the box ran green on. Unpinned, a
+# rebuild picked up SQLAlchemy 2.1, whose postgresql:// default driver is now
+# psycopg 3 — not installed — so daemon and webserver crash-looped on boot
+# ("No module named 'psycopg'") and every schedule stopped until a rollback.
+# Bump these on purpose, never by rebuilding.
 RUN pip install --no-cache-dir uv && uv pip install --system --no-cache \
-    "dagster>=1.9,<2" "dagster-webserver>=1.9,<2" "dagster-postgres" \
-    "dagster-dbt" "dbt-snowflake>=1.9" "boto3>=1.34" \
-    "snowflake-connector-python" "requests>=2.32" "pyyaml>=6.0"
+    "dagster==1.13.20" "dagster-webserver==1.13.20" "dagster-postgres==0.29.20" \
+    "dagster-dbt==0.29.20" "dbt-core==1.11.14" "dbt-snowflake==1.12.0" \
+    "SQLAlchemy==2.0.52" "psycopg2-binary==2.9.12" "boto3==1.43.85" \
+    "snowflake-connector-python==4.7.2" "requests>=2.32" "pyyaml>=6.0"
 
 ENV DAGSTER_HOME=/opt/dagster/home
 WORKDIR /opt/dagster/app
