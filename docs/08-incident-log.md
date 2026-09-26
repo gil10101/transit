@@ -702,3 +702,34 @@ which the box does on its own when impaired — would have restarted all eight v
 Still open, not ours to decide: with every city retired the freshness tripwire fails four
 times an hour by design (it refuses to probe nothing and pass), and stopping its schedule is
 an operator action.
+
+## 2026-09-26 · The final audit: a standings fan-out, and DC's three erased bus days
+The closeout pass checked every number on the public page against gold, S3, CloudWatch,
+Cost Explorer and the broker. Two findings were in the data rather than the copy.
+
+**The standings export double-counted trips and cancellations.** It joined route-grain
+`fct_service_delivery_daily` to direction-grain `fct_route_reliability_daily`, so every
+delivery row repeated once per direction: judged observed trips summed to 6.74M, against
+3.17M once fixed, and SF's cancel rate read 2.85% in the standings beside 2.79% in the findings on
+the same page. On-time, excess wait and bunching were unaffected — each reliability row was
+still counted once. Fix: reliability collapses to the route-day before the join. The two
+cancel columns now agree for every city.
+
+**DC's buses are unscored on 2026-09-10..12.** Those three judged days carry 1.62M stop
+events of which 7% are scored — the Metrorail share; every Metrobus event has volume and no
+delay. This is the erosion the 2026-09-11 rotation freeze was written to prevent (DC's
+calendar ending 09-12 was named there as the next case); the days were recomputed against the
+09-13 static anyway, whose calendar does not cover them. Impact: DC's on-time share is 54.98%
+with the three days and 54.89% without, and its score is 80.1 either way. Not repaired — the
+fix is the `repair_city` / `static_version_override` recompute against `dc-20260906-80dfa7e8`,
+and with the cloud about to be decommissioned the owner chose to record it instead. Checked for
+every city: no other judged day scores under 60% of its events.
+
+Copy fixes from the same pass, each re-measured before it changed: raw peak 162 GB / 531,745
+objects (CloudWatch daily max), feeds-table stops as distinct stops served, Toronto 225 of 230
+routes observed, ten SF operators without realtime, the journey records whose static ids moved
+with the version cap (NYC, Helsinki, Zurich — now an exact match), DC's journey moved to a
+scored Metrorail record, Kafka's real message cap (900 KB, poller-enforced), Tokyo 51 KB per
+poll, and AWS gross $78.21 for 1–25 Sep ($0.16 after credits). Map vehicles now come from a
+fixed moment — 08:30 local on each city's last judged day — because "the latest drained
+window" is empty once every poller is retired.

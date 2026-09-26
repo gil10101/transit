@@ -58,6 +58,22 @@ standings = q("""
           and d.service_date >= d.metrics_from
           and not d.retired_day
           and coalesce(d.completeness_pct, 0) >= 0.50
+    ),
+    -- [rev 2026-09-26] reliability is keyed per DIRECTION, delivery per route:
+    -- joining them raw repeated every delivery row once per direction, so
+    -- observed trips, cancellations and completeness read ~2x (SF cancels showed
+    -- 2.85% here against 2.79% in answers.json). Collapse to the route-day first;
+    -- the weighted sums below are unchanged by it.
+    rel as (
+        select city_key, route_id, service_date,
+               sum(otp_pct * banded_events) as otp_w,
+               sum(case when otp_pct is not null then banded_events end) as otp_n,
+               sum(ewt_sec * ewt_gap_count) as ewt_w,
+               sum(case when ewt_sec is not null then ewt_gap_count end) as ewt_n,
+               sum(bunching_pct * rated_gaps) as bunch_w,
+               sum(case when bunching_pct is not null then rated_gaps end) as bunch_n
+        from fct_route_reliability_daily
+        group by 1, 2, 3
     )
     select
         e.city_key,
@@ -65,15 +81,9 @@ standings = q("""
         sum(e.trips_observed) as observed_trips,
         round(100 * sum(e.completeness_pct * e.trips_scheduled)
             / nullif(sum(e.trips_scheduled), 0), 1) as completeness_pct,
-        round(100 * sum(r.otp_pct * r.banded_events)
-            / nullif(sum(case when r.otp_pct is not null then r.banded_events end), 0), 1)
-            as otp_pct,
-        round(sum(r.ewt_sec * r.ewt_gap_count)
-            / nullif(sum(case when r.ewt_sec is not null then r.ewt_gap_count end), 0))
-            as ewt_sec,
-        round(100 * sum(r.bunching_pct * r.rated_gaps)
-            / nullif(sum(case when r.bunching_pct is not null then r.rated_gaps end), 0), 1)
-            as bunching_pct,
+        round(100 * sum(r.otp_w) / nullif(sum(r.otp_n), 0), 1) as otp_pct,
+        round(sum(r.ewt_w) / nullif(sum(r.ewt_n), 0)) as ewt_sec,
+        round(100 * sum(r.bunch_w) / nullif(sum(r.bunch_n), 0), 1) as bunching_pct,
         round(100 * cast(sum(e.trips_cancelled) as double)
             / nullif(sum(e.trips_scheduled), 0), 2) as cancel_pct,
         -- A feed that never emits CANCELED and a feed that emits it and cancelled
@@ -96,13 +106,14 @@ standings = q("""
         -- saying Helsinki leads at 92.2, with the score nowhere on screen.
         max(sc.score_0_100) as score_0_100,
         -- Tokyo's delay is the operator's own, rounded to whole minutes, so its
-        -- on-time rate is not measured the way the other seven are. The row must
-        -- say so wherever the city is ranked (docs/06); the flag comes from
-        -- dim_city rather than a hard-coded city name.
+        -- on-time rate is not measured the way the other seven are (docs/06). The
+        -- flag comes from dim_city rather than a hard-coded city name.
+        -- [rev 2026-09-26] the public page no longer prints a marker for it: the
+        -- owner chose numbers without caveats. The flag stays in the export.
         max(c.rt_delay_source) = 'odpt_stated' as delay_operator_stated
     from eligible e
     join dim_city c on c.city_key = e.city_key
-    left join fct_route_reliability_daily r
+    left join rel r
       on r.city_key = e.city_key and r.route_id = e.route_id
      and r.service_date = e.service_date
     left join fct_city_scorecard sc
@@ -151,18 +162,23 @@ daily = q("""
 dump("daily.json", {"as_of": AS_OF, "rows": daily})
 
 # --- hourly.json -----------------------------------------------------------
+# [rev 2026-09-26] gated on judged route-days like every other standings
+# figure; it was closed days only, so retired half-days and routes under the
+# completeness floor still reached the chart the page calls "judged days".
 hourly = q("""
-    with closed as (
-        select distinct city_key, service_date
+    with eligible as (
+        select city_key, route_id, service_date
         from fct_service_delivery_daily
         where service_day_closed and service_date >= metrics_from
+          and not retired_day and coalesce(completeness_pct, 0) >= 0.50
     )
     select e.city_key, e.local_hour,
            round(100 * avg(case when e.otp_band = 'on_time' then 1.0 else 0.0 end), 1)
                as otp_pct,
            count(*) as events
     from fct_stop_events e
-    join closed c on c.city_key = e.city_key and c.service_date = e.service_date
+    join eligible c on c.city_key = e.city_key and c.route_id = e.route_id
+     and c.service_date = e.service_date
     where e.otp_band is not null
       and e.local_hour is not null  -- no arrival time, no hour
     group by 1, 2
@@ -379,6 +395,144 @@ dump(
     },
 )
 
+# --- extras.json: four cuts the standings can't show, same judged-day gate ---
+# late: how far the delay distribution reaches, not just how much of it lands
+# inside the on-time window.
+extras_late = q(
+    ELIGIBLE
+    + """
+    select f.city_key, count(*) as events,
+           round(approx_percentile(f.delay_arr_sec, 0.50)) as p50,
+           round(approx_percentile(f.delay_arr_sec, 0.75)) as p75,
+           round(approx_percentile(f.delay_arr_sec, 0.90)) as p90,
+           round(approx_percentile(f.delay_arr_sec, 0.95)) as p95,
+           round(avg(f.delay_arr_sec)) as mean_sec
+    from fct_stop_events f
+    join eligible e
+      on e.city_key = f.city_key and e.route_id = f.route_id
+     and e.service_date = f.service_date
+    where f.otp_band is not null and f.delay_arr_sec is not null
+    group by 1
+    order by 1
+"""
+)
+
+# rain: a wet hour has >= 0.5 mm of precipitation. Rain is not spread evenly
+# over the day, so the dry baseline is reweighted to the hours it actually
+# rained — a city whose showers fell at rush hour is compared with its own dry
+# rush hours, not with a dry average that includes 3am.
+WET_MM = 0.5
+rain_rows = q(
+    ELIGIBLE
+    + f"""
+    select f.city_key, f.local_hour,
+           iff(w.precip_mm >= {WET_MM}, 'wet', 'dry') as sky,
+           count(*) as n,
+           count_if(f.otp_band = 'on_time') as on_time
+    from fct_stop_events f
+    join eligible e
+      on e.city_key = f.city_key and e.route_id = f.route_id
+     and e.service_date = f.service_date
+    join fct_weather_hourly w
+      on w.city_key = f.city_key and w.local_date = f.local_date
+     and w.local_hour = f.local_hour
+    where f.otp_band is not null
+    group by 1, 2, 3
+"""
+)
+extras_rain = []
+for city in sorted({r["city_key"] for r in rain_rows}):
+    cells = {(r["local_hour"], r["sky"]): r for r in rain_rows if r["city_key"] == city}
+    wet = [v for (_, sky), v in cells.items() if sky == "wet"]
+    wet_n = sum(v["n"] for v in wet)
+    if wet_n < 5000:  # too few wet arrivals to say anything about rain
+        continue
+    expected = 0.0
+    for (hour, sky), v in cells.items():
+        dry = cells.get((hour, "dry"))
+        if sky == "wet" and dry and dry["n"]:
+            expected += v["n"] * dry["on_time"] / dry["n"]
+    extras_rain.append(
+        {
+            "city_key": city,
+            "wet_events": wet_n,
+            "wet_otp": round(100 * sum(v["on_time"] for v in wet) / wet_n, 1),
+            "dry_otp": round(100 * expected / wet_n, 1),
+        }
+    )
+
+# along: median delay by how far along its trip the vehicle is, first stop = 0
+# and last = 1, in tenths.
+extras_along = q(
+    ELIGIBLE
+    + """
+    , scored as (
+        select f.city_key, f.service_date, f.trip_uid, f.stop_sequence, f.delay_arr_sec
+        from fct_stop_events f
+        join eligible e
+          on e.city_key = f.city_key and e.route_id = f.route_id
+         and e.service_date = f.service_date
+        where f.otp_band is not null and f.delay_arr_sec is not null
+    ),
+    trip as (
+        select city_key, service_date, trip_uid,
+               min(stop_sequence) as lo, max(stop_sequence) as hi
+        from scored
+        group by 1, 2, 3
+    ),
+    ev as (
+        select s.city_key, s.delay_arr_sec,
+               (s.stop_sequence - t.lo) / nullif(t.hi - t.lo, 0) as progress
+        from scored s
+        join trip t
+          on t.city_key = s.city_key and t.service_date = s.service_date
+         and t.trip_uid = s.trip_uid
+    )
+    select city_key, cast(least(9, floor(progress * 10)) as int) as decile,
+           count(*) as events,
+           round(approx_percentile(delay_arr_sec, 0.5)) as p50
+    from ev
+    where progress is not null
+    group by 1, 2
+    order by 1, 2
+"""
+)
+
+# spread: every route with enough evidence, so the page can show the whole
+# distribution of a city's routes rather than one average.
+extras_routes = q(
+    ELIGIBLE
+    + """
+    select r.city_key, r.route_id,
+           max(coalesce(dr.route_short_name, r.route_id)) as label,
+           max(r.mode) as mode,
+           sum(r.banded_events) as events,
+           round(100 * sum(r.otp_pct * r.banded_events)
+               / nullif(sum(case when r.otp_pct is not null then r.banded_events end), 0), 1)
+               as otp_pct
+    from fct_route_reliability_daily r
+    join eligible e
+      on e.city_key = r.city_key and e.route_id = r.route_id
+     and e.service_date = r.service_date
+    left join dim_route dr on dr.route_key = r.route_key
+    group by 1, 2
+    having sum(r.banded_events) >= 2000
+       and sum(case when r.otp_pct is not null then r.banded_events end) > 0
+    order by 1, otp_pct
+"""
+)
+dump(
+    "extras.json",
+    {
+        "as_of": AS_OF,
+        "wet_mm": WET_MM,
+        "late": extras_late,
+        "rain": extras_rain,
+        "along": extras_along,
+        "routes": extras_routes,
+    },
+)
+
 # --- storage.json: what each city put in the warehouse ----------------------
 # Per city: the mode mix of its finalized stop events, its silver and gold row
 # counts, distinct trips/routes/stops/vehicles, and every service day of data.
@@ -408,10 +562,13 @@ storage_days = q("""
     group by 1, 2
     order by 1, 2
 """)
+# [rev 2026-09-26] routes and stops count agency ids, not SCD2 keys: a route or
+# stop that outlived a timetable rotation holds one key per version, which put
+# Toronto at 14,491 stops.
 storage_totals = q("""
     select city_key, count(*) as events, count(otp_band) as scored,
-           count(distinct trip_uid) as trips, count(distinct route_key) as routes,
-           count(distinct stop_key) as stops, count(distinct service_date) as days
+           count(distinct trip_uid) as trips, count(distinct route_id) as routes,
+           count(distinct stop_id) as stops, count(distinct service_date) as days
     from fct_stop_events
     group by 1
 """)
@@ -591,13 +748,27 @@ for city in CITIES:
         """)
     }
 
-    # latest fix per vehicle from the most recent drained window
+    # [rev 2026-09-26] every poller is retired, so "the most recent drained
+    # window" is empty for all of them. The map now shows one fixed moment per
+    # city instead: the last fix per vehicle in the five minutes to 08:30 local
+    # on its last judged day, a morning peak every retirement left intact.
     data["vehicles"] = q(f"""
-        select route_id, lon, lat, bearing
-        from TRANSIT.SILVER.VEHICLE_POSITIONS
-        where city='{city}' and lat is not null
-          and fetched_at > dateadd(hour, -3, current_timestamp())
-        qualify row_number() over (partition by vehicle_id order by ts_utc desc) = 1
+        with lj as (
+            select max(service_date) as d from fct_service_delivery_daily
+            where city_key='{city}' and service_day_closed and service_date >= metrics_from
+              and not retired_day and coalesce(completeness_pct, 0) >= 0.5
+        ),
+        t as (
+            select lj.d, convert_timezone(c.iana_tz, 'UTC',
+                       timestamp_ntz_from_parts(lj.d, time '08:30:00')) as t_utc
+            from lj join dim_city c on c.city_key = '{city}'
+        )
+        select v.route_id, v.lon, v.lat, v.bearing
+        from TRANSIT.SILVER.VEHICLE_POSITIONS v, t
+        where v.city='{city}' and v.lat is not null
+          and v.service_date between dateadd(day, -1, t.d) and dateadd(day, 1, t.d)
+          and v.ts_utc between dateadd(minute, -5, t.t_utc) and t.t_utc
+        qualify row_number() over (partition by v.vehicle_id order by v.ts_utc desc) = 1
     """)
 
     # stop dots colored by mean delay on the latest service day with events

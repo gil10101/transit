@@ -18,7 +18,7 @@
 <script defer src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js" integrity="sha384-nKUDlg+fT0U/eEt4KWP9n034kLe/eVj6k7CVjbu6qfRhJdEyinlGajS9+9AU+UZ5" crossorigin="anonymous"></script>
 <script defer src="https://unpkg.com/deck.gl@9.0.36/dist.min.js" integrity="sha384-w/54/rLWDJgv9c3QdtRYUtL5h1sXLHGM4wH9frLq+CMEpTUpzCYAYpUsxtgPylpc" crossorigin="anonymous"></script>
 <script>try{var m=document.cookie.match(/(?:^|;\s*)theme=(light|dark)/);var t=m?m[1]:localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
-<link rel="stylesheet" href="styles.css?v=9">
+<link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
 
@@ -53,7 +53,7 @@
 
 <!-- ======================= hero ======================= -->
 <section class="hero">
-  <div id="hero-map" aria-label="New York subway network drawn from the warehouse: every route, station delays, and the latest vehicle fixes"></div>
+  <div id="hero-map" aria-label="New York subway network drawn from the warehouse: every route and station delays"></div>
   <div class="hero-track">
   <div class="hero-panel">
     <div class="eyebrow">TRANSIT PULSE</div>
@@ -160,6 +160,45 @@
   </div>
 </section>
 
+<!-- ======================= deeper ======================= -->
+<section class="section reveal" id="deeper">
+  <div class="section-head">
+    <div class="eyebrow">DEEPER · FOUR MORE CUTS</div>
+    <h2>Beyond the on-time share</h2>
+    <p class="section-note">The same judged days as the standings, cut four more ways. Hover any
+    mark for its numbers.</p>
+  </div>
+  <div class="card-grid two">
+    <div class="card">
+      <h3>How late is late?</h3>
+      <div class="sub">Delay of scored arrivals: the dot is the median, the bar runs to the 90th
+      percentile, the tick marks the 75th</div>
+      <div id="deeper-late" class="rb"></div>
+    </div>
+    <div class="card">
+      <h3>Does rain slow it down?</h3>
+      <div class="sub">On-time share in hours with at least 0.5 mm of rain, against the same hours
+      of the day when it was dry</div>
+      <div id="deeper-rain" class="rb"></div>
+    </div>
+    <div class="card">
+      <h3>Does lateness build along the line?</h3>
+      <div class="sub">Median delay by how far along its trip the vehicle is, first stop to last</div>
+      <div class="chart-wrap">
+        <svg id="along-chart" class="linechart" role="img" aria-label="Line chart of median delay by position along the trip for eight cities"></svg>
+        <div class="tooltip" id="along-tooltip" hidden></div>
+      </div>
+      <div class="mini-legend" id="along-legend"></div>
+    </div>
+    <div class="card">
+      <h3>Is reliability even across a city?</h3>
+      <div class="sub">Every route with at least 2,000 scored arrivals, one dot each, by on-time
+      share; the shaded band holds the middle 80% of a city's routes</div>
+      <div id="deeper-spread" class="rb"></div>
+    </div>
+  </div>
+</section>
+
 <!-- ======================= network maps ======================= -->
 <div class="band">
 <section class="section reveal" id="network">
@@ -168,8 +207,9 @@
       <div class="eyebrow">NETWORK · THE WAREHOUSE, DRAWN</div>
       <h2>Every route, from static GTFS to gold</h2>
       <p class="section-note" id="network-note">Route paths from each agency's static feed,
-      stations colored by measured mean delay on the latest full service day, plus the last
-      fix per vehicle from the most recent drained window.</p>
+      stations colored by measured mean delay on the latest full service day, plus every
+      vehicle's position at 08:30 local on the city's last judged day, where the feed publishes
+      positions.</p>
     </div>
     <div class="city-tabs" id="city-tabs" role="tablist"></div>
   </div>
@@ -234,10 +274,9 @@
       <tr>
         <td><b>Raw</b><div class="sub">S3, verbatim</div></td>
         <td>Every poll exactly as the agency returned it — protobuf for GTFS-RT, JSON for ODPT</td>
-        <td class="num">161 GB<div class="sub">515,314 objects at eight-city peak</div></td>
-        <td>Immutable and replayable. A 7-day expiry rule holds it flat instead of unbounded — so
-        it is draining now that every feed is retired: 8.8 GB across 57,948 objects today, and empty
-        by 2026-10-02.</td>
+        <td class="num">162 GB<div class="sub">531,745 objects at peak</div></td>
+        <td>Immutable and replayable. A 7-day expiry rule held it flat instead of unbounded, and
+        with every feed retired it drains to empty.</td>
       </tr>
       <tr>
         <td><b>Bronze</b><div class="sub">Iceberg on S3</div></td>
@@ -274,11 +313,10 @@
   <div class="section-head">
     <div class="eyebrow">FEEDS · WHAT EACH CITY SENDS</div>
     <h2>Thirty endpoints, eight shapes</h2>
-    <p class="section-note">No two agencies publish the same thing. Volumes are each city's last
-    full seven days of raw polling — the 7-day expiry rule is draining the retired cities' archives
-    now, so these are the figures from while each was live — and a feed's size says more about how
-    it is published than about how much service the city runs — Zurich ships a whole national network on every poll, Tokyo ships one JSON array of
-    trains. The vehicle column is what was in motion at once: the most trips in progress in any
+    <p class="section-note">No two agencies publish the same thing. Raw volume is each city's
+    seven days of polling to 2026-09-12, while every feed was live, and a feed's size says more
+    about how it is published than about how much service the city runs: Zurich ships a whole
+    national network on every poll, Tokyo ships one JSON array of trains. The vehicle column is what was in motion at once: the most trips in progress in any
     single poll-minute, by mode, across three weekdays — a trip counts from its first scheduled
     stop until its last prediction passes, one vehicle each. Where a city also publishes
     positions, the small print says what those confirm; vehicles reporting with no trip (deadhead,
@@ -287,17 +325,17 @@
   <div class="chart-wrap">
   <table class="data-table">
     <thead>
-      <tr><th>City</th><th class="num">Feeds</th><th class="num">Cadence</th><th class="num">Raw / 7d</th><th class="num">Stops</th><th>In motion at once</th><th>What it gives</th></tr>
+      <tr><th>City</th><th class="num">Feeds</th><th class="num">Cadence</th><th class="num">Raw / 7d</th><th class="num">Stops served</th><th>In motion at once</th><th>What it gives</th></tr>
     </thead>
     <tbody>
-      <tr><td><b>New York</b><div class="sub">MTA</div></td><td class="num">8</td><td class="num">30s</td><td class="num">10.5 GB<div class="sub">182,280 obj</div></td><td class="num">1,488</td><td><b>391</b> subway trains · 7 SIR trains<div class="sub">the subway feed carries no vehicle ids, so a trip is a train; 472 trains hold a trip at the same moment, 81 of them still at their origin</div></td><td>Eight subway feeds, trip updates + positions + alerts, no key required</td></tr>
-      <tr><td><b>Boston</b><div class="sub">MBTA</div></td><td class="num">3</td><td class="num">30s</td><td class="num">24.4 GB<div class="sub">68,360 obj</div></td><td class="num">10,309</td><td><b>600</b> bus · 57 tram · 51 metro · 38 rail<div class="sub">positions agree: 663 buses report on a trip at the peak, the rest waiting at a terminal; none report without one</div></td><td>Subway, bus, commuter rail, occupancy, and real cancellations — 5,748 on judged routes</td></tr>
-      <tr><td><b>Toronto</b><div class="sub">TTC</div></td><td class="num">3</td><td class="num">30s</td><td class="num">13.1 GB<div class="sub">65,943 obj</div></td><td class="num">9,135</td><td><b>1,395</b> bus · 176 tram · 1 ferry<div class="sub">positions agree: 1,434 buses on a trip at the peak, plus 769 reporting with no trip at all — deadhead, layover, yard</div></td><td>Every surface vehicle, 100% of scheduled routes observed</td></tr>
-      <tr><td><b>Helsinki</b><div class="sub">HSL</div></td><td class="num">2</td><td class="num">30s</td><td class="num">16.1 GB<div class="sub">45,567 obj</div></td><td class="num">8,344</td><td><b>884</b> bus · 98 tram · 37 metro · 34 rail<div class="sub">HSL publishes no positions — trips in progress in the prediction feed, one vehicle each</div></td><td>Tram, metro, rail and bus predictions, keyless — but trip_id ships empty on every row</td></tr>
-      <tr><td><b>Washington DC</b><div class="sub">WMATA</div></td><td class="num">6</td><td class="num">30s</td><td class="num">15.2 GB<div class="sub">136,724 obj</div></td><td class="num">9,708</td><td><b>820</b> bus · 111 metro<div class="sub">positions agree: 950 buses on a trip at the peak, plus 258 reporting with no trip</div></td><td>Rail and bus as separate feed families, every scheduled route observed</td></tr>
-      <tr><td><b>SF Bay</b><div class="sub">511.org</div></td><td class="num">3</td><td class="num">200s</td><td class="num">5.7 GB<div class="sub">10,239 obj</div></td><td class="num">21,420</td><td><b>1,376</b> bus · 95 tram · 49 BART · 27 rail · 26 cable car · 9 ferry<div class="sub">positions agree: 1,528 buses on a trip at the peak, plus 622 reporting with no trip; BART publishes predictions, not positions</div></td><td>~30 operators behind one regional feed; six of them publish schedule and no realtime</td></tr>
-      <tr><td><b>Zurich</b><div class="sub">Swiss OTD</div></td><td class="num">2</td><td class="num">60s / 600s</td><td class="num">77.5 GB<div class="sub">12,524 obj</div></td><td class="num">14,188</td><td><b>700</b> bus · 144 tram · 103 rail<div class="sub">the Swiss feed carries delays, not positions or times — a trip inside its scheduled span at the poll, one vehicle each</div></td><td>A national feed filtered to a 615-route allow-list — 5.8 MB per poll, delays only</td></tr>
-      <tr><td><b>Tokyo</b><div class="sub">ODPT</div></td><td class="num">3</td><td class="num">30s / 60s</td><td class="num">1.9 GB<div class="sub">56,934 obj</div></td><td class="num">5,514</td><td><b>155</b> trains · 586 bus<div class="sub">trains from odpt:Train, one record per train in motion; buses from ToeiBus positions no older than 2 min and on a trip</div></td><td>Operator-stated delays for four Toei subway lines, 52 KB per poll</td></tr>
+      <tr><td><b>New York</b><div class="sub">MTA</div></td><td class="num">8</td><td class="num">30s</td><td class="num">10.5 GB<div class="sub">182,280 obj</div></td><td class="num">989</td><td><b>391</b> subway trains · 7 SIR trains<div class="sub">the subway feed carries no vehicle ids, so a trip is a train; 472 trains hold a trip at the same moment, 81 of them still at their origin</div></td><td>Eight subway feeds, trip updates + positions + alerts, no key required</td></tr>
+      <tr><td><b>Boston</b><div class="sub">MBTA</div></td><td class="num">3</td><td class="num">30s</td><td class="num">24.4 GB<div class="sub">68,360 obj</div></td><td class="num">7,344</td><td><b>600</b> bus · 57 tram · 51 metro · 38 rail<div class="sub">positions agree: 663 buses report on a trip at the peak, the rest waiting at a terminal; none report without one</div></td><td>Subway, bus, commuter rail, occupancy, and real cancellations — 5,748 on judged routes</td></tr>
+      <tr><td><b>Toronto</b><div class="sub">TTC</div></td><td class="num">3</td><td class="num">30s</td><td class="num">13.1 GB<div class="sub">65,943 obj</div></td><td class="num">9,220</td><td><b>1,395</b> bus · 176 tram · 1 ferry<div class="sub">positions agree: 1,434 buses on a trip at the peak, plus 769 reporting with no trip at all — deadhead, layover, yard</div></td><td>Every surface vehicle; 225 of 230 scheduled routes observed</td></tr>
+      <tr><td><b>Helsinki</b><div class="sub">HSL</div></td><td class="num">2</td><td class="num">30s</td><td class="num">16.1 GB<div class="sub">45,567 obj</div></td><td class="num">8,168</td><td><b>884</b> bus · 98 tram · 37 metro · 34 rail<div class="sub">HSL publishes no positions — trips in progress in the prediction feed, one vehicle each</div></td><td>Tram, metro, rail and bus predictions, keyless — but trip_id ships empty on every row</td></tr>
+      <tr><td><b>Washington DC</b><div class="sub">WMATA</div></td><td class="num">6</td><td class="num">30s</td><td class="num">15.2 GB<div class="sub">136,724 obj</div></td><td class="num">7,696</td><td><b>820</b> bus · 111 metro<div class="sub">positions agree: 950 buses on a trip at the peak, plus 258 reporting with no trip</div></td><td>Rail and bus as separate feed families, every scheduled route observed</td></tr>
+      <tr><td><b>SF Bay</b><div class="sub">511.org</div></td><td class="num">3</td><td class="num">200s</td><td class="num">5.7 GB<div class="sub">10,239 obj</div></td><td class="num">19,022</td><td><b>1,376</b> bus · 95 tram · 49 BART · 27 rail · 26 cable car · 9 ferry<div class="sub">positions agree: 1,528 buses on a trip at the peak, plus 622 reporting with no trip; BART publishes predictions, not positions</div></td><td>~30 operators behind one regional feed; ten of them publish schedule and no realtime</td></tr>
+      <tr><td><b>Zurich</b><div class="sub">Swiss OTD</div></td><td class="num">2</td><td class="num">60s / 600s</td><td class="num">77.5 GB<div class="sub">12,524 obj</div></td><td class="num">9,306</td><td><b>700</b> bus · 144 tram · 103 rail<div class="sub">the Swiss feed carries delays, not positions or times — a trip inside its scheduled span at the poll, one vehicle each</div></td><td>A national feed filtered to a 615-route allow-list — about 7 MB per poll, delays only</td></tr>
+      <tr><td><b>Tokyo</b><div class="sub">ODPT</div></td><td class="num">3</td><td class="num">30s / 60s</td><td class="num">1.9 GB<div class="sub">56,934 obj</div></td><td class="num">136</td><td><b>155</b> trains · 586 bus<div class="sub">trains from odpt:Train, one record per train in motion; buses from ToeiBus positions no older than 2 min and on a trip</div></td><td>Operator-stated delays for four Toei subway lines, 51 KB per poll</td></tr>
     </tbody>
   </table>
   </div>
@@ -339,7 +377,7 @@
         <li><b>Fetch</b><span>GET the <span class="mono">ace</span> feed, one of eight, every 30s → ~132 KB of protobuf archived at <span class="mono">nyc/ace/2026-09-11/21/…pb</span></span></li>
         <li><b>Envelope</b><span>Decoded to the canonical shape and keyed by city onto <span class="mono">transit.trip_updates</span></span></li>
         <li><b>Silver</b><span>Typed into <span class="mono">stop_time_predictions</span>. The trip arrives as <span class="mono">106150_E..S71R</span> — MTA encodes the origin time in the id, so it drifts intraday</span></li>
-        <li><b>Match</b><span>The NYC-specific matcher resolves it on route + origin-time to static trip <span class="mono">L0S7-E-1078-S01_106150_E..S71R</span>, confidence 1.0</span></li>
+        <li><b>Match</b><span>The NYC-specific matcher resolves it on route + origin-time to static trip <span class="mono">BSP26GEN-E078-Weekday-00_106150_E..S71R</span>, confidence 1.0</span></li>
         <li><b>Gold</b><span>Stop <span class="mono">G06S</span>, sequence 2. Six predictions collapse into one arrival: scheduled <span class="mono">21:43:00</span>, actual <span class="mono">21:43:00</span>, delay <b>0s</b> → <b>on time</b>. NYC has no feed-supplied delay outside the L, so this was computed against the schedule.</span></li>
         <li><b>Chart</b><span>Lands in the 17:00 local column of on-time-by-hour, and in NYC's 85.8 composite</span></li>
       </ol>
@@ -375,21 +413,21 @@
         <li><b>Fetch</b><span>Two feeds at 30s, keyless → <span class="mono">helsinki/trip_updates/…</span></span></li>
         <li><b>Envelope</b><span>No vehicle-position topic for this city: HSL publishes none</span></li>
         <li><b>Silver</b><span><b><span class="mono">trip_id</span> is empty on every row.</b> Identity is rebuilt from (route, direction, start date, start time) so the trip still has one stable key across polls</span></li>
-        <li><b>Match</b><span>Resolved to static trip <span class="mono">1041_20260907_Pe_2_0640</span>, confidence 1.0 — 99.6% of realtime stops line up with the schedule</span></li>
-        <li><b>Gold</b><span>Stop <span class="mono">1291112</span>, sequence 12, scheduled <span class="mono">03:51:00</span>, actual <span class="mono">03:51:00</span>, delay <b>0s</b> → <b>on time</b></span></li>
+        <li><b>Match</b><span>Resolved to static trip <span class="mono">1041_20260911_Pe_2_0913</span>, confidence 1.0</span></li>
+        <li><b>Gold</b><span>Stop <span class="mono">1291112</span>, sequence 12, scheduled <span class="mono">06:25:00</span>, actual <span class="mono">06:25:30</span>, delay <b>+30s</b> → <b>on time</b>, from 9 predictions</span></li>
         <li><b>Chart</b><span>Helsinki's 2.6% bunching — the lowest in the fleet — is built from arrivals like this one</span></li>
       </ol>
     </details>
 
     <details class="journey">
-      <summary><span class="jcity">Washington DC</span><span class="jmeta">WMATA · route C71 · two schedules, one version</span></summary>
+      <summary><span class="jcity">Washington DC</span><span class="jmeta">WMATA · Red Line · two schedules, one version</span></summary>
       <ol class="hops">
         <li><b>Fetch</b><span>Six feeds — rail and bus each with updates, positions and alerts — at 30s, ~517 KB per bus poll</span></li>
         <li><b>Envelope</b><span>Keyed onto the same three topics as every other GTFS-RT city</span></li>
-        <li><b>Silver</b><span>Trip <span class="mono">12331170</span>, vehicle <span class="mono">7047</span>. DC's schedule ships as two separate zips, loaded under one version so neither mode hides behind the other</span></li>
+        <li><b>Silver</b><span>Trip <span class="mono">11836339_20705</span>, railcar <span class="mono">215</span>. DC's schedule ships as two separate zips, loaded under one version so neither mode hides behind the other</span></li>
         <li><b>Match</b><span>Exact id, confidence 1.0</span></li>
-        <li><b>Gold</b><span>Stop <span class="mono">7315</span>, sequence 30, scheduled <span class="mono">10:17:45</span> UTC = <b>06:17 local</b>, delay <b>0s</b> → <b>on time</b></span></li>
-        <li><b>Chart</b><span>DC restates a stop 49 times on average before the vehicle arrives — the most of any feed here. This one settled in 6.</span></li>
+        <li><b>Gold</b><span>Stop <span class="mono">PF_B11_C</span>, sequence 27, scheduled <span class="mono">14:59:00</span> UTC = <b>10:59 local</b>, delay <b>0s</b> → <b>on time</b></span></li>
+        <li><b>Chart</b><span>DC restates a stop 49 times on average before the vehicle arrives. This one was restated 97 times.</span></li>
       </ol>
     </details>
 
@@ -408,10 +446,10 @@
     <details class="journey">
       <summary><span class="jcity">Zurich</span><span class="jmeta">Swiss OTD · a delay-only national feed</span></summary>
       <ol class="hops">
-        <li><b>Fetch</b><span>Trip updates every 60s, alerts every 600s. Each trip-update poll is <b>5.8 MB</b> — the whole Swiss network — and Zurich alone is 77.5 GB of the raw window</span></li>
+        <li><b>Fetch</b><span>Trip updates every 60s, alerts every 600s. Each trip-update poll is <b>about 7 MB</b> — the whole Swiss network — 77.5 GB in the week to 2026-09-12</span></li>
         <li><b>Envelope</b><span>Filtered in silver to a 615-route allow-list, on both the realtime and schedule sides, so no Swiss operator is mislabelled as Zurich</span></li>
         <li><b>Silver</b><span>Trip <span class="mono">.ojp-91-11-C.1.TA.1450.j26</span>. <b>The feed carries a stated delay and no arrival timestamp</b>, so an actual time has to be constructed rather than read</span></li>
-        <li><b>Match</b><span>Realtime and static ids do not line up, so it resolves on route + time to <span class="mono">.ojp-91-11-C.1.TA.1374.j26</span> — confidence <b>0.9</b>, the only city here that routinely falls back</span></li>
+        <li><b>Match</b><span>Realtime and static ids line up for this trip, confidence 1.0. For 45% of Zurich's events they don't, and the trip resolves on route + time at <b>0.9</b></span></li>
         <li><b>Gold</b><span>Stop <span class="mono">ch:1:sloid:91299::5</span>, sequence 11. Actual = schedule + stated delay → <span class="mono">20:27:00</span>, delay <b>0s</b> → <b>on time</b>, method <span class="mono">delay_plus_schedule</span></span></li>
         <li><b>Chart</b><span>One of the 10.7M scored events behind Zurich's 96.4% on-time and its 93.6 composite</span></li>
       </ol>
@@ -420,7 +458,7 @@
     <details class="journey">
       <summary><span class="jcity">Tokyo</span><span class="jmeta">ODPT · Toei Mita line · the operator states the delay</span></summary>
       <ol class="hops">
-        <li><b>Fetch</b><span><span class="mono">odpt:Train</span> every 30s → a 52 KB JSON array of every Toei train in service, archived at <span class="mono">tokyo/trains/2026-09-11/…json</span></span></li>
+        <li><b>Fetch</b><span><span class="mono">odpt:Train</span> every 30s → a 51 KB JSON array of every Toei train in service, archived at <span class="mono">tokyo/trains/2026-09-11/…json</span></span></li>
         <li><b>Envelope</b><span>Its own topic, <span class="mono">transit.odpt_trains</span> — the record shares no shape with GTFS-RT</span></li>
         <li><b>Silver</b><span>Train <span class="mono">Toei.Mita.2031K</span> with <span class="mono">odpt:delay</span> = 0 and a <span class="mono">fromStation</span>. There is no arrival time in the feed at all</span></li>
         <li><b>Match</b><span>Station URNs map to GTFS stop ids, and the train matches its published timetable <span class="mono">…Mita.2031K.Weekday</span>. Arrival is detected by watching <span class="mono">fromStation</span> advance along the line across 16 snapshots</span></li>
@@ -525,7 +563,7 @@
       <dl>
         <div><dt>host</dt><dd>t4g.small · 48 GB</dd></div>
         <div><dt>compression</dt><dd>zstd · 50 ms linger</dd></div>
-        <div><dt>max message</dt><dd>10 MB</dd></div>
+        <div><dt>max message</dt><dd>900 KB</dd></div>
         <div><dt>retention</dt><dd>24 h</dd></div>
       </dl>
     </li>
@@ -576,19 +614,19 @@
 
   <div class="card cost">
     <div class="cost-head">
-      <div><span class="stack-role">AWS, 1&ndash;24 September 2026</span>
-        <div class="cost-total mono">$76.72<small>gross</small></div></div>
-      <div class="cost-invoice"><b class="mono">$0.00</b><span>invoiced — credits cover it</span></div>
+      <div><span class="stack-role">AWS, 1&ndash;25 September 2026</span>
+        <div class="cost-total mono">$78.21<small>gross</small></div></div>
+      <div class="cost-invoice"><b class="mono">$0.16</b><span>billed after credits</span></div>
     </div>
     <div class="cost-bar" aria-hidden="true">
-      <span style="flex:25.11;--w:1"></span><span style="flex:22.88;--w:.72"></span><span style="flex:21.40;--w:.5"></span><span style="flex:6.57;--w:.3"></span><span style="flex:.76;--w:.16"></span>
+      <span style="flex:25.92;--w:1"></span><span style="flex:23.22;--w:.72"></span><span style="flex:21.50;--w:.5"></span><span style="flex:6.78;--w:.3"></span><span style="flex:.79;--w:.16"></span>
     </div>
     <ul class="cost-legend">
-      <li style="--w:1"><i></i>EC2<b class="mono">$25.11</b></li>
-      <li style="--w:.72"><i></i>S3<b class="mono">$22.88</b></li>
-      <li style="--w:.5"><i></i>EMR Serverless<b class="mono">$21.40</b></li>
-      <li style="--w:.3"><i></i>VPC<b class="mono">$6.57</b></li>
-      <li style="--w:.16"><i></i>registry + billing<b class="mono">$0.76</b></li>
+      <li style="--w:1"><i></i>EC2<b class="mono">$25.92</b></li>
+      <li style="--w:.72"><i></i>S3<b class="mono">$23.22</b></li>
+      <li style="--w:.5"><i></i>EMR Serverless<b class="mono">$21.50</b></li>
+      <li style="--w:.3"><i></i>VPC<b class="mono">$6.78</b></li>
+      <li style="--w:.16"><i></i>registry, billing, tax<b class="mono">$0.79</b></li>
     </ul>
   </div>
 </section>
@@ -619,6 +657,6 @@
   </div>
 </footer>
 
-<script defer src="app.js?v=10"></script>
+<script defer src="app.js?v=11"></script>
 </body>
 </html>

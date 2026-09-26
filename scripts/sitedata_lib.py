@@ -19,7 +19,8 @@ OUT = ROOT / "site" / "data"
 # mart. Chicago stays out until CTA activates the beta key (docs/04). Note when
 # reading tokyo's standings: its delay is operator-stated and rounded to whole
 # minutes, so its OTP is not measured the same way as the other seven
-# (docs/06 "Tokyo's punctuality number"). The site must say so wherever it ranks.
+# (docs/06 "Tokyo's punctuality number"). [rev 2026-09-26] The public page shows
+# the numbers without a marker, by the owner's decision; docs/06 keeps the method note.
 CITIES = ["nyc", "boston", "dc", "sf", "toronto", "helsinki", "zurich", "tokyo"]
 
 

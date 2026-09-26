@@ -260,27 +260,36 @@ async function renderChartLegend() {
 }
 
 /* series: {cityKey: [{x, y} ...]} on an integer x grid; xLabel maps x → tick text.
-   angled: tick labels at 45° so a dense axis never overlaps on a narrow card. */
-function drawLineChart({ svgId, tipId, series, xMax, xTickStep, xLabel, tipTitle, angled = false }) {
+   angled: "auto" tilts tick labels 45° only when upright ones would collide.
+   The y options default to a percentage axis on 10-point steps clamped to 0..100. */
+function drawLineChart({
+  svgId, tipId, series, xMax, xTickStep, xLabel, tipTitle, angled = false,
+  yStep = 10, yClamp = [0, 100], fmtY = (v) => `${v}%`, fmtTip = (v) => `${v.toFixed(1)}%`,
+  useChips = true,
+}) {
   const svg = $(svgId);
   if (!svg) return;
   const W = svg.clientWidth || 640, H = svg.clientHeight || 280;
+  if (angled === "auto") {
+    const spacing = ((W - 54) * xTickStep) / Math.max(1, xMax);
+    angled = spacing < String(xLabel(xMax)).length * 6.5 + 6;
+  }
   const M = { top: 12, right: 14, bottom: angled ? 34 : 28, left: 40 };
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
 
-  const visible = Object.keys(CITIES).filter((c) => series[c]?.some(Boolean) && !hidden.has(c));
+  const visible = Object.keys(CITIES).filter((c) => series[c]?.some(Boolean) && !(useChips && hidden.has(c)));
   const vals = visible.flatMap((c) => series[c].filter(Boolean).map((p) => p.y));
   if (!vals.length) { svg.innerHTML = ""; return; }
-  const lo = Math.max(0, Math.floor((Math.min(...vals) - 5) / 10) * 10);
-  const hi = Math.min(100, Math.ceil((Math.max(...vals) + 3) / 10) * 10);
+  const lo = Math.max(yClamp[0], Math.floor((Math.min(...vals) - yStep / 2) / yStep) * yStep);
+  const hi = Math.min(yClamp[1], Math.ceil((Math.max(...vals) + yStep * 0.3) / yStep) * yStep);
   const x = (i) => M.left + (i * (W - M.left - M.right)) / Math.max(1, xMax);
   const y = (v) => M.top + ((hi - v) * (H - M.top - M.bottom)) / (hi - lo);
 
   const gridCol = cssVar("--border"), mutedCol = cssVar("--muted-foreground");
   let g = "";
-  for (let v = lo; v <= hi; v += 10) {
+  for (let v = lo; v <= hi; v += yStep) {
     g += `<line x1="${M.left}" x2="${W - M.right}" y1="${y(v)}" y2="${y(v)}" stroke="${gridCol}" stroke-width="0.5"/>` +
-      `<text x="${M.left - 8}" y="${y(v) + 4}" text-anchor="end" font-size="10.5" fill="${mutedCol}" font-family="Geist Mono,monospace">${v}%</text>`;
+      `<text x="${M.left - 8}" y="${y(v) + 4}" text-anchor="end" font-size="10.5" fill="${mutedCol}" font-family="Geist Mono,monospace">${fmtY(v)}</text>`;
   }
   for (let i = 0; i <= xMax; i += xTickStep) {
     if (angled) {
@@ -288,7 +297,10 @@ function drawLineChart({ svgId, tipId, series, xMax, xTickStep, xLabel, tipTitle
       g += `<line x1="${bx}" x2="${bx}" y1="${by}" y2="${by + 4}" stroke="${gridCol}" stroke-width="1"/>` +
         `<text transform="translate(${bx},${by + 9}) rotate(-45)" text-anchor="end" dominant-baseline="central" font-size="10" fill="${mutedCol}" font-family="Geist Mono,monospace">${xLabel(i)}</text>`;
     } else {
-      g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="10.5" fill="${mutedCol}" font-family="Geist Mono,monospace">${xLabel(i)}</text>`;
+      // a word at either edge reads inward so it never runs off the plot
+      const word = String(xLabel(i)).length > 2;
+      const anchor = word && i === 0 ? "start" : word && i === xMax ? "end" : "middle";
+      g += `<text x="${x(i)}" y="${H - 8}" text-anchor="${anchor}" font-size="10.5" fill="${mutedCol}" font-family="Geist Mono,monospace">${xLabel(i)}</text>`;
     }
   }
   for (const c of visible) {
@@ -326,7 +338,7 @@ function drawLineChart({ svgId, tipId, series, xMax, xTickStep, xLabel, tipTitle
     dotsG.innerHTML = at.map((d) =>
       `<circle cx="${x(i)}" cy="${y(d.p.y)}" r="4" fill="${cityColor(d.c)}" stroke="${cssVar("--surface")}" stroke-width="2"/>`).join("");
     tip.innerHTML = `<div class="t-title mono">${tipTitle(i)}</div>` + at.map((d) =>
-      `<div class="t-row"><span class="dot" style="background:${cityColor(d.c)}"></span>${CITIES[d.c].name}<b class="mono">${d.p.y.toFixed(1)}%</b></div>`).join("");
+      `<div class="t-row"><span class="dot" style="background:${cityColor(d.c)}"></span>${CITIES[d.c].name}<b class="mono">${fmtTip(d.p.y)}</b></div>`).join("");
     tip.hidden = false;
     const wrap = svg.parentElement.getBoundingClientRect();
     const tx = ev.clientX - wrap.left;
@@ -342,7 +354,9 @@ function drawLineChart({ svgId, tipId, series, xMax, xTickStep, xLabel, tipTitle
 }
 
 async function renderLineCharts() {
-  const [hourly, daily] = await Promise.all([loadJSON("data/hourly.json"), loadJSON("data/daily.json")]);
+  const [hourly, daily, extras] = await Promise.all([
+    loadJSON("data/hourly.json"), loadJSON("data/daily.json"), loadJSON("data/extras.json"),
+  ]);
 
   const hSeries = {};
   for (const r of hourly.rows) {
@@ -370,10 +384,26 @@ async function renderLineCharts() {
   }
   drawLineChart({
     svgId: "daily-chart", tipId: "daily-tooltip", series: dSeries,
-    xMax: days - 1, xTickStep: 1, angled: true,
+    xMax: days - 1, xTickStep: 1, angled: "auto",
     xLabel: (i) => i + 1,
     tipTitle: (i) => `day ${i + 1} of recording`,
   });
+
+  // median delay by tenth of the trip; its own legend, so the shape-section chips don't apply
+  const aSeries = {};
+  for (const r of extras.along) {
+    if (CITIES[r.city_key]) (aSeries[r.city_key] ??= [])[r.decile] = { y: +r.p50 };
+  }
+  drawLineChart({
+    svgId: "along-chart", tipId: "along-tooltip", series: aSeries,
+    xMax: 9, xTickStep: 1, useChips: false,
+    xLabel: (i) => (i === 0 ? "first stop" : i === 9 ? "last stop" : ""),
+    tipTitle: (i) => `${i * 10}–${(i + 1) * 10}% along the trip`,
+    yStep: 30, yClamp: [-Infinity, Infinity],
+    fmtY: (v) => `${v}s`, fmtTip: (v) => `${v > 0 ? "+" : ""}${Math.round(v)}s`,
+  });
+  $("along-legend").innerHTML = Object.keys(CITIES).filter((c) => aSeries[c])
+    .map((c) => `<span><span class="dot" style="background:${cityColor(c)}"></span>${CITIES[c].name}</span>`).join("");
 }
 
 // ---------- delay distribution small multiples ----------
@@ -501,8 +531,7 @@ function daybars(days, color) {
     const x = i * bw, w = Math.max(0.8, bw - 1.5);
     const tip = `<div class="t-title mono">${esc(d.service_date)}</div>` +
       `<div class="t-row">stop events<b class="mono">${Number(d.events).toLocaleString("en-US")}</b></div>` +
-      `<div class="t-row">trips<b class="mono">${Number(d.trips).toLocaleString("en-US")}</b></div>` +
-      `<div class="t-row"><span class="sw ${d.judged ? "solid" : "hollow"}" style="--c:${color}"></span>${d.judged ? "judged" : "not judged"}</div>`;
+      `<div class="t-row">trips<b class="mono">${Number(d.trips).toLocaleString("en-US")}</b></div>`;
     const bar = d.judged
       ? `<rect class="bar" x="${x.toFixed(1)}" y="${(H - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}"/>`
       : `<rect class="bar hollow" x="${(x + 0.5).toFixed(1)}" y="${(H - h + 0.5).toFixed(1)}" width="${Math.max(0.5, w - 1).toFixed(1)}" height="${Math.max(0.5, h - 1).toFixed(1)}" fill="none" stroke="${color}" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
@@ -659,6 +688,103 @@ async function renderAnswers() {
   $("answers-cancel").innerHTML =
     `<table class="data-table"><tr><th>city</th><th class="num">cancelled</th><th class="num">trips</th></tr>${cxRows}</table>` +
     `<p class="footnote">A dash means the feed has no way to say "cancelled".${torNote}</p>`;
+}
+
+// ---------- deeper: four cuts the standings can't show ----------
+const mmss = (sec) => {
+  const n = Math.round(Number(sec)), a = Math.abs(n);
+  return `${n < 0 ? "−" : ""}${Math.floor(a / 60)}:${String(a % 60).padStart(2, "0")}`;
+};
+const tipOf = (title, rows) => `<div class="t-title">${esc(title)}</div>` +
+  rows.map(([k, v]) => `<div class="t-row">${esc(k)}<b class="mono">${esc(v)}</b></div>`).join("");
+const pct1 = (v) => `${Number(v).toFixed(1)}%`;
+const signed = (v, unit) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}${unit}`;
+
+// one axis row of evenly spaced labels over the track column
+function rbAxis(ticks, pos, fmt) {
+  // every other inner tick drops out on a phone-width track (.odd)
+  return `<div class="rb-row rb-axis"><span></span><div class="rb-track">${ticks.map((t, i) =>
+    `<span class="rb-tick${i % 2 && i < ticks.length - 1 ? " odd" : ""}" style="left:${pos(t)}%">${fmt(t)}</span>`).join("")}</div><span></span></div>`;
+}
+
+async function renderDeeper() {
+  const x = await loadJSON("data/extras.json");
+
+  // how late is late: median dot, bar to the 90th percentile, tick at the 75th
+  const late = x.late.filter((r) => CITIES[r.city_key]).sort((a, b) => a.p90 - b.p90);
+  const lateTop = Math.ceil(Math.max(...late.map((r) => +r.p90)) / 120) * 120;
+  const lp = (sec) => (100 * Math.max(0, sec)) / lateTop;
+  const lateTicks = [];
+  for (let t = 0; t <= lateTop; t += 120) lateTicks.push(t);
+  $("deeper-late").innerHTML = rbAxis(lateTicks, lp, (t) => (t === lateTop ? `${t / 60} min` : `${t / 60}`)) + late.map((r) => {
+    const col = cityColor(r.city_key);
+    const tip = tipOf(CITIES[r.city_key].name, [
+      ["median", mmss(r.p50)], ["75th percentile", mmss(r.p75)], ["90th percentile", mmss(r.p90)],
+      ["95th percentile", mmss(r.p95)], ["mean", mmss(r.mean_sec)],
+      ["scored arrivals", Number(r.events).toLocaleString("en-US")],
+    ]);
+    return `<div class="rb-row" data-tip="${esc(tip)}">${cityCell(r.city_key)}
+      <div class="rb-track">
+        <span class="rb-range" style="left:${lp(r.p50)}%;width:${Math.max(0, lp(r.p90) - lp(r.p50))}%;--c:${col}"></span>
+        <span class="rb-tick75" style="left:${lp(r.p75)}%"></span>
+        <span class="rb-dot" style="left:${lp(r.p50)}%;--c:${col}"></span>
+      </div>
+      <span class="rb-val mono">${mmss(r.p50)}<i>·</i>${mmss(r.p90)}</span></div>`;
+  }).join("") + `<div class="rb-key"><span><i class="k-dot"></i>median</span><span><i class="k-bar"></i>to 90th percentile</span><span class="mono">m:ss</span></div>`;
+
+  // rain: dry baseline reweighted to the hours it rained, then the rainy share
+  const rain = x.rain.filter((r) => CITIES[r.city_key])
+    .map((r) => ({ ...r, d: r.wet_otp - r.dry_otp })).sort((a, b) => a.d - b.d);
+  const rLo = Math.floor((Math.min(...rain.flatMap((r) => [r.wet_otp, r.dry_otp])) - 2) / 10) * 10;
+  const rp = (v) => (100 * (v - rLo)) / (100 - rLo);
+  const rainTicks = [];
+  for (let t = rLo; t <= 100; t += 10) rainTicks.push(t);
+  $("deeper-rain").innerHTML = rbAxis(rainTicks, rp, (t) => `${t}%`) + rain.map((r) => {
+    const col = cityColor(r.city_key);
+    const a = Math.min(rp(r.wet_otp), rp(r.dry_otp)), b = Math.max(rp(r.wet_otp), rp(r.dry_otp));
+    const tip = tipOf(CITIES[r.city_key].name, [
+      ["on time in rain", pct1(r.wet_otp)], ["dry, same hours", pct1(r.dry_otp)],
+      ["difference", signed(r.d, " pts")], ["rainy-hour arrivals", Number(r.wet_events).toLocaleString("en-US")],
+    ]);
+    return `<div class="rb-row" data-tip="${esc(tip)}">${cityCell(r.city_key)}
+      <div class="rb-track">
+        <span class="db-line" style="left:${a}%;width:${b - a}%"></span>
+        <span class="db-dry" style="left:${rp(r.dry_otp)}%;--c:${col}"></span>
+        <span class="rb-dot" style="left:${rp(r.wet_otp)}%;--c:${col}"></span>
+      </div>
+      <span class="rb-val mono">${signed(r.d, "")}<i>pts</i></span></div>`;
+  }).join("") + `<div class="rb-key"><span><i class="k-ring"></i>dry, same hours</span><span><i class="k-dot"></i>rain</span></div>`;
+
+  // route spread: every route a dot, middle 80% shaded, median marked
+  const routes = {};
+  for (const r of x.routes) if (CITIES[r.city_key]) (routes[r.city_key] ??= []).push(r);
+  const q = (v, f) => v[Math.min(v.length - 1, Math.floor(f * v.length))];
+  const spread = Object.entries(routes).map(([c, rs]) => {
+    const v = rs.map((r) => +r.otp_pct).sort((a, b) => a - b);
+    return { c, rs, p10: q(v, 0.1), p50: q(v, 0.5), p90: q(v, 0.9), good: (100 * v.filter((o) => o >= 80).length) / v.length };
+  }).sort((a, b) => b.p50 - a.p50);
+  $("deeper-spread").innerHTML = rbAxis([0, 20, 40, 60, 80, 100], (t) => t, (t) => `${t}%`) + spread.map((s) => {
+    const col = cityColor(s.c);
+    const dots = s.rs.map((r, i) => {
+      const tip = tipOf(`${CITIES[s.c].name} · ${r.label}`, [
+        ["on time", pct1(r.otp_pct)], ["mode", r.mode ?? "—"],
+        ["scored arrivals", Number(r.events).toLocaleString("en-US")],
+      ]);
+      // deterministic jitter so a dense city spreads vertically instead of stacking
+      return `<span class="sd" style="left:${+r.otp_pct}%;top:${3 + ((i * 7919) % 19)}px;--c:${col}" data-tip="${esc(tip)}"></span>`;
+    }).join("");
+    const rowTip = tipOf(CITIES[s.c].name, [
+      ["routes", String(s.rs.length)], ["median route", pct1(s.p50)],
+      ["middle 80%", `${pct1(s.p10)} – ${pct1(s.p90)}`], ["routes ≥ 80% on time", pct1(s.good)],
+    ]);
+    return `<div class="rb-row sp-row">${cityCell(s.c)}
+      <div class="rb-track sp-track">
+        <span class="sp-band" style="left:${s.p10}%;width:${s.p90 - s.p10}%;--c:${col}"></span>
+        <span class="sp-80"></span>${dots}
+        <span class="sp-med" style="left:${s.p50}%"></span>
+      </div>
+      <span class="rb-val mono" data-tip="${esc(rowTip)}">${Math.round(s.good)}%<i>≥80</i></span></div>`;
+  }).join("") + `<div class="rb-key"><span><i class="k-band"></i>middle 80% of routes</span><span><i class="k-med"></i>median route</span><span>right: share of routes at least 80% on time</span></div>`;
 }
 
 // ---------- best / worst routes ----------
@@ -851,6 +977,7 @@ function rethemeAll() {
   renderDist();
   renderModes();
   renderAnswers();
+  renderDeeper();
   renderStorage();
   renderRoutes();
   renderHero();
@@ -900,6 +1027,7 @@ renderChartLegend().then(renderLineCharts);
 renderDist();
 renderModes();
 renderAnswers();
+renderDeeper();
 renderStorage();
 renderRoutes();
 renderHero();
