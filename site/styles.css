@@ -186,6 +186,7 @@ a:hover { text-decoration: underline; }
   color: var(--foreground-2);
 }
 .header-banner .mono { font-size: 11.5px; }
+.header-banner .mono, .hero-note .mono, .nw { white-space: nowrap; }
 .statusbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .status {
   display: flex;
@@ -241,6 +242,7 @@ a:hover { text-decoration: underline; }
   font-weight: 700;
   letter-spacing: 0.16em;
   color: var(--muted-foreground);
+  text-wrap: balance;
 }
 h1 {
   font-size: 34px;
@@ -253,7 +255,9 @@ h2 {
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.015em;
-  margin: 6px 0 4px;
+  line-height: 1.2;
+  margin: 10.4px 0 8.4px; /* same single-line position as 1.6 leading with 6px/4px */
+  text-wrap: balance;
 }
 .card h3 { font-size: 14px; font-weight: 600; margin: 0; }
 
@@ -288,7 +292,7 @@ h2 {
   background: var(--surface);
   padding: 16px;
 }
-.card .sub { margin-top: 2px; font-size: 11.5px; color: var(--muted-foreground); }
+.card .sub { margin-top: 2px; font-size: 11.5px; color: var(--muted-foreground); text-wrap: pretty; }
 .card-grid { display: grid; gap: 16px; }
 .card-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .finding-grid {
@@ -316,6 +320,9 @@ h2 {
   line-height: 1.2;
 }
 .tile span {
+  display: block;
+  margin-top: 2px;
+  line-height: 1.35;
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.12em;
@@ -410,6 +417,7 @@ h2 {
 .standing-row .num { text-align: right; font-size: 13px; }
 .standing-row .otp { font-size: 17px; font-weight: 500; }
 .standing-row .unscored { font-size: 15px; color: var(--muted-foreground); }
+.standing-row.head .num { font-size: inherit; }
 .na-dash { color: var(--muted-foreground); opacity: 0.6; }
 .spark { display: block; }
 .spark-empty { color: var(--muted-foreground); font-size: 11px; }
@@ -552,7 +560,7 @@ h2 {
 .mode-legend .mono { color: var(--muted-foreground); }
 .storage-tiles { margin: 0; gap: 8px 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .storage-tiles .tile b { font-size: 17px; }
-.storage-fleet { margin-top: 10px; font-size: 11.5px; color: var(--muted-foreground); line-height: 1.5; }
+.storage-fleet { margin-top: 10px; font-size: 11.5px; color: var(--muted-foreground); line-height: 1.5; text-wrap: pretty; }
 .storage-fleet b { color: var(--foreground); font-weight: 500; }
 .daybars { display: block; width: 100%; height: 44px; margin-top: 12px; }
 .daybars .bar { opacity: 0.9; transition: opacity 120ms ease; }
@@ -568,6 +576,7 @@ h2 {
   .storage-grid { grid-template-columns: 1fr; }
   .storage-body { grid-template-columns: 92px 1fr; }
   .storage-tiles { grid-column: 1 / -1; }
+  .storage-head { flex-direction: column; align-items: flex-start; gap: 2px; }
 }
 
 /* ---------- network maps ---------- */
@@ -755,6 +764,7 @@ h2 {
 .weight-legend b { font-size: 18px; font-weight: 500; line-height: 1.2; }
 .wl-name { font-size: 12.5px; font-weight: 600; }
 .wl-how { font-size: 11.5px; line-height: 1.45; color: var(--muted-foreground); }
+.section-note, .rule p, .wl-how { text-wrap: pretty; }
 
 /* ---------- footer (sky clone) ---------- */
 .site-footer { border-top: 1px solid var(--border); }
@@ -841,7 +851,7 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
   display: grid; grid-template-columns: 84px 1fr; gap: 14px;
   align-items: baseline; font-size: 14px; line-height: 1.55;
 }
-.hops li b {
+.hops li > b {
   font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
   color: var(--muted-foreground); font-weight: 600;
 }
@@ -906,7 +916,7 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
   flex-wrap: wrap;
   gap: 12px 28px;
   margin-top: 14px;
-  padding: 14px 18px;
+  padding: 14px 16px;
   border: 1px dashed var(--border-2);
   border-radius: 12px;
 }
@@ -935,6 +945,9 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
   .weight-legend { grid-template-columns: 1fr 1fr; gap: 14px 2px; }
   .orch-beats { margin-left: 0; }
 }
+@media (max-width: 479px) {
+  .orch-beats { display: grid; grid-template-columns: repeat(2, max-content); gap: 10px 32px; }
+}
 @media (max-width: 640px) {
   .hops li { grid-template-columns: 1fr; gap: 2px; }
 }
@@ -959,6 +972,7 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
   .data-table.heat-table td:first-child { padding-right: 6px; }
   .data-table.heat-table td { padding-left: 3px; }
   .data-table.heat-table th { padding-left: 3px; font-size: 9px; letter-spacing: 0.06em; }
+  .data-table.heat-table td.num + td.num, .data-table.heat-table th.num + th.num { padding-left: 3px; }
   .heat-table .city-cell { font-size: 11.5px; gap: 5px; white-space: normal; line-height: 1.25; }
   .heat-hint { margin-left: 0; }
 }
@@ -1086,6 +1100,9 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
   .rb-tick { font-size: 9px; }
   .rb-tick.odd { display: none; }
 }
+@media (max-width: 380px) {
+  #deeper-spread .rb-axis .rb-tick:last-child { display: none; }
+}
 
 /* ---------- phone chrome ----------
    The status bar's own ≤639px rule loses to .icon-btn declared after it, and the
@@ -1096,6 +1113,27 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
   .statusbar .gh-link { display: none; }
   .status .sep, .status-when { display: none; }
   .hero-legend { bottom: 38px; flex-wrap: wrap; gap: 6px 12px; }
+  /* the panel sets the hero's height, so it can never run into #standings; the
+     legend and attribution keep a 112px band under it */
+  .hero { height: auto; min-height: max(500px, min(74vh, 680px)); display: grid; }
+  .hero-track { position: relative; inset: auto; width: 100%; padding: 12px 12px 112px; }
+  .hero-panel { position: relative; top: 0; left: 0; right: 0; }
+  /* a 3-4 line banner pinned for the whole page took a fifth of a small screen */
+  .statusbar { position: relative; }
+  /* the city panel covered the routes/delay toggle; stack them */
+  .map-frame { height: 560px; }
+  .map-mode { top: 12px; left: 12px; right: auto; }
+  .map-mode button { padding: 7px 12px; }
+  .map-panel { top: 58px; left: 12px; right: 12px; min-width: 0; padding: 12px 14px; }
+  .map-legend { left: 12px; right: 12px; bottom: 46px; flex-wrap: wrap; gap: 4px 12px; }
+  .map-legend > span { white-space: nowrap; }
+  /* route names wrap instead of pushing the figures out of the card */
+  #routes .data-table th.num { white-space: nowrap; }
+  #routes .data-table .city-cell { white-space: normal; align-items: flex-start; line-height: 1.35; }
+  #routes .data-table .city-cell .dot { margin-top: 5px; }
+  /* a wrapped journey meta line sits under the city, not under the marker */
+  details.journey > summary { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; row-gap: 2px; }
+  details.journey > summary .jmeta { grid-column: 2; text-wrap: pretty; }
 }
 
 /* standings on narrow screens: six visible cells (rank, city, score, on-time,
@@ -1113,6 +1151,9 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
   .standing-row .city { font-size: 13px; gap: 6px; }
   .standing-row.head { font-size: 9px; letter-spacing: 0.06em; }
 }
+@media (max-width: 380px) {
+  .standing-row { grid-template-columns: 14px minmax(0, 1fr) 36px 42px 40px; gap: 6px; }
+}
 
 /* adjacent numeric columns share no padding (num cells zero their right edge), so
    on a phone "57.4%53.4%" touched; give every num after a num a left gutter */
@@ -1123,8 +1164,21 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
    the frame scroll sideways instead. */
 @media (max-width: 900px) {
   #feeds .data-table { min-width: 980px; }
-  #pipeline .data-table { min-width: 760px; }
   #feeds .chart-wrap, #pipeline .chart-wrap { -webkit-overflow-scrolling: touch; }
+  /* a hard cut through "531,745 objec" read as a wrong number; fade the edge
+     until the frame is scrolled to its end (app.js toggles .at-end) */
+  #feeds .chart-wrap:not(.at-end), #pipeline .chart-wrap:not(.at-end) {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent);
+  }
+}
+@media (max-width: 739px) {
+  #pipeline .data-table { min-width: 760px; }
+}
+/* at 320 the feeds frame ended right at the 4th column's glyphs, where the fade
+   is already transparent; pull them into the visible part of the fade */
+@media (max-width: 359px) {
+  #feeds .data-table td.num, #feeds .data-table th.num { padding-right: 14px; }
 }
 
 /* the four findings tables hold a city and up to four figures; at 320px the peak
@@ -1137,6 +1191,9 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
   [id^="answers-"] .data-table .city-cell { white-space: normal; line-height: 1.2; gap: 6px; }
   [id^="answers-"] .data-table td.num + td.num, [id^="answers-"] .data-table th.num + th.num { padding-left: 6px; }
   [id^="answers-"] .data-table td:first-child, [id^="answers-"] .data-table th:first-child { padding-right: 6px; }
+  /* only the peak and weekend tables need wrapping names; in the early table the
+     mode column takes the slack and would split "Washington DC" for nothing */
+  #answers-early .data-table .city-cell { white-space: nowrap; }
 }
 
 /* two storage cards side by side need ~560px each: below that the stat tiles
@@ -1145,3 +1202,6 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
   .storage-grid { grid-template-columns: minmax(0, 1fr); }
 }
 .daybars-label { flex-wrap: wrap; }
+@media (max-width: 359px) {
+  .daybars-label .db-key { order: 3; flex-basis: 100%; }
+}

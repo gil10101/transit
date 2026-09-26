@@ -18,7 +18,7 @@
 <script defer src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js" integrity="sha384-nKUDlg+fT0U/eEt4KWP9n034kLe/eVj6k7CVjbu6qfRhJdEyinlGajS9+9AU+UZ5" crossorigin="anonymous"></script>
 <script defer src="https://unpkg.com/deck.gl@9.0.36/dist.min.js" integrity="sha384-w/54/rLWDJgv9c3QdtRYUtL5h1sXLHGM4wH9frLq+CMEpTUpzCYAYpUsxtgPylpc" crossorigin="anonymous"></script>
 <script>try{var m=document.cookie.match(/(?:^|;\s*)theme=(light|dark)/);var t=m?m[1]:localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
-<link rel="stylesheet" href="styles.css?v=15">
+<link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
 
@@ -44,8 +44,8 @@
       </a>
     </div>
   </div>
-  <div class="header-banner">Collection is complete: eight cities polled from 2026-08-23 to
-    2026-09-25, all eight scored. Every figure is a warehouse snapshot captured
+  <div class="header-banner">Collection is complete: eight cities polled from <span class="nw">2026-08-23</span> to
+    <span class="nw">2026-09-25</span>, all eight scored. Every figure is a warehouse snapshot captured
     <span id="as-of-banner" class="mono">—</span>.</div>
 </header>
 
@@ -93,7 +93,7 @@
     <div class="eyebrow">SHAPE · WHEN, AND HOW LATE</div>
     <h2>The shape of a service day</h2>
     <p class="section-note">Every city is scored in its own timezone — 3am in Helsinki compares
-    to 3am in New York. Click a city chip to isolate it in both charts; hover for exact values.</p>
+    to 3am in New&nbsp;York. Click a city chip to isolate it in both charts; hover for exact values.</p>
   </div>
   <div class="chart-legend" id="hourly-legend"></div>
   <div class="card-grid two">
@@ -288,7 +288,7 @@
         <td><b>Silver</b><div class="sub">Iceberg on S3</div></td>
         <td>One schema for eight cities: typed, deduplicated, service-date resolved</td>
         <td class="num">2.96B rows<div class="sub">48.8 GB · 16 tables</div></td>
-        <td>Exact-duplicate drop inside a 2-hour watermark, which is why drains run every 2 hours.</td>
+        <td>Exact-duplicate drop inside a 2-hour watermark, which is why drains run every 2&nbsp;hours.</td>
       </tr>
       <tr>
         <td><b>Gold</b><div class="sub">Snowflake + dbt</div></td>
@@ -333,7 +333,7 @@
       <tr><td><b>Toronto</b><div class="sub">TTC</div></td><td class="num">3</td><td class="num">30s</td><td class="num">13.1 GB<div class="sub">65,943 obj</div></td><td class="num">9,220</td><td><b>1,395</b> bus · 176 tram · 1 ferry<div class="sub">positions agree: 1,434 buses on a trip at the peak, plus 769 reporting with no trip at all — deadhead, layover, yard</div></td><td>Every surface vehicle; 225 of 230 scheduled routes observed</td></tr>
       <tr><td><b>Helsinki</b><div class="sub">HSL</div></td><td class="num">2</td><td class="num">30s</td><td class="num">16.1 GB<div class="sub">45,567 obj</div></td><td class="num">8,168</td><td><b>884</b> bus · 98 tram · 37 metro · 34 rail<div class="sub">HSL publishes no positions — trips in progress in the prediction feed, one vehicle each</div></td><td>Tram, metro, rail and bus predictions, keyless — but trip_id ships empty on every row</td></tr>
       <tr><td><b>Washington DC</b><div class="sub">WMATA</div></td><td class="num">6</td><td class="num">30s</td><td class="num">15.2 GB<div class="sub">136,724 obj</div></td><td class="num">7,696</td><td><b>820</b> bus · 111 metro<div class="sub">positions agree: 950 buses on a trip at the peak, plus 258 reporting with no trip</div></td><td>Rail and bus as separate feed families, every scheduled route observed</td></tr>
-      <tr><td><b>SF Bay</b><div class="sub">511.org</div></td><td class="num">3</td><td class="num">200s</td><td class="num">5.7 GB<div class="sub">10,239 obj</div></td><td class="num">19,022</td><td><b>1,376</b> bus · 95 tram · 49 BART · 27 rail · 26 cable car · 9 ferry<div class="sub">positions agree: 1,528 buses on a trip at the peak, plus 622 reporting with no trip; BART publishes predictions, not positions</div></td><td>~30 operators behind one regional feed; ten of them publish schedule and no realtime</td></tr>
+      <tr><td><b>SF Bay</b><div class="sub">511.org</div></td><td class="num">3</td><td class="num">200s</td><td class="num">5.7 GB<div class="sub">10,239 obj</div></td><td class="num">19,022</td><td><b>1,376</b>&nbsp;bus · 95&nbsp;tram · 49&nbsp;BART · 27&nbsp;rail · 26&nbsp;cable&nbsp;car · 9&nbsp;ferry<div class="sub">positions agree: 1,528 buses on a trip at the peak, plus 622 reporting with no trip; BART publishes predictions, not positions</div></td><td>~30 operators behind one regional feed; ten of them publish schedule and no realtime</td></tr>
       <tr><td><b>Zurich</b><div class="sub">Swiss OTD</div></td><td class="num">2</td><td class="num">60s / 600s</td><td class="num">77.5 GB<div class="sub">12,524 obj</div></td><td class="num">9,306</td><td><b>700</b> bus · 144 tram · 103 rail<div class="sub">the Swiss feed carries delays, not positions or times — a trip inside its scheduled span at the poll, one vehicle each</div></td><td>A national feed filtered to a 615-route allow-list — about 7 MB per poll, delays only</td></tr>
       <tr><td><b>Tokyo</b><div class="sub">ODPT</div></td><td class="num">3</td><td class="num">30s / 60s</td><td class="num">1.9 GB<div class="sub">56,934 obj</div></td><td class="num">136</td><td><b>155</b> trains · 586 bus<div class="sub">trains from odpt:Train, one record per train in motion; buses from ToeiBus positions no older than 2 min and on a trip</div></td><td>Operator-stated delays for four Toei subway lines, 51 KB per poll</td></tr>
     </tbody>
@@ -510,7 +510,7 @@
       <div class="rule-fig mono">local</div>
       <h3>Each city on its own clock</h3>
       <p>Every hour and service day is read in the city's own time zone, so 3am in Tokyo
-      compares to 3am in New York.</p>
+      compares to 3am in New&nbsp;York.</p>
     </div>
   </div>
 
@@ -530,7 +530,7 @@
       <div style="--w:.48"><b class="mono">20%</b><span class="wl-name">Cancellations</span>
         <span class="wl-how">Share of scheduled trips the agency cancelled</span></div>
       <div style="--w:.28"><b class="mono">15%</b><span class="wl-name">Bunching</span>
-        <span class="wl-how">Share of arrivals less than half a scheduled gap behind the one ahead</span></div>
+        <span class="wl-how">Share of arrivals less than half a scheduled gap behind the one&nbsp;ahead</span></div>
     </div>
   </div>
 </section>
@@ -634,11 +634,11 @@
       <a href="https://github.com/gil10101/transit">github.com/gil10101/transit</a>
       <a href="https://gillu.me">gillu.me</a>
       <a href="https://sky.gillu.me">sky.gillu.me</a>
-      <span class="footer-stamp">warehouse snapshot <span id="as-of-footer">—</span> · collection complete</span>
+      <span class="footer-stamp">warehouse snapshot <span id="as-of-footer">—</span>&nbsp;· collection&nbsp;complete</span>
     </div>
   </div>
 </footer>
 
-<script defer src="app.js?v=12"></script>
+<script defer src="app.js?v=13"></script>
 </body>
 </html>

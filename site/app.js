@@ -21,10 +21,11 @@ const VP_ABSENT = {
   zurich: "The Swiss LA API is trip-updates only — no vehicle positions — so Zurich shows routes and stop delays only.",
 };
 
-// modes are a second axis, so they get their own hues — none of them a city's
+// modes are a second axis, so they get their own hues; within a card none of
+// them reads as that card's city
 const MODE_COLORS = {
-  light: { metro: "#4f46e5", rail: "#0e7490", tram: "#b45309", bus: "#64748b", ferry: "#0284c7", other: "#a16207", unknown: "#b8bcc4" },
-  dark:  { metro: "#818cf8", rail: "#22d3ee", tram: "#f59e0b", bus: "#94a3b8", ferry: "#38bdf8", other: "#fbbf24", unknown: "#5b616b" },
+  light: { metro: "#4f46e5", rail: "#0e7490", tram: "#b45309", bus: "#64748b", ferry: "#0284c7", other: "#db2777", unknown: "#b8bcc4" },
+  dark:  { metro: "#818cf8", rail: "#22d3ee", tram: "#f59e0b", bus: "#94a3b8", ferry: "#38bdf8", other: "#f472b6", unknown: "#5b616b" },
 };
 
 const MAP_STYLES = {
@@ -229,7 +230,7 @@ async function renderStandings() {
       <span class="num mono ewt">${r.ewt_sec == null ? NA : r.ewt_sec + "s"}</span>
       <span class="num mono optional">${r.bunching_pct == null ? NA : r.bunching_pct + "%"}</span>
       <span class="num mono optional">${cancelCell(r)}</span>
-      <span class="num mono">${r.judged_days} / 20</span>
+      <span class="num mono">${r.judged_days}/20</span>
     </div>`;
   }).join("");
   $("standings-rows").innerHTML = head + rows;
@@ -260,7 +261,8 @@ async function renderChartLegend() {
 }
 
 /* series: {cityKey: [{x, y} ...]} on an integer x grid; xLabel maps x → tick text.
-   angled: "auto" tilts tick labels 45° only when upright ones would collide.
+   angled: "auto" keeps tick labels upright and thins them (every 2nd, 3rd ...
+   tick) until they no longer collide.
    The y options default to a percentage axis on 10-point steps clamped to 0..100. */
 function drawLineChart({
   svgId, tipId, series, xMax, xTickStep, xLabel, tipTitle, angled = false,
@@ -271,8 +273,10 @@ function drawLineChart({
   if (!svg) return;
   const W = svg.clientWidth || 640, H = svg.clientHeight || 280;
   if (angled === "auto") {
-    const spacing = ((W - 54) * xTickStep) / Math.max(1, xMax);
-    angled = spacing < String(xLabel(xMax)).length * 6.5 + 6;
+    const need = String(xLabel(xMax)).length * 6.5 + 6;
+    const per = (W - 54) / Math.max(1, xMax);
+    while (per * xTickStep < need && xTickStep < xMax) xTickStep++;
+    angled = false;
   }
   const M = { top: 12, right: 14, bottom: angled ? 34 : 28, left: 40 };
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -487,12 +491,12 @@ async function renderModes() {
 // Ring segments are filled annular sectors, not dashed circle strokes: a dash
 // seam anti-aliases into a visible notch where the ring closes. A 2px surface
 // stroke separates the segments evenly instead.
-function donut(parts, colors, size = 92, stroke = 14) {
+function donut(parts, colors, size = 92, stroke = 14, denom) {
   const c = size / 2, R = c - 1, r = R - stroke;
   const total = parts.reduce((a, p) => a + p.value, 0) || 1;
   const pt = (rad, a) => `${(c + rad * Math.sin(a)).toFixed(2)},${(c - rad * Math.cos(a)).toFixed(2)}`;
   const ring = (rad, sweep) => `M${c},${c - rad}A${rad},${rad} 0 1 ${sweep} ${c},${c + rad}A${rad},${rad} 0 1 ${sweep} ${c},${c - rad}Z`;
-  const pct = (v) => (100 * v / total).toFixed(1) + "%";
+  const pct = (v) => (100 * v / (denom || total)).toFixed(1) + "%";
   // a sliver thinner than the 2px separator reads as a chip in the ring, so
   // every segment gets at least ~5px of arc, borrowed from the largest one
   const minSweep = 5 / R;
@@ -561,7 +565,7 @@ async function renderStorage() {
       `<li><span class="dot" style="background:${mc[p.key] ?? mc.unknown}"></span>${esc(p.key)} <span class="mono">${(100 * p.value / d.events).toFixed(1)}%</span></li>`).join("");
     const silverTotal = Object.values(d.silver).reduce((a, b) => a + b, 0);
     const silverBits = ["predictions", "positions", "trains", "alerts"].filter((k) => d.silver[k])
-      .map((k) => `${fmt(d.silver[k])} ${k}`).join(" · ");
+      .map((k) => `${fmt(d.silver[k])}&nbsp;${k}`).join("&nbsp;· ");
     // fleet at the peak minute: trips in motion per mode, plus any mode the city
     // publishes positions for and no trip updates (ToeiBus)
     const f = fleet?.cities?.[c];
@@ -572,15 +576,15 @@ async function renderStorage() {
     }
     const motionTotal = Object.values(motion).reduce((a, b) => a + b, 0);
     const motionBits = Object.entries(motion).sort((a, b) => b[1] - a[1])
-      .map(([m, v]) => `${fmt(v)} ${m === "metro" && c === "nyc" ? "subway" : m}`).join(" · ");
+      .map(([m, v]) => `${fmt(v)}&nbsp;${m === "metro" && c === "nyc" ? "subway" : m}`).join("&nbsp;· ");
     const noTrip = f ? (f.positions.no_route?.no_trip ?? 0) : 0;
     const vehicles = d.vehicles != null
-      ? `${fmt(d.vehicles)} distinct vehicle ids`
+      ? `${fmt(d.vehicles)}&nbsp;distinct vehicle ids`
       : c === "nyc" ? "no vehicle ids — a trip stands in for a train" : "no positions feed";
     return `<div class="card storage-card">
-      <div class="storage-head"><span class="city-cell"><span class="dot" style="background:${cityColor(c)}"></span><b>${CITIES[c].name}</b></span><span class="sub">${esc(CITIES[c].src)} · ${d.days} service days</span></div>
+      <div class="storage-head"><span class="city-cell"><span class="dot" style="background:${cityColor(c)}"></span><b>${CITIES[c].name}</b></span><span class="sub">${esc(CITIES[c].src)}&nbsp;· ${d.days}&nbsp;service&nbsp;days</span></div>
       <div class="storage-body">
-        ${donut(parts, mc)}
+        ${donut(parts, mc, 92, 14, d.events)}
         <ul class="mode-legend">${legend}</ul>
         <div class="tile-grid storage-tiles">
           <div class="tile"><b>${fmt(d.events)}</b><span>stop events</span></div>
@@ -591,7 +595,7 @@ async function renderStorage() {
           <div class="tile"><b>${fmt(d.stops)}</b><span>stops</span></div>
         </div>
       </div>
-      <p class="storage-fleet">${silverBits} · ${vehicles}${f ? ` · <b>${fmt(motionTotal)} in motion at the peak minute</b> (${motionBits})${noTrip ? ` · ${fmt(noTrip)} more reporting with no trip` : ""}` : ""}</p>
+      <p class="storage-fleet">${silverBits}&nbsp;· ${vehicles}${f ? `&nbsp;· <b>${fmt(motionTotal)} in motion at the peak minute</b> (${motionBits})${noTrip ? `&nbsp;· ${fmt(noTrip)}&nbsp;more reporting with no&nbsp;trip` : ""}` : ""}</p>
       ${daybars(d.days_series, cityColor(c))}
     </div>`;
   }).join("");
@@ -648,9 +652,9 @@ async function renderAnswers() {
   const earlyRows = Object.entries(early)
     .map(([c, e]) => ({ c, pct: (100 * e.early) / e.measured, measured: e.measured, modes: e.modes.sort((x, y) => Number(y.measured) - Number(x.measured)) }))
     .sort((x, y) => y.pct - x.pct)
-    .map((r) => `<tr><td>${cityCell(r.c)}</td>
-     <td class="num mono"><span title="${fmt(r.measured)} measured timepoint departures">${r.pct.toFixed(1)}%</span>
-     <span class="mode-split">${r.modes.map((m) => `${esc(m.mode)} ${Number(m.early_dep_pct).toFixed(1)}%`).join(" · ")}</span></td></tr>`).join("");
+    .map((r) => `<tr data-tip="${esc(tipOf(CITIES[r.c].name, [["left early", r.pct.toFixed(1) + "%"], ["measured timepoint departures", fmt(r.measured)]]))}"><td>${cityCell(r.c)}</td>
+     <td class="num mono"><span>${r.pct.toFixed(1)}%</span>
+     <span class="mode-split">${r.modes.map((m) => `${esc(m.mode)}&nbsp;${Number(m.early_dep_pct).toFixed(1)}%`).join("&nbsp;· ")}</span></td></tr>`).join("");
   // Three feeds cannot answer this one. The reason is a property of the feed,
   // not a hole in the data, so it sits on the same rows the measured cities use.
   const EARLY_NA = {
@@ -790,7 +794,7 @@ async function renderDeeper() {
 // ---------- best / worst routes ----------
 function routeTable(rows) {
   const body = rows.map((r) => {
-    const what = r.long_name && r.long_name !== r.label ? esc(String(r.long_name).slice(0, 30).toLowerCase()) : r.mode;
+    const what = r.long_name && r.long_name !== r.label ? esc(String(r.long_name).toLowerCase()) : r.mode;
     const name = `${CITIES[r.city_key].name.toLowerCase()} · ${what}`;
     return `<tr>
       <td><span class="city-cell"><span class="dot" style="background:${cityColor(r.city_key)}"></span>
@@ -878,6 +882,7 @@ async function renderHero() {
     layers: mapLayers("hero", data, theme, true),
     initialViewState: { latitude: 40.717, longitude: -73.925, zoom: 11.6, pitch: 52, bearing: -18 },
     controller: false,
+    touchAction: "pan-y",
   };
   if (heroDeck) heroDeck.setProps(props);
   else heroDeck = new deck.DeckGL({ container: "hero-map", mapLib: maplibregl, ...props });
@@ -1034,3 +1039,12 @@ renderHero();
 renderTabs();
 renderCityMap("nyc", true);
 setupReveal();
+document.querySelectorAll("#feeds .chart-wrap, #pipeline .chart-wrap").forEach((w) => {
+  const upd = () => w.classList.toggle("at-end", w.scrollLeft + w.clientWidth >= w.scrollWidth - 2);
+  w.addEventListener("scroll", upd, { passive: true });
+  const ro = new ResizeObserver(upd);
+  ro.observe(w);
+  const t = w.querySelector("table");
+  if (t) ro.observe(t);
+  upd();
+});
