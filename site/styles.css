@@ -696,7 +696,7 @@ h2 {
   line-height: 1.1;
   color: var(--foreground);
 }
-.rule-fig small, .stack-fig small, .cost-total small {
+.rule-fig small, .stack-fig small {
   margin-left: 6px;
   font-family: "Geist", system-ui, sans-serif;
   font-size: 11px;
@@ -734,13 +734,13 @@ h2 {
 .weights { margin-top: 20px; padding: 18px 20px 20px; }
 .weights-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .weights-head .sub { margin: 0; }
-.weight-bar, .cost-bar { display: flex; gap: 2px; height: 12px; margin-top: 14px; }
-.weight-bar span, .cost-bar span {
+.weight-bar { display: flex; gap: 2px; height: 12px; margin-top: 14px; }
+.weight-bar span {
   min-width: 3px;
   background: color-mix(in srgb, var(--foreground) calc(var(--w) * 78%), var(--surface));
 }
-.weight-bar span:first-child, .cost-bar span:first-child { border-radius: 4px 0 0 4px; }
-.weight-bar span:last-child, .cost-bar span:last-child { border-radius: 0 4px 4px 0; }
+.weight-bar span:first-child { border-radius: 4px 0 0 4px; }
+.weight-bar span:last-child { border-radius: 0 4px 4px 0; }
 /* legend columns sit under their own segment: widths mirror the weights */
 .weight-legend { display: grid; grid-template-columns: 35fr 30fr 20fr 15fr; gap: 2px; margin-top: 12px; }
 .weight-legend > div { display: flex; flex-direction: column; gap: 2px; padding-right: 14px; }
@@ -916,29 +916,6 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
 .orch-beats li { display: flex; flex-direction: column; font-size: 11.5px; color: var(--muted-foreground); }
 .orch-beats b { font-size: 15px; font-weight: 500; color: var(--foreground); }
 
-.cost { margin-top: 14px; padding: 18px 20px 20px; }
-.cost-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.cost-total { margin-top: 4px; font-size: 30px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.1; }
-.cost-invoice { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--muted-foreground); }
-.cost-invoice b { font-size: 15px; font-weight: 500; color: var(--good); }
-.cost-legend {
-  list-style: none;
-  margin: 12px 0 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 22px;
-  font-size: 12px;
-  color: var(--foreground-2);
-}
-.cost-legend li { display: flex; align-items: center; gap: 7px; }
-.cost-legend i {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--foreground) calc(var(--w) * 78%), var(--surface));
-}
-.cost-legend b { font-weight: 500; color: var(--foreground); }
 
 @media (max-width: 1180px) {
   .stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1148,6 +1125,18 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
   #feeds .data-table { min-width: 980px; }
   #pipeline .data-table { min-width: 760px; }
   #feeds .chart-wrap, #pipeline .chart-wrap { -webkit-overflow-scrolling: touch; }
+}
+
+/* the four findings tables hold a city and up to four figures; at 320px the peak
+   table ran 57px past its card and widened the whole page. Tighten below 380px and
+   let the card scroll its own table if a longer name still does not fit. */
+[id^="answers-"] { overflow-x: auto; }
+@media (max-width: 380px) {
+  [id^="answers-"] .data-table { font-size: 11.5px; }
+  [id^="answers-"] .data-table th { letter-spacing: 0.06em; }
+  [id^="answers-"] .data-table .city-cell { white-space: normal; line-height: 1.2; gap: 6px; }
+  [id^="answers-"] .data-table td.num + td.num, [id^="answers-"] .data-table th.num + th.num { padding-left: 6px; }
+  [id^="answers-"] .data-table td:first-child, [id^="answers-"] .data-table th:first-child { padding-right: 6px; }
 }
 
 /* two storage cards side by side need ~560px each: below that the stat tiles
