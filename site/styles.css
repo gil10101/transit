@@ -1020,8 +1020,6 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
   color: var(--muted-foreground);
   white-space: nowrap;
 }
-.rb-tick:first-child { transform: none; }
-.rb-tick:last-child { transform: translateX(-100%); }
 .rb-range {
   position: absolute;
   top: 3px;
@@ -1128,7 +1126,7 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
 @media (max-width: 900px) {
   .standing-row { grid-template-columns: 22px minmax(0, 1.4fr) repeat(4, minmax(0, 1fr)); }
 }
-.standing-row .city .dot { flex: none; }
+.standing-row .city .dot, .city-cell .dot { flex: none; }
 @media (max-width: 480px) {
   /* five tracks on a phone: excess wait steps out, as bunching and cancels already do */
   .standing-row { grid-template-columns: 18px minmax(0, 1.7fr) repeat(3, minmax(0, 1fr)); gap: 8px; padding: 10px 2px; }
