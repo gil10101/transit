@@ -112,6 +112,7 @@ architecture:
 | `docs/08-incident-log.md` | every failure, what it cost, and what was changed |
 | `docs/10-production-gates.md` | quality gates A–G, incident log, verification evidence |
 | `docs/09-backfill-feasibility.md` | why GTFS-RT history cannot be backfilled, only accrued |
+| `docs/11-teardown.md` | decommission runbook: AWS + Snowflake, in order, with checks |
 
 ## Layout
 
