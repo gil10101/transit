@@ -2,7 +2,9 @@
 --
 -- Headline question: which cities run the most reliable public transit, and
 -- what makes them reliable? The eight sub-questions below come from
--- docs/transit-pulse-plan.md §1. Every query here runs against TRANSIT.GOLD in
+-- docs/transit-pulse-plan.md §1; Q9-Q12 at the end [added 2026-09-26] are the
+-- four further cuts the site shows (site/data/extras.json), measured on the
+-- standings' judged route-days. Every query here runs against TRANSIT.GOLD in
 -- Snowflake and is the exact query whose output is quoted in
 -- docs/06-business-answers.md — re-run it to refresh those numbers rather than
 -- editing them by hand.
@@ -92,6 +94,12 @@ order by 1, 2
 -- Q4. Frequency and headways. bunched = actual gap < 0.5x scheduled,
 -- big gap = > 2x scheduled. Restricted to rows with a scheduled headway, which
 -- is itself gated on dim_city.schedule_matchable.
+-- [rev 2026-09-26] and to rows with a gap_ratio. Tokyo has a scheduled headway
+-- on every gap but gap_ratio/bunched_flag/big_gap_flag are NULL by design
+-- (dim_city.gap_regularity_measurable, docs/06 Q4-Q5), and the case-when below
+-- turned those NULLs into 0.0% bunched / 0.0% big gap — best in the fleet, for a
+-- city whose regularity is not measured. No other city moves: their gap_ratio
+-- is non-NULL wherever sched_headway_sec is.
 -- ---------------------------------------------------------------------------
 select c.city_name,
        count(*)                                                                as gaps,
@@ -102,6 +110,7 @@ select c.city_name,
 from TRANSIT.GOLD.FCT_HEADWAYS h
 join TRANSIT.GOLD.DIM_CITY c on c.city_key = h.city_key
 where h.sched_headway_sec is not null
+  and h.gap_ratio is not null
 group by 1
 order by bunched_pct desc
 ;--split--
@@ -274,4 +283,183 @@ select c.city_name,
 from TRANSIT.GOLD.FCT_CITY_SCORECARD s
 join TRANSIT.GOLD.DIM_CITY c on c.city_key = s.city_key
 order by s.score_0_100 desc
+;--split--
+
+
+-- ===========================================================================
+-- Q9-Q12 [added 2026-09-26]: four cuts the standings cannot show. Same logic
+-- as the extras.json block of scripts/export_site_data.py, and the same judged
+-- route-day gate as the standings and fct_city_scorecard: closed local day, at
+-- or after metrics_from, not a retired_day, completeness >= 0.50. Because of
+-- that gate these do not reconcile exactly with Q1/Q2, which read every scored
+-- event.
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- Q9. How late is late — how far each city's delay distribution reaches, not
+-- just how much of it lands inside the on-time window. approx_percentile, as
+-- the exporter uses, so a re-run can differ from the export by a second. Q2
+-- differs more, because of the gate rather than the approximation: NYC's exact
+-- median is 4s over every scored event and 15s over judged route-days.
+-- ---------------------------------------------------------------------------
+with eligible as (
+    select d.city_key, d.route_id, d.service_date
+    from TRANSIT.GOLD.FCT_SERVICE_DELIVERY_DAILY d
+    where d.service_day_closed
+      and d.service_date >= d.metrics_from
+      and not d.retired_day
+      and coalesce(d.completeness_pct, 0) >= 0.50
+)
+select c.city_name,
+       count(*)                                        as events,
+       round(approx_percentile(f.delay_arr_sec, 0.50)) as p50_s,
+       round(approx_percentile(f.delay_arr_sec, 0.75)) as p75_s,
+       round(approx_percentile(f.delay_arr_sec, 0.90)) as p90_s,
+       round(approx_percentile(f.delay_arr_sec, 0.95)) as p95_s,
+       round(avg(f.delay_arr_sec))                     as mean_s
+from TRANSIT.GOLD.FCT_STOP_EVENTS f
+join eligible e
+  on e.city_key = f.city_key and e.route_id = f.route_id
+ and e.service_date = f.service_date
+join TRANSIT.GOLD.DIM_CITY c on c.city_key = f.city_key
+where f.otp_band is not null
+  and f.delay_arr_sec is not null
+group by 1
+order by p90_s
+;--split--
+
+-- ---------------------------------------------------------------------------
+-- Q10. Rain. A wet hour has >= 0.5 mm of precipitation (extras.json wet_mm;
+-- Q7b's 1 mm cut is kept as it was). Returns city x local_hour x sky cells;
+-- the comparison is built from them in Python (export_site_data.py), because
+-- rain is not spread evenly over the day: the dry baseline is REWEIGHTED TO THE
+-- HOURS IT RAINED, so a city whose showers fell at rush hour is compared with
+-- its own dry rush hours, not with a dry average that includes 3am.
+--   wet_n   = sum of n over the city's wet cells
+--   wet_otp = sum(on_time over wet cells) / wet_n
+--   dry_otp = sum over wet hours h of n_wet[h] * on_time_dry[h] / n_dry[h],
+--             divided by wet_n (a wet hour with no dry cell adds nothing)
+-- Cities with wet_n < 5,000 are omitted — too few rainy arrivals (SF had
+-- essentially no rain in its window).
+-- ---------------------------------------------------------------------------
+with eligible as (
+    select d.city_key, d.route_id, d.service_date
+    from TRANSIT.GOLD.FCT_SERVICE_DELIVERY_DAILY d
+    where d.service_day_closed
+      and d.service_date >= d.metrics_from
+      and not d.retired_day
+      and coalesce(d.completeness_pct, 0) >= 0.50
+)
+select c.city_name,
+       f.local_hour,
+       iff(w.precip_mm >= 0.5, 'wet', 'dry')  as sky,
+       count(*)                               as n,
+       count_if(f.otp_band = 'on_time')       as on_time,
+       count(distinct f.local_date)           as dates   -- summed over a city's wet
+                                                         -- cells = its rainy hours
+from TRANSIT.GOLD.FCT_STOP_EVENTS f
+join eligible e
+  on e.city_key = f.city_key and e.route_id = f.route_id
+ and e.service_date = f.service_date
+join TRANSIT.GOLD.FCT_WEATHER_HOURLY w
+  on w.city_key = f.city_key and w.local_date = f.local_date
+ and w.local_hour = f.local_hour
+join TRANSIT.GOLD.DIM_CITY c on c.city_key = f.city_key
+where f.otp_band is not null
+group by 1, 2, 3
+order by 1, 2, 3
+;--split--
+
+-- ---------------------------------------------------------------------------
+-- Q11. Delay along the trip — median delay by how far along its trip the
+-- vehicle is, in tenths: the trip's first scored stop = 0, its last = 1.
+-- Does lateness build up along a route, or is it set at the terminal?
+-- ---------------------------------------------------------------------------
+with eligible as (
+    select d.city_key, d.route_id, d.service_date
+    from TRANSIT.GOLD.FCT_SERVICE_DELIVERY_DAILY d
+    where d.service_day_closed
+      and d.service_date >= d.metrics_from
+      and not d.retired_day
+      and coalesce(d.completeness_pct, 0) >= 0.50
+),
+scored as (
+    select f.city_key, f.service_date, f.trip_uid, f.stop_sequence, f.delay_arr_sec
+    from TRANSIT.GOLD.FCT_STOP_EVENTS f
+    join eligible e
+      on e.city_key = f.city_key and e.route_id = f.route_id
+     and e.service_date = f.service_date
+    where f.otp_band is not null
+      and f.delay_arr_sec is not null
+),
+trip as (
+    select city_key, service_date, trip_uid,
+           min(stop_sequence) as lo, max(stop_sequence) as hi
+    from scored
+    group by 1, 2, 3
+),
+ev as (
+    select s.city_key, s.delay_arr_sec,
+           (s.stop_sequence - t.lo) / nullif(t.hi - t.lo, 0) as progress
+    from scored s
+    join trip t
+      on t.city_key = s.city_key and t.service_date = s.service_date
+     and t.trip_uid = s.trip_uid
+)
+select c.city_name,
+       cast(least(9, floor(ev.progress * 10)) as int)  as decile,
+       count(*)                                         as events,
+       round(approx_percentile(ev.delay_arr_sec, 0.5))  as p50_s
+from ev
+join TRANSIT.GOLD.DIM_CITY c on c.city_key = ev.city_key
+where ev.progress is not null            -- single-stop trips have no progress
+group by 1, 2
+order by 1, 2
+;--split--
+
+-- ---------------------------------------------------------------------------
+-- Q12. Route spread — the whole distribution of a city's routes rather than
+-- one average. A route qualifies with >= 2,000 banded events over its judged
+-- route-days; its on-time share is event-weighted across days and directions
+-- and rounded to 0.1 as the exporter does. Quantiles follow the site's rule,
+-- value = sorted[floor(f * n)] clipped to the last route (site/app.js), so
+-- p10 / p90 bound the middle 80% of routes.
+-- ---------------------------------------------------------------------------
+with eligible as (
+    select d.city_key, d.route_id, d.service_date
+    from TRANSIT.GOLD.FCT_SERVICE_DELIVERY_DAILY d
+    where d.service_day_closed
+      and d.service_date >= d.metrics_from
+      and not d.retired_day
+      and coalesce(d.completeness_pct, 0) >= 0.50
+),
+routes as (
+    select r.city_key, r.route_id,
+           round(100 * sum(r.otp_pct * r.banded_events)
+               / nullif(sum(case when r.otp_pct is not null then r.banded_events end), 0), 1)
+               as otp_pct
+    from TRANSIT.GOLD.FCT_ROUTE_RELIABILITY_DAILY r
+    join eligible e
+      on e.city_key = r.city_key and e.route_id = r.route_id
+     and e.service_date = r.service_date
+    group by 1, 2
+    having sum(r.banded_events) >= 2000
+       and sum(case when r.otp_pct is not null then r.banded_events end) > 0
+),
+ranked as (
+    select city_key, otp_pct,
+           row_number() over (partition by city_key order by otp_pct) - 1 as i,
+           count(*) over (partition by city_key)                          as n
+    from routes
+)
+select c.city_name,
+       max(k.n)                                                               as routes,
+       max(case when k.i = least(floor(0.1 * k.n), k.n - 1) then k.otp_pct end) as p10_otp,
+       max(case when k.i = least(floor(0.5 * k.n), k.n - 1) then k.otp_pct end) as p50_otp,
+       max(case when k.i = least(floor(0.9 * k.n), k.n - 1) then k.otp_pct end) as p90_otp,
+       round(100.0 * count_if(k.otp_pct >= 80) / max(k.n), 1)                 as routes_ge_80_pct
+from ranked k
+join TRANSIT.GOLD.DIM_CITY c on c.city_key = k.city_key
+group by 1
+order by p50_otp desc
 ;

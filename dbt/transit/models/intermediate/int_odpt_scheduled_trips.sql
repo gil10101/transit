@@ -21,10 +21,11 @@
 -- Day-type resolution is deliberately identical to int_odpt_stop_events so the
 -- numerator and the denominator agree about what runs on a given date. KNOWN
 -- GAP, shared with that model: Japanese national holidays falling on a weekday
--- run holiday schedules but classify as Weekday here. No holiday falls between
--- 2026-09-03 (Tokyo's first data) and the 2026-09-17 close — the next are the
--- 21st and 23rd — so it cannot bite inside this project's window; a jp holiday
--- seed is the fix when it matters (docs/01 §C.4).
+-- run holiday schedules but classify as Weekday here. [rev 2026-09-26] It did
+-- bite: Tokyo polled until 2026-09-25, so 09-21..23 (Respect for the Aged Day,
+-- the bridging holiday, Autumnal Equinox) were expected at weekday service and
+-- read ~28% complete. Judged on-time moves 98.05% -> 97.96% without them; not
+-- repaired. A jp holiday seed is the fix (docs/01 §C.4, docs/06 Q8).
 --
 -- Toei only, because int_odpt_stop_map is Toei only (Metro publishes no
 -- odpt:Train). NipporiToneri appears in the map but has no realtime at all, so

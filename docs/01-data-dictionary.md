@@ -158,6 +158,8 @@ OTP no. Asserted by `assert_no_scored_events_in_feed_gaps`.
 
 ### C.4 Static: Tokyo Metro publishes GTFS static on the center; ODPT static types (`odpt:Station`, `odpt:Railway`, `odpt:TrainTimetable`, `odpt:Calendar`) provide the schedule for delay context and the **URN↔GTFS id mapping table** (`int_odpt_stop_map` — a required, tested model).
 
+[rev 2026-09-26] Day type is resolved from the weekday alone, so a Japanese national holiday on a weekday is expected at weekday service. That landed inside the window: 2026-09-21..23 were holidays and read ~28% complete against weekday timetables. Judged on-time is 98.05% with those days and 97.96% without; not repaired. A holiday seed is the fix.
+
 **[AMENDED 2026-09-01 — dumps + zips live-verified, parsed]**
 - ODPT dumps via the Dump API only (`api.odpt.org/api/v4/odpt:<Type>.json?acl:consumerKey=` — 301-redirects to the file; the retrieval API caps static types at 1000 entries). Sizes: Station 0.6 MB, Railway 0.13 MB, Calendar 0.2 MB, TrainTimetable **63 MB** (all center operators; parse filters to TokyoMetro+Toei → 15,374 timetables, 290k stop rows). Weekly `odpt_static` Dagster asset → `spark_jobs/odpt_static_parse.py` → `silver.odpt_{station,railway,train_timetable,calendar}`.
 - **Timetable times are "HH:MM" WRAPPED at midnight** (00:10 follows 23:59 — never GTFS-style "24:10"). The parse reconstructs GTFS-style seconds-since-service-day (>86400 allowed): +24h when the clock runs backwards inside a timetable (88 Toei timetables cross midnight) and a +24h base offset when the FIRST time is before the 03:00 cutover (43 start 00:00–03:00 — previous service day). Verified post-parse: 0 non-monotonic timetables.
