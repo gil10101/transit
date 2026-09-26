@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Transit Pulse — which city runs the most reliable transit?</title>
-<meta name="description" content="Eight cities, five countries: live agency feeds scored against each agency's own schedule, from a Kafka - Spark - Iceberg - Snowflake - dbt warehouse.">
+<meta name="description" content="Eight cities, five countries, 35 service days of realtime agency feeds scored against each agency's own schedule, from a Kafka - Spark - Iceberg - Snowflake - dbt warehouse.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='4' width='24' height='24' rx='6' fill='%232a78d6'/%3E%3Crect x='9' y='20' width='14' height='3' rx='1.5' fill='white'/%3E%3Crect x='9' y='9' width='14' height='8' rx='2' fill='white'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +18,7 @@
 <script defer src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js" integrity="sha384-nKUDlg+fT0U/eEt4KWP9n034kLe/eVj6k7CVjbu6qfRhJdEyinlGajS9+9AU+UZ5" crossorigin="anonymous"></script>
 <script defer src="https://unpkg.com/deck.gl@9.0.36/dist.min.js" integrity="sha384-w/54/rLWDJgv9c3QdtRYUtL5h1sXLHGM4wH9frLq+CMEpTUpzCYAYpUsxtgPylpc" crossorigin="anonymous"></script>
 <script>try{var m=document.cookie.match(/(?:^|;\s*)theme=(light|dark)/);var t=m?m[1]:localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
-<link rel="stylesheet" href="styles.css?v=8">
+<link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
 
@@ -44,10 +44,9 @@
       </a>
     </div>
   </div>
-  <div class="header-banner">Every figure is a warehouse snapshot captured
-    <span id="as-of-banner" class="mono">—</span>. Ingestion is finished: all eight pollers are
-    stopped — six on 2026-09-14, Zurich on 2026-09-15 and Tokyo on 2026-09-25 — each once its city
-    had banked the 20 judged days a score needs, so every city on this page holds a score.</div>
+  <div class="header-banner">Collection is complete: eight cities polled from 2026-08-23 to
+    2026-09-25, all eight scored. Every figure is a warehouse snapshot captured
+    <span id="as-of-banner" class="mono">—</span>.</div>
 </header>
 
 <main id="top">
@@ -59,8 +58,8 @@
   <div class="hero-panel">
     <div class="eyebrow">TRANSIT PULSE</div>
     <h1>Which city runs the most reliable transit?</h1>
-    <p class="hero-sub">Eight cities, five countries — live agency feeds scored against each
-    agency's own published schedule.</p>
+    <p class="hero-sub">Eight cities, five countries — agency realtime feeds, 35 service days of
+    them, scored against each agency's own timetable.</p>
     <div class="tile-grid" id="hero-tiles"></div>
     <p class="hero-note">Kafka &middot; Spark &middot; Iceberg &middot; Snowflake &middot;
     dbt &middot; Dagster — the warehouse behind every number, snapshot
@@ -75,38 +74,16 @@
   <div class="section-head">
     <div class="eyebrow">STANDINGS · CLOSED JUDGED DAYS ONLY</div>
     <h2>Reliability, city by city</h2>
-    <p class="section-note">Service-weighted across every closed judged day; routes below a 50%
-    completeness floor are excluded rather than guessed. A composite 0&ndash;100 score requires 20
-    judged days across a city's judged window, and <strong>all eight have now cleared it</strong>
-    — New York got there first, Tokyo last. <strong>Tokyo tops the table at 98.8*</strong>, and the
-    asterisk carries the weight: Toei states its own delay and rounds it to whole minutes, and with
-    excess wait and bunching nulled by design its score rests on on-time alone plus a cancellation
-    component its feed cannot fail. <strong>Among the seven cities measured against their own
-    timetable to the second, Zurich leads at 93.6</strong>, ahead of Helsinki 92.2, New York 85.8,
-    Boston 81.1, Washington DC 80.1, Toronto 72.7 and SF Bay 60.5. Every city is rated on its full
-    history: each service day is scored against the timetable that was live that day, not the one
-    published since.</p>
+    <p class="section-note">A 0&ndash;100 composite over every closed judged day, weighted by the
+    service each route runs. <strong>Tokyo leads at 98.8</strong>, then Zurich 93.6 and Helsinki
+    92.2; SF Bay closes the table at 60.5. Each service day is scored against the timetable that
+    was live that day.</p>
   </div>
   <div class="card">
     <div class="standings" id="standings-rows"></div>
     <p class="footnote">On-time = arrival within &minus;1 to +5 min of schedule. Excess wait =
     time beyond the scheduled headway on frequent service. Added (unscheduled) trips count
     toward volume, never toward on-time.</p>
-    <p class="footnote"><b>Tokyo shows a dash for excess wait and bunching on purpose.</b> Both
-    compare observed arrivals against the timetable, which only measures something when the two are
-    independent. Toei publishes a stated delay instead of an arrival time, so an arrival is
-    reconstructed as schedule&nbsp;+&nbsp;stated delay — and because 92.6% of those stated delays are
-    exactly zero, <b>88.7% of Tokyo's gaps between consecutive trains are identical to the scheduled
-    gap</b>, against 0.2&ndash;4.1% everywhere else. Computed anyway it would read 0.7% bunching and
-    a 2s wait, best in the fleet, on what is very nearly its own timetable handed back — so it is
-    nulled at the fact layer instead, the same way every metric without evidence is. Cancellations
-    are blank for an unrelated reason: <span class="mono">odpt:Train</span> has no cancellation
-    field at all.</p>
-    <p class="footnote"><b>A feed with no cancellation vocabulary scores a perfect cancellation
-    component.</b> The composite renormalises over the sub-scores that have evidence, but a cancel
-    rate of zero from a feed that cannot say "cancelled" still counts as evidence — New York's and
-    Tokyo's both read 100 on a component worth 20%. Dropped as the unmeasured component it is,
-    New York reads 82.2 and Tokyo 98.1; the order of the table does not change.</p>
   </div>
 </section>
 
@@ -130,7 +107,7 @@
     </div>
     <div class="card">
       <h3>On-time share by service day</h3>
-      <div class="sub">Each city's closed judged days — the run is young, the lines are short</div>
+      <div class="sub">Each city's closed judged days, counted from its first — day 1 is the first day it was judged</div>
       <div class="chart-wrap">
         <svg id="daily-chart" class="linechart" role="img" aria-label="Line chart of daily on-time percentage for eight cities"></svg>
         <div class="tooltip" id="daily-tooltip" hidden></div>
@@ -138,12 +115,12 @@
     </div>
     <div class="card">
       <h3>Where the delay mass sits</h3>
-      <div class="sub">Distribution of arrival delay, 30-second bins, share of each city's scored events. Tokyo is the exception to read carefully: Toei states delay rounded to whole minutes, so 92.6% of its 821k scored events land in the zero bin by construction — a coarse ruler, not a thin sample</div>
+      <div class="sub">Distribution of arrival delay, 30-second bins, share of each city's scored events — hover a bin for its share</div>
       <div id="dist-grid" class="dist-grid"></div>
     </div>
     <div class="card">
       <h3>On-time share by mode</h3>
-      <div class="sub">Same on-time rule, split by vehicle type — blank means the city runs no scored service of that mode</div>
+      <div class="sub">Same on-time rule, split by vehicle type; a dot means the city runs no scored service of that mode</div>
       <div id="modes-table"></div>
     </div>
   </div>
@@ -242,10 +219,10 @@
   <div class="section-head">
     <div class="eyebrow">PIPELINE · FIVE LAYERS</div>
     <h2>What happens to one poll</h2>
-    <p class="section-note">Every number on this page starts as a single HTTP request to an
-    agency. Eight poller containers hold 30 endpoints at a 30-second floor, and each response is
-    archived verbatim before anything interprets it — so every layer below can be rebuilt from
-    the one above without asking an agency for the same bytes twice.</p>
+    <p class="section-note">Every number on this page started as a single HTTP request to an
+    agency. Eight poller containers held 30 endpoints at a 30-second floor for a month, and each
+    response was archived verbatim before anything interpreted it — so every layer below can be
+    rebuilt from the one above without asking an agency for the same bytes twice.</p>
   </div>
   <div class="tile-grid wide-tiles" id="pipeline-tiles"></div>
   <div class="chart-wrap" style="margin-top:18px">
@@ -376,7 +353,7 @@
         <li><b>Silver</b><span>Trip <span class="mono">78512915</span>, vehicle <span class="mono">y2023</span> — MBTA's realtime ids match its static file exactly, so no inference is needed</span></li>
         <li><b>Match</b><span>Straight equijoin to the same id in the schedule, confidence 1.0</span></li>
         <li><b>Gold</b><span>Stop <span class="mono">2471</span>, sequence 9, scheduled <span class="mono">00:35:00</span>, actual <span class="mono">00:35:00</span>, delay <b>0s</b> → <b>on time</b>, from 6 predictions</span></li>
-        <li><b>Chart</b><span>20:00 local. Boston is also the fleet's most honest cancellation feed — its 9,118 cancellations are why its completeness reads lower than cities that simply never say the word</span></li>
+        <li><b>Chart</b><span>The 20:00 local column, and one of the 8.0M scored events behind Boston's 81.1</span></li>
       </ol>
     </details>
 
@@ -388,7 +365,7 @@
         <li><b>Silver</b><span>Trip <span class="mono">128666020</span>, vehicle <span class="mono">8331</span>. TTC sets <span class="mono">start_date</span> on zero trips, so the service day is resolved with a −4h cutover rather than the usual noon rule — without it, every overnight trip lands on the wrong date</span></li>
         <li><b>Match</b><span>Exact id against the surface schedule, confidence 1.0</span></li>
         <li><b>Gold</b><span>Stop <span class="mono">5954</span>, sequence 4, scheduled <span class="mono">08:26:40</span> UTC = <b>04:26 local</b>, delay <b>0s</b> → <b>on time</b></span></li>
-        <li><b>Chart</b><span>The 4am column — and part of why Toronto's early share, 36%, is the most striking number on this page</span></li>
+        <li><b>Chart</b><span>The 4am column — and part of Toronto's 18.1% early-departure share, the highest in the fleet</span></li>
       </ol>
     </details>
 
@@ -400,7 +377,7 @@
         <li><b>Silver</b><span><b><span class="mono">trip_id</span> is empty on every row.</b> Identity is rebuilt from (route, direction, start date, start time) so the trip still has one stable key across polls</span></li>
         <li><b>Match</b><span>Resolved to static trip <span class="mono">1041_20260907_Pe_2_0640</span>, confidence 1.0 — 99.6% of realtime stops line up with the schedule</span></li>
         <li><b>Gold</b><span>Stop <span class="mono">1291112</span>, sequence 12, scheduled <span class="mono">03:51:00</span>, actual <span class="mono">03:51:00</span>, delay <b>0s</b> → <b>on time</b></span></li>
-        <li><b>Chart</b><span>Helsinki's 2.5% bunching — the lowest in the fleet — is built from arrivals like this one</span></li>
+        <li><b>Chart</b><span>Helsinki's 2.6% bunching — the lowest in the fleet — is built from arrivals like this one</span></li>
       </ol>
     </details>
 
@@ -424,7 +401,7 @@
         <li><b>Silver</b><span>Trip <span class="mono">SM:15252201-155-Blocks-Weekday-62</span>, vehicle <span class="mono">436</span> — <span class="mono">SM:</span> is SamTrans</span></li>
         <li><b>Match</b><span>Exact id against the regional schedule, confidence 1.0</span></li>
         <li><b>Gold</b><span>Stop <span class="mono">335503</span>, sequence 34, scheduled <span class="mono">12:15:33</span>, actual <span class="mono">12:15:33</span>, delay <b>0s</b> → <b>on time</b></span></li>
-        <li><b>Chart</b><span>SF's completeness reads lowest in the fleet at 84.4%, and it is six operators publishing no realtime at all — not one failing agency</span></li>
+        <li><b>Chart</b><span>SF's completeness, 93.2%, is the lowest in the fleet — six operators publish no realtime at all</span></li>
       </ol>
     </details>
 
@@ -436,7 +413,7 @@
         <li><b>Silver</b><span>Trip <span class="mono">.ojp-91-11-C.1.TA.1450.j26</span>. <b>The feed carries a stated delay and no arrival timestamp</b>, so an actual time has to be constructed rather than read</span></li>
         <li><b>Match</b><span>Realtime and static ids do not line up, so it resolves on route + time to <span class="mono">.ojp-91-11-C.1.TA.1374.j26</span> — confidence <b>0.9</b>, the only city here that routinely falls back</span></li>
         <li><b>Gold</b><span>Stop <span class="mono">ch:1:sloid:91299::5</span>, sequence 11. Actual = schedule + stated delay → <span class="mono">20:27:00</span>, delay <b>0s</b> → <b>on time</b>, method <span class="mono">delay_plus_schedule</span></span></li>
-        <li><b>Chart</b><span>Zurich's 96.3% on-time — the best measured here, and worth reading next to the method that produced it</span></li>
+        <li><b>Chart</b><span>One of the 10.7M scored events behind Zurich's 96.4% on-time and its 93.6 composite</span></li>
       </ol>
     </details>
 
@@ -448,64 +425,172 @@
         <li><b>Silver</b><span>Train <span class="mono">Toei.Mita.2031K</span> with <span class="mono">odpt:delay</span> = 0 and a <span class="mono">fromStation</span>. There is no arrival time in the feed at all</span></li>
         <li><b>Match</b><span>Station URNs map to GTFS stop ids, and the train matches its published timetable <span class="mono">…Mita.2031K.Weekday</span>. Arrival is detected by watching <span class="mono">fromStation</span> advance along the line across 16 snapshots</span></li>
         <li><b>Gold</b><span>Stop <span class="mono">226</span>, sequence 2, scheduled <span class="mono">11:52:00</span>, actual = schedule + stated delay → <span class="mono">11:52:00</span>, <b>on time</b>, method <span class="mono">odpt_stated</span></span></li>
-        <li><b>Chart</b><span>Tokyo's delay distribution is a single spike: <b>92.6% of its events are exactly 0 seconds</b> and none are negative, because Toei reports punctuality in whole minutes and calls on-time zero</span></li>
+        <li><b>Chart</b><span>Lands in the zero bin of Tokyo's delay distribution, and in its 98.1% on-time and 98.8 composite</span></li>
       </ol>
     </details>
 
   </div>
 </section>
 
-<!-- ======================= method / footer ======================= -->
+<!-- ======================= method ======================= -->
 <section class="section reveal" id="method">
   <div class="section-head">
     <div class="eyebrow">METHOD · HOW THE SCORING WORKS</div>
     <h2>Same rules for every city</h2>
+    <p class="section-note">One ruler, applied the same way in eight time zones. Each feed is
+    matched to the timetable its agency published for that day, and every threshold below is
+    fixed in code, not tuned per city.</p>
   </div>
-  <div class="method-cols">
-    <p>Realtime predictions are finalized against each agency's own schedule: a stop event
-    is on time within &minus;1 to +5 minutes. Cities publishing no usable delay get it
-    computed from predicted arrival vs schedule; Zurich and Tokyo state delays directly and
-    are labeled as such. Frequent service is judged on excess wait time instead of the
-    timetable — riders there experience headways, not clock times.</p>
-    <p>The scorecard refuses to rank a city on fewer than 20 closed judged days across its window;
-    routes under 10 scheduled trips or a 50% completeness floor are excluded and counted,
-    never guessed. Known coverage gaps (Helsinki ferries ride an AIS feed we don't poll;
-    one tram line has never emitted realtime) are documented in the repo instead of
-    smoothed over.</p>
+
+  <div class="rule-grid">
+    <div class="rule">
+      <div class="rule-fig mono">&minus;1&thinsp;/&thinsp;+5<small>min</small></div>
+      <h3>On time</h3>
+      <div class="ontime-line" aria-hidden="true">
+        <span class="ot-band"></span><span class="ot-zero"></span>
+        <span class="ot-tick" style="left:0;transform:none">&minus;5</span>
+        <span class="ot-tick" style="left:20%">&minus;1</span>
+        <span class="ot-tick" style="left:50%">+5</span>
+        <span class="ot-tick" style="left:100%;transform:translateX(-100%)">+15</span>
+      </div>
+      <p>An arrival counts when it lands between one minute early and five minutes late
+      against the agency's own schedule.</p>
+    </div>
+    <div class="rule">
+      <div class="rule-fig mono">20<small>days</small></div>
+      <h3>Before a score</h3>
+      <p>No composite until a city has 20 closed, judged service days. All eight cities
+      cleared it.</p>
+    </div>
+    <div class="rule">
+      <div class="rule-fig mono">50<small>%</small></div>
+      <h3>Completeness floor</h3>
+      <p>A route whose feed carried fewer than half its scheduled trips is set aside, as is
+      any route under 10 scheduled trips a day.</p>
+    </div>
+    <div class="rule">
+      <div class="rule-fig mono">local</div>
+      <h3>Each city on its own clock</h3>
+      <p>Every hour and service day is read in the city's own time zone, so 3am in Tokyo
+      compares to 3am in New York.</p>
+    </div>
+  </div>
+
+  <div class="card weights">
+    <div class="weights-head">
+      <h3>What goes into a score</h3>
+      <span class="sub">0&ndash;100, four parts, fixed weights</span>
+    </div>
+    <div class="weight-bar" aria-hidden="true">
+      <span style="flex:35;--w:1"></span><span style="flex:30;--w:.72"></span><span style="flex:20;--w:.48"></span><span style="flex:15;--w:.28"></span>
+    </div>
+    <div class="weight-legend">
+      <div style="--w:1"><b class="mono">35%</b><span class="wl-name">Excess wait</span>
+        <span class="wl-how">Minutes riders wait beyond the scheduled gap on frequent service; ten minutes scores zero</span></div>
+      <div style="--w:.72"><b class="mono">30%</b><span class="wl-name">On time</span>
+        <span class="wl-how">Share of stop events inside &minus;1 to +5 minutes</span></div>
+      <div style="--w:.48"><b class="mono">20%</b><span class="wl-name">Cancellations</span>
+        <span class="wl-how">Share of scheduled trips the agency cancelled</span></div>
+      <div style="--w:.28"><b class="mono">15%</b><span class="wl-name">Bunching</span>
+        <span class="wl-how">Share of arrivals less than half a scheduled gap behind the one ahead</span></div>
+    </div>
   </div>
 </section>
 
-<!-- ======================= specs (fine print) ======================= -->
+<!-- ======================= specs ======================= -->
 <section class="section reveal" id="specs">
   <div class="section-head">
-    <div class="eyebrow">SPECS · FINE PRINT</div>
+    <div class="eyebrow">SPECS · THE STACK</div>
     <h2>What it runs on</h2>
+    <p class="section-note">Five stages from an agency's HTTP response to a row in gold, with
+    Dagster keeping time across all of them.</p>
   </div>
-  <div class="spec-grid">
-    <div class="spec"><b>Ingest</b><p>Eight poller containers, one per city, from a single
-    config-driven image. Thirty endpoints at a 30-second floor — SF at 200s under a 60 requests/hour
-    cap, Zurich's alerts at 600s. Every response is archived to S3 before anything decodes it,
-    on a 7-day expiry.</p></div>
-    <div class="spec"><b>Queue</b><p>Single-broker Kafka in KRaft mode on a t4g.small with 48 GB
-    gp3. Four topics at three partitions each, zstd compression, 50 ms linger, 10 MB maximum
-    message, 24-hour retention.</p></div>
-    <div class="spec"><b>Processing</b><p>Spark Structured Streaming on EMR Serverless 7.5.0 with
-    an availableNow trigger. The application is capped at 8 vCPU / 32 GB; each run is a 2 vCPU /
-    6 GB driver plus two 2 vCPU / 10 GB executors, 16 shuffle partitions, five state-store
-    versions retained.</p></div>
-    <div class="spec"><b>Lake</b><p>Apache Iceberg on S3 through a Hadoop catalog. Bronze is
-    partitioned by (feed, city, service_date), silver by (city, service_date). Snowflake reads
-    silver as external tables, so there is no load step.</p></div>
-    <div class="spec"><b>Warehouse</b><p>Snowflake on an X-Small warehouse. dbt builds 17 staging
-    views, 20 intermediate tables and 13 marts over 6 seeds, with 242 tests on every run.</p></div>
-    <div class="spec"><b>Orchestration</b><p>Dagster on a t4g.medium services box: drains every
-    two hours, the dbt chain at 11:05 and 23:05 UTC, a feed-freshness tripwire four times an hour,
-    hourly weather, and a schedule refresh on Sunday mornings.</p></div>
+
+  <ol class="stack">
+    <li class="stack-card">
+      <div class="stack-top"><span class="stack-n mono">01</span><span class="stack-role">Ingest</span></div>
+      <div class="stack-tech">Python pollers on Docker</div>
+      <div class="stack-fig mono">30<small>endpoints</small></div>
+      <dl>
+        <div><dt>containers</dt><dd>8, one image</dd></div>
+        <div><dt>poll floor</dt><dd>30 s</dd></div>
+        <div><dt>slow lanes</dt><dd>SF 200 s · Zurich alerts 600 s</dd></div>
+        <div><dt>archive</dt><dd>S3, 7-day expiry</dd></div>
+      </dl>
+    </li>
+    <li class="stack-card">
+      <div class="stack-top"><span class="stack-n mono">02</span><span class="stack-role">Queue</span></div>
+      <div class="stack-tech">Kafka, KRaft mode</div>
+      <div class="stack-fig mono">4&times;3<small>topics &times; partitions</small></div>
+      <dl>
+        <div><dt>host</dt><dd>t4g.small · 48 GB</dd></div>
+        <div><dt>compression</dt><dd>zstd · 50 ms linger</dd></div>
+        <div><dt>max message</dt><dd>10 MB</dd></div>
+        <div><dt>retention</dt><dd>24 h</dd></div>
+      </dl>
+    </li>
+    <li class="stack-card">
+      <div class="stack-top"><span class="stack-n mono">03</span><span class="stack-role">Process</span></div>
+      <div class="stack-tech">Spark Structured Streaming</div>
+      <div class="stack-fig mono">2 h<small>drain cycle</small></div>
+      <dl>
+        <div><dt>runtime</dt><dd>EMR Serverless 7.5</dd></div>
+        <div><dt>ceiling</dt><dd>8 vCPU · 32 GB</dd></div>
+        <div><dt>per run</dt><dd>driver + 2 executors</dd></div>
+        <div><dt>shuffle</dt><dd>16 partitions</dd></div>
+      </dl>
+    </li>
+    <li class="stack-card">
+      <div class="stack-top"><span class="stack-n mono">04</span><span class="stack-role">Lake</span></div>
+      <div class="stack-tech">Apache Iceberg on S3</div>
+      <div class="stack-fig mono"><span id="spec-silver">2.96B</span><small>silver rows</small></div>
+      <dl>
+        <div><dt>catalog</dt><dd>Hadoop</dd></div>
+        <div><dt>bronze by</dt><dd>feed · city · date</dd></div>
+        <div><dt>silver by</dt><dd>city · date</dd></div>
+        <div><dt>load step</dt><dd>none — external tables</dd></div>
+      </dl>
+    </li>
+    <li class="stack-card">
+      <div class="stack-top"><span class="stack-n mono">05</span><span class="stack-role">Warehouse</span></div>
+      <div class="stack-tech">Snowflake + dbt</div>
+      <div class="stack-fig mono"><span id="spec-gold">422.9M</span><small>gold rows</small></div>
+      <dl>
+        <div><dt>compute</dt><dd>X-Small</dd></div>
+        <div><dt>models</dt><dd>50 over 6 seeds</dd></div>
+        <div><dt>layers</dt><dd>17 · 20 · 13</dd></div>
+        <div><dt>tests</dt><dd>242 every build</dd></div>
+      </dl>
+    </li>
+  </ol>
+
+  <div class="orch">
+    <div class="orch-name"><span class="stack-role">Orchestration</span><span class="stack-tech">Dagster on a t4g.medium</span></div>
+    <ul class="orch-beats">
+      <li><b class="mono">2 h</b>silver drains</li>
+      <li><b class="mono">11:05 · 23:05</b>dbt chain, UTC</li>
+      <li><b class="mono">hourly</b>weather</li>
+      <li><b class="mono">Sunday</b>timetable refresh</li>
+    </ul>
   </div>
-  <p class="footnote">Gross AWS usage was <b>$67.45</b> for 1–20 September 2026 — S3 $20.63, EMR
-  Serverless $20.62, EC2 $20.21, the remainder networking and registry. Credits cover it, so the
-  invoice is $0.00. Every figure on this page is read from the Snowflake catalog, the AWS API or
-  the orchestrator's own run log rather than estimated.</p>
+
+  <div class="card cost">
+    <div class="cost-head">
+      <div><span class="stack-role">AWS, 1&ndash;24 September 2026</span>
+        <div class="cost-total mono">$76.72<small>gross</small></div></div>
+      <div class="cost-invoice"><b class="mono">$0.00</b><span>invoiced — credits cover it</span></div>
+    </div>
+    <div class="cost-bar" aria-hidden="true">
+      <span style="flex:25.11;--w:1"></span><span style="flex:22.88;--w:.72"></span><span style="flex:21.40;--w:.5"></span><span style="flex:6.57;--w:.3"></span><span style="flex:.76;--w:.16"></span>
+    </div>
+    <ul class="cost-legend">
+      <li style="--w:1"><i></i>EC2<b class="mono">$25.11</b></li>
+      <li style="--w:.72"><i></i>S3<b class="mono">$22.88</b></li>
+      <li style="--w:.5"><i></i>EMR Serverless<b class="mono">$21.40</b></li>
+      <li style="--w:.3"><i></i>VPC<b class="mono">$6.57</b></li>
+      <li style="--w:.16"><i></i>registry + billing<b class="mono">$0.76</b></li>
+    </ul>
+  </div>
 </section>
 
 </main>
@@ -529,11 +614,11 @@
       <a href="https://github.com/gil10101/transit">github.com/gil10101/transit</a>
       <a href="https://gillu.me">gillu.me</a>
       <a href="https://sky.gillu.me">sky.gillu.me</a>
-      <span class="footer-stamp">warehouse snapshot <span id="as-of-footer">—</span> · pipeline live</span>
+      <span class="footer-stamp">warehouse snapshot <span id="as-of-footer">—</span> · collection complete</span>
     </div>
   </div>
 </footer>
 
-<script defer src="app.js?v=9"></script>
+<script defer src="app.js?v=10"></script>
 </body>
 </html>

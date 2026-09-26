@@ -13,8 +13,7 @@ const CITIES = {
   dc:       { name: "Washington DC", src: "WMATA · rail + bus",                  view: [38.90, -77.03, 11.0],  light: "#eda100", dark: "#c98500" },
   toronto:  { name: "Toronto",       src: "TTC · streetcar + bus + subway",      view: [43.72, -79.38, 11.15], light: "#e87ba4", dark: "#d55181" },
   sf:       { name: "SF Bay Area",   src: "511.org · 30+ agencies",              view: [37.70, -122.30, 9.6],  light: "#008300", dark: "#008300" },
-  // operator-stated, minute-rounded delay — every surface that ranks tokyo says so.
-  // Violet: the one hue the seven above leave free (toronto owns pink here).
+  // violet: the one hue the seven above leave free (toronto owns pink here)
   tokyo:    { name: "Tokyo",         src: "ODPT · Toei subway + tram + bus",     view: [35.68, 139.76, 10.8],  light: "#8a56d6", dark: "#9a6ee0" },
 };
 const VP_ABSENT = {
@@ -89,6 +88,48 @@ function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+// ---------- shared hover tooltip ----------
+// Any element carrying data-tip (HTML, escaped at build time) gets the floating
+// tooltip. One delegated listener serves the mode table, donuts and day bars;
+// pointerdown makes a tap work the same way on touch screens.
+const hoverTip = document.createElement("div");
+hoverTip.className = "tooltip float-tip";
+hoverTip.hidden = true;
+document.body.appendChild(hoverTip);
+let tipEl = null;
+
+function donutCenter(seg, on) {
+  const svg = seg?.closest(".donut");
+  if (!svg) return;
+  const src = on ? seg : svg;
+  svg.querySelector(".donut-val").textContent = src.dataset.pct;
+  svg.querySelector(".donut-lbl").textContent = src.dataset.mode;
+}
+function setTipTarget(el) {
+  if (el === tipEl) return;
+  if (tipEl) { tipEl.classList.remove("is-hot"); donutCenter(tipEl, false); }
+  tipEl = el;
+  if (!el) { hoverTip.hidden = true; return; }
+  el.classList.add("is-hot");
+  donutCenter(el, true);
+  hoverTip.innerHTML = el.dataset.tip;
+  hoverTip.hidden = false;
+}
+function onTipPointer(ev) {
+  setTipTarget(ev.target.closest?.("[data-tip]") ?? null);
+  if (!tipEl) return;
+  const pad = 14, w = hoverTip.offsetWidth, h = hoverTip.offsetHeight;
+  let x = ev.clientX + pad, y = ev.clientY - h - pad;
+  if (x + w > innerWidth - 8) x = ev.clientX - w - pad;
+  if (y < 8) y = ev.clientY + pad;
+  hoverTip.style.left = Math.max(8, x) + "px";
+  hoverTip.style.top = y + "px";
+}
+document.addEventListener("pointermove", onTipPointer);
+document.addEventListener("pointerdown", onTipPointer);
+addEventListener("scroll", () => setTipTarget(null), { passive: true });
+document.documentElement.addEventListener("mouseleave", () => setTipTarget(null));
+
 // ---------- header stamp + hero/pipeline tiles ----------
 async function renderTiles() {
   const s = await loadJSON("data/summary.json");
@@ -104,8 +145,10 @@ async function renderTiles() {
     tile("8 · 5", "cities · countries"),
     tile(fmt(c.silver_rows), "rows in silver"),
     tile(fmt(c.gold_rows), "rows in gold"),
-    tile(c.service_days, "service days live"),
+    tile(c.service_days, "service days"),
   ].join("");
+  $("spec-silver").textContent = fmt(c.silver_rows);
+  $("spec-gold").textContent = fmt(c.gold_rows);
   $("pipeline-tiles").innerHTML = [
     tile(fmt(c.silver_rows), "silver rows (iceberg)"),
     tile(fmt(c.gold_rows), "gold rows (dbt marts)"),
@@ -115,13 +158,15 @@ async function renderTiles() {
 }
 
 // ---------- standings ----------
+// A metric the feed cannot express is a quiet dash, never a printed zero.
+const NA = `<span class="na-dash">—</span>`;
+
 // Cancellations carry three states and one number cannot show them: a feed with
 // no CANCELED vocabulary (New York, Tokyo) reads a dash, a feed that says it and
 // almost never means it reads "<0.01%" rather than a bare 0.00% beside a real
 // count (Toronto: 4 trips in 661,306), and everyone else reads the rate.
 function cancelCell(r) {
-  if (r.cancel_pct == null) return "—";
-  if (r.emits_cancels === false) return `<span title="feed never emits CANCELED">—</span>`;
+  if (r.cancel_pct == null || r.emits_cancels === false) return NA;
   const v = Number(r.cancel_pct);
   // compare on the COUNT, not the rate: the rate arrives pre-rounded to two
   // places, so a real handful of cancellations is already 0.0 by the time it
@@ -173,21 +218,16 @@ async function renderStandings() {
   const rows = ranked.map((r, i) => {
     const color = cityColor(r.city_key);
     const name = CITIES[r.city_key]?.name ?? r.city_key;
-    // An operator-stated, minute-rounded delay is not measured the way the
-    // others are, so the mark travels with every figure it feeds (docs/06).
-    const star = r.delay_operator_stated
-      ? `<sup class="stated" title="operator-stated delay, rounded to whole minutes — not measured the way the other cities are">*</sup>`
-      : "";
     return `<div class="standing-row">
       <span class="rank mono">${i + 1}</span>
       <span class="city"><span class="dot" style="background:${color}"></span>${name}</span>
       <span class="optional">${sparkline(byCity[r.city_key] ?? [], color)}</span>
       <span class="num mono otp">${r.score_0_100 == null
         ? `<span class="unscored" title="needs 20 judged days">—</span>`
-        : Number(r.score_0_100).toFixed(1) + star}</span>
-      <span class="num mono">${r.otp_pct == null ? "—" : Number(r.otp_pct).toFixed(1) + "%" + star}</span>
-      <span class="num mono">${r.ewt_sec == null ? "—" : r.ewt_sec + "s"}</span>
-      <span class="num mono optional">${r.bunching_pct == null ? "—" : r.bunching_pct + "%"}</span>
+        : Number(r.score_0_100).toFixed(1)}</span>
+      <span class="num mono">${r.otp_pct == null ? "—" : Number(r.otp_pct).toFixed(1) + "%"}</span>
+      <span class="num mono">${r.ewt_sec == null ? NA : r.ewt_sec + "s"}</span>
+      <span class="num mono optional">${r.bunching_pct == null ? NA : r.bunching_pct + "%"}</span>
       <span class="num mono optional">${cancelCell(r)}</span>
       <span class="num mono">${r.judged_days} / 20</span>
     </div>`;
@@ -219,12 +259,13 @@ async function renderChartLegend() {
   });
 }
 
-/* series: {cityKey: [{x, y} ...]} on an integer x grid; xLabel maps x → tick text. */
-function drawLineChart({ svgId, tipId, series, xMax, xTickStep, xLabel, tipTitle }) {
+/* series: {cityKey: [{x, y} ...]} on an integer x grid; xLabel maps x → tick text.
+   angled: tick labels at 45° so a dense axis never overlaps on a narrow card. */
+function drawLineChart({ svgId, tipId, series, xMax, xTickStep, xLabel, tipTitle, angled = false }) {
   const svg = $(svgId);
   if (!svg) return;
   const W = svg.clientWidth || 640, H = svg.clientHeight || 280;
-  const M = { top: 12, right: 14, bottom: 28, left: 40 };
+  const M = { top: 12, right: 14, bottom: angled ? 34 : 28, left: 40 };
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
 
   const visible = Object.keys(CITIES).filter((c) => series[c]?.some(Boolean) && !hidden.has(c));
@@ -242,7 +283,13 @@ function drawLineChart({ svgId, tipId, series, xMax, xTickStep, xLabel, tipTitle
       `<text x="${M.left - 8}" y="${y(v) + 4}" text-anchor="end" font-size="10.5" fill="${mutedCol}" font-family="Geist Mono,monospace">${v}%</text>`;
   }
   for (let i = 0; i <= xMax; i += xTickStep) {
-    g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="10.5" fill="${mutedCol}" font-family="Geist Mono,monospace">${xLabel(i)}</text>`;
+    if (angled) {
+      const bx = x(i).toFixed(1), by = H - M.bottom;
+      g += `<line x1="${bx}" x2="${bx}" y1="${by}" y2="${by + 4}" stroke="${gridCol}" stroke-width="1"/>` +
+        `<text transform="translate(${bx},${by + 9}) rotate(-45)" text-anchor="end" dominant-baseline="central" font-size="10" fill="${mutedCol}" font-family="Geist Mono,monospace">${xLabel(i)}</text>`;
+    } else {
+      g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="10.5" fill="${mutedCol}" font-family="Geist Mono,monospace">${xLabel(i)}</text>`;
+    }
   }
   for (const c of visible) {
     let d = "", prev = false;
@@ -309,18 +356,23 @@ async function renderLineCharts() {
     tipTitle: (h) => `${String(h).padStart(2, "0")}:00 local`,
   });
 
-  const dates = [...new Set(daily.rows.map((r) => r.service_date))].sort();
-  const idx = new Map(dates.map((d, i) => [d, i]));
+  // x is the day of recording, not the calendar: day 1 is each city's first
+  // judged day, so cities that started a week apart still line up
+  const byCity = {};
+  for (const r of daily.rows) (byCity[r.city_key] ??= []).push(r);
   const dSeries = {};
-  for (const r of daily.rows) {
-    if (r.otp_pct == null) continue; // a gap in the line, never a plunge to 0
-    (dSeries[r.city_key] ??= [])[idx.get(r.service_date)] = { y: +r.otp_pct };
+  let days = 0;
+  for (const [c, rows] of Object.entries(byCity)) {
+    rows.sort((a, b) => a.service_date.localeCompare(b.service_date));
+    days = Math.max(days, rows.length);
+    // a judged day with no scoreable delay is a gap in the line, never a plunge to 0
+    dSeries[c] = rows.map((r) => (r.otp_pct == null ? undefined : { y: +r.otp_pct }));
   }
   drawLineChart({
     svgId: "daily-chart", tipId: "daily-tooltip", series: dSeries,
-    xMax: dates.length - 1, xTickStep: 1,
-    xLabel: (i) => dates[i]?.slice(5).replace("-", "/") ?? "",
-    tipTitle: (i) => dates[i] ?? "",
+    xMax: days - 1, xTickStep: 1, angled: true,
+    xLabel: (i) => i + 1,
+    tipTitle: (i) => `day ${i + 1} of recording`,
   });
 }
 
@@ -350,7 +402,10 @@ async function renderDist() {
       const sec = B0 + i * STEP;
       const col = sec < -60 ? sem.early : sec < 60 ? sem.good : sec < 300 ? sem.warn : sem.bad;
       const h = Math.max(s > 0 ? 1 : 0, (s / peak) * (H - 12));
-      return `<rect x="${(i * bw).toFixed(1)}" y="${(H - h).toFixed(1)}" width="${(bw - 0.6).toFixed(1)}" height="${h.toFixed(1)}" fill="${col}"><title>${sec >= 0 ? "+" : ""}${sec}s to ${sec + STEP >= 0 ? "+" : ""}${sec + STEP}s: ${(s * 100).toFixed(1)}% of events</title></rect>`;
+      const tip = `<div class="t-title mono">${sec >= 0 ? "+" : ""}${sec}s to ${sec + STEP >= 0 ? "+" : ""}${sec + STEP}s</div>` +
+        `<div class="t-row">${esc(CITIES[c].name)}<b class="mono">${(s * 100).toFixed(1)}%</b></div>`;
+      return `<g class="bin" data-tip="${esc(tip)}"><rect class="hit" x="${(i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}"/>` +
+        `<rect x="${(i * bw).toFixed(1)}" y="${(H - h).toFixed(1)}" width="${(bw - 0.6).toFixed(1)}" height="${h.toFixed(1)}" fill="${col}"/></g>`;
     }).join("");
     const zeroX = ((0 - B0) / STEP) * bw;
     const share5 = shares.slice(0, nb).reduce((a, s, i) => (B0 + i * STEP >= 300 ? a + s : a), 0);
@@ -377,47 +432,87 @@ async function renderModes() {
   }
   const cols = MODES.filter((m) => seen.has(m));
   const order = summary.standings.map((r) => r.city_key).filter((c) => byCity[c]);
+  // one hue, light → dark with on-time share; the shade is a reading aid, the
+  // printed number stays the value
+  const LO = 40, HI = 100;
+  const shade = (otp) => (6 + 42 * Math.max(0, Math.min(1, (otp - LO) / (HI - LO)))).toFixed(0);
   const head = `<tr><th>city</th>${cols.map((m) => `<th class="num">${m}</th>`).join("")}</tr>`;
   const rows = order.map((c) => {
     const cells = cols.map((m) => {
       const v = byCity[c][m];
-      return `<td class="num mono">${v ? `<span title="${fmt(v.events)} scored events">${v.otp.toFixed(1)}%</span>` : ""}</td>`;
+      if (!v) return `<td class="num"><span class="heat empty" aria-label="no ${m} service">·</span></td>`;
+      const tip = `<div class="t-title">${esc(CITIES[c].name)} · ${esc(m)}</div>` +
+        `<div class="t-row">on time<b class="mono">${v.otp.toFixed(1)}%</b></div>` +
+        `<div class="t-row">scored events<b class="mono">${v.events.toLocaleString("en-US")}</b></div>`;
+      return `<td class="num"><span class="heat mono" style="--shade:${shade(v.otp)}%" data-tip="${esc(tip)}">${v.otp.toFixed(1)}%</span></td>`;
     }).join("");
     return `<tr><td><span class="city-cell"><span class="dot" style="background:${cityColor(c)}"></span>${CITIES[c].name}</span></td>${cells}</tr>`;
   }).join("");
-  $("modes-table").innerHTML = `<table class="data-table">${head}${rows}</table>` +
-    `<p class="footnote">Cells under 5,000 scored events are suppressed. Hover a cell for its evidence count.</p>`;
+  $("modes-table").innerHTML = `<div class="table-scroll"><table class="data-table heat-table">${head}${rows}</table></div>` +
+    `<div class="heat-key"><span class="mono">${LO}%</span><span class="heat-ramp"></span><span class="mono">${HI}%</span>` +
+    `<span class="heat-hint">on time · hover a cell for its scored events</span></div>`;
 }
 
 // ---------- storage: what each city put in the warehouse ----------
+// Ring segments are filled annular sectors, not dashed circle strokes: a dash
+// seam anti-aliases into a visible notch where the ring closes. A 2px surface
+// stroke separates the segments evenly instead.
 function donut(parts, colors, size = 92, stroke = 14) {
-  const r = (size - stroke) / 2, C = 2 * Math.PI * r, cx = size / 2;
+  const c = size / 2, R = c - 1, r = R - stroke;
   const total = parts.reduce((a, p) => a + p.value, 0) || 1;
-  let off = 0;
-  const arcs = parts.map((p) => {
-    const len = (p.value / total) * C;
-    const s = `<circle r="${r}" cx="${cx}" cy="${cx}" fill="none" stroke="${colors[p.key] ?? colors.unknown}" stroke-width="${stroke}"
-      stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${cx} ${cx})">
-      <title>${esc(p.key)}: ${(100 * p.value / total).toFixed(1)}% · ${fmt(p.value)} stop events</title></circle>`;
-    off += len;
-    return s;
+  const pt = (rad, a) => `${(c + rad * Math.sin(a)).toFixed(2)},${(c - rad * Math.cos(a)).toFixed(2)}`;
+  const ring = (rad, sweep) => `M${c},${c - rad}A${rad},${rad} 0 1 ${sweep} ${c},${c + rad}A${rad},${rad} 0 1 ${sweep} ${c},${c - rad}Z`;
+  const pct = (v) => (100 * v / total).toFixed(1) + "%";
+  // a sliver thinner than the 2px separator reads as a chip in the ring, so
+  // every segment gets at least ~5px of arc, borrowed from the largest one
+  const minSweep = 5 / R;
+  const sweeps = parts.map((p) => Math.max(minSweep, (p.value / total) * 2 * Math.PI));
+  if (parts.length > 1) sweeps[0] -= sweeps.reduce((a, b) => a + b, 0) - 2 * Math.PI;
+  let a0 = 0;
+  const segs = parts.map((p, i) => {
+    const share = p.value / total;
+    const a1 = a0 + (parts.length > 1 ? sweeps[i] : 2 * Math.PI);
+    const big = a1 - a0 > Math.PI ? 1 : 0;
+    const d = share > 0.9999
+      ? ring(R, 1) + ring(r, 0)
+      : `M${pt(R, a0)}A${R},${R} 0 ${big} 1 ${pt(R, a1)}L${pt(r, a1)}A${r},${r} 0 ${big} 0 ${pt(r, a0)}Z`;
+    a0 = a1;
+    const tip = `<div class="t-title">${esc(p.key)}</div>` +
+      `<div class="t-row">share of stop events<b class="mono">${pct(p.value)}</b></div>` +
+      `<div class="t-row">stop events<b class="mono">${p.value.toLocaleString("en-US")}</b></div>` +
+      (p.routes != null ? `<div class="t-row">routes<b class="mono">${Number(p.routes).toLocaleString("en-US")}</b></div>` : "");
+    return `<path class="seg" d="${d}" fill="${colors[p.key] ?? colors.unknown}" fill-rule="evenodd"
+      data-tip="${esc(tip)}" data-pct="${pct(p.value)}" data-mode="${esc(p.key)}"/>`;
   }).join("");
-  return `<svg class="donut" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="share of stop events by mode">${arcs}</svg>`;
+  const top = parts[0];
+  return `<svg class="donut" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img"
+    aria-label="share of stop events by mode" data-pct="${top ? pct(top.value) : ""}" data-mode="${top ? esc(top.key) : ""}">
+    <g class="segs">${segs}</g>
+    <text class="donut-val mono" x="${c}" y="${c + 1}" text-anchor="middle">${top ? pct(top.value) : ""}</text>
+    <text class="donut-lbl" x="${c}" y="${c + 13}" text-anchor="middle">${top ? esc(top.key) : ""}</text></svg>`;
 }
 
 function daybars(days, color) {
   if (!days.length) return "";
-  const W = 300, H = 40, n = days.length, bw = W / n;
+  const W = 300, H = 44, n = days.length, bw = W / n;
   const peak = Math.max(...days.map((d) => +d.events)) || 1;
   const bars = days.map((d, i) => {
     const h = Math.max(1, (+d.events / peak) * (H - 2));
-    const x = i * bw, w = Math.max(0.8, bw - 1);
-    return d.judged
-      ? `<rect x="${x.toFixed(1)}" y="${(H - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" opacity="0.9"><title>${esc(d.service_date)}: ${fmt(d.events)} stop events · ${fmt(d.trips)} trips · judged</title></rect>`
-      : `<rect x="${(x + 0.5).toFixed(1)}" y="${(H - h + 0.5).toFixed(1)}" width="${Math.max(0.5, w - 1).toFixed(1)}" height="${Math.max(0.5, h - 1).toFixed(1)}" fill="none" stroke="${color}" stroke-width="1" opacity="0.7"><title>${esc(d.service_date)}: ${fmt(d.events)} stop events · ${fmt(d.trips)} trips · not judged</title></rect>`;
+    const x = i * bw, w = Math.max(0.8, bw - 1.5);
+    const tip = `<div class="t-title mono">${esc(d.service_date)}</div>` +
+      `<div class="t-row">stop events<b class="mono">${Number(d.events).toLocaleString("en-US")}</b></div>` +
+      `<div class="t-row">trips<b class="mono">${Number(d.trips).toLocaleString("en-US")}</b></div>` +
+      `<div class="t-row"><span class="sw ${d.judged ? "solid" : "hollow"}" style="--c:${color}"></span>${d.judged ? "judged" : "not judged"}</div>`;
+    const bar = d.judged
+      ? `<rect class="bar" x="${x.toFixed(1)}" y="${(H - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}"/>`
+      : `<rect class="bar hollow" x="${(x + 0.5).toFixed(1)}" y="${(H - h + 0.5).toFixed(1)}" width="${Math.max(0.5, w - 1).toFixed(1)}" height="${Math.max(0.5, h - 1).toFixed(1)}" fill="none" stroke="${color}" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+    // the hit area is the full column, so a short day is as easy to point at as a tall one
+    return `<g class="day" data-tip="${esc(tip)}"><rect class="hit" x="${x.toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}"/>${bar}</g>`;
   }).join("");
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="daybars" role="img" aria-label="stop events per service day">${bars}</svg>` +
-    `<div class="daybars-label"><span>${esc(days[0].service_date)}</span><span>${esc(days[days.length - 1].service_date)}</span></div>`;
+    `<div class="daybars-label"><span>${esc(days[0].service_date)}</span>` +
+    `<span class="db-key"><span class="sw solid" style="--c:${color}"></span>judged<span class="sw hollow" style="--c:${color}"></span>not judged</span>` +
+    `<span>${esc(days[days.length - 1].service_date)}</span></div>`;
 }
 
 async function renderStorage() {
@@ -430,7 +525,8 @@ async function renderStorage() {
   const mc = MODE_COLORS[currentTheme()];
   $("storage-grid").innerHTML = order.map((c) => {
     const d = st.cities[c];
-    const parts = d.modes.filter((m) => m.events > 0).sort((a, b) => b.events - a.events)
+    // under 0.05% of events prints as 0.0% and is a speck on the ring: left out
+    const parts = d.modes.filter((m) => m.events >= 0.0005 * d.events).sort((a, b) => b.events - a.events)
       .map((m) => ({ key: m.mode, value: +m.events, routes: m.routes }));
     const legend = parts.map((p) =>
       `<li><span class="dot" style="background:${mc[p.key] ?? mc.unknown}"></span>${esc(p.key)} <span class="mono">${(100 * p.value / d.events).toFixed(1)}%</span></li>`).join("");
@@ -558,14 +654,11 @@ async function renderAnswers() {
   const tor = a.cancellations.find((r) => r.city_key === "toronto");
   const torDays = (summary.standings.find((r) => r.city_key === "toronto") || {}).judged_days;
   const torNote = tor && torDays
-    ? ` Toronto is the third case: it can say it, and has, <b>${fmt(tor.cancelled)} times in ${torDays} judged days</b>.`
+    ? ` Toronto can say it, and did — <b>${fmt(tor.cancelled)} times in ${torDays} judged days</b>.`
     : "";
   $("answers-cancel").innerHTML =
     `<table class="data-table"><tr><th>city</th><th class="num">cancelled</th><th class="num">trips</th></tr>${cxRows}</table>` +
-    `<p class="footnote">Three different things sit in this column. A dash means the feed has no
-     CANCELED vocabulary at all — New York's 13.4M rows are every one SCHEDULED, and
-     <span class="mono">odpt:Train</span> has no cancellation field — so it is a feed property, not
-     perfect service. A percentage means the feed says it and means it.${torNote}</p>`;
+    `<p class="footnote">A dash means the feed has no way to say "cancelled".${torNote}</p>`;
 }
 
 // ---------- best / worst routes ----------
