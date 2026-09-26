@@ -40,7 +40,7 @@ Streamlit + pydeck dashboard (scorecard · H3 delay hexmaps · route explorer ·
 live map · pipeline ops)          SNS alerting on chain failure
         ▼
 site/ — static public page (deck.gl network maps · standings · hourly OTP),
-snapshot data via `make site-data`, deployed on Vercel
+snapshot data via `make site-data`, live at https://transit.gillu.me (Vercel)
 ```
 
 Local dev is the same code against Redpanda + MinIO + duckdb (`make up`, dbt

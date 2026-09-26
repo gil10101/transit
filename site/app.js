@@ -203,7 +203,7 @@ async function renderStandings() {
   const head = `<div class="standing-row head"><span></span><span>city</span>` +
     `<span class="optional">daily on-time</span><span class="num">score</span>` +
     `<span class="num">on-time</span>` +
-    `<span class="num">excess wait</span><span class="num optional">bunching</span>` +
+    `<span class="num ewt">excess wait</span><span class="num optional">bunching</span>` +
     `<span class="num optional">cancelled</span><span class="num">judged</span></div>`;
   // Rank by the composite, which is what the section claims to rank by. Cities
   // still short of 20 judged days have no score and sort to the bottom on
@@ -226,7 +226,7 @@ async function renderStandings() {
         ? `<span class="unscored" title="needs 20 judged days">—</span>`
         : Number(r.score_0_100).toFixed(1)}</span>
       <span class="num mono">${r.otp_pct == null ? "—" : Number(r.otp_pct).toFixed(1) + "%"}</span>
-      <span class="num mono">${r.ewt_sec == null ? NA : r.ewt_sec + "s"}</span>
+      <span class="num mono ewt">${r.ewt_sec == null ? NA : r.ewt_sec + "s"}</span>
       <span class="num mono optional">${r.bunching_pct == null ? NA : r.bunching_pct + "%"}</span>
       <span class="num mono optional">${cancelCell(r)}</span>
       <span class="num mono">${r.judged_days} / 20</span>

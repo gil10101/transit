@@ -1111,3 +1111,50 @@ details.journey > summary:focus-visible { outline: 2px solid var(--accent); outl
   .rb-tick { font-size: 9px; }
   .rb-tick.odd { display: none; }
 }
+
+/* ---------- phone chrome ----------
+   The status bar's own ≤639px rule loses to .icon-btn declared after it, and the
+   capture date wrapped to four lines; the hero legend sat on the map attribution. */
+@media (max-width: 639px) {
+  .statusbar-inner { gap: 12px; padding: 10px 16px; }
+  .wordmark, .portfolio-link { white-space: nowrap; }
+  .statusbar .gh-link { display: none; }
+  .status .sep, .status-when { display: none; }
+  .hero-legend { bottom: 38px; flex-wrap: wrap; gap: 6px 12px; }
+}
+
+/* standings on narrow screens: six visible cells (rank, city, score, on-time,
+   excess wait, judged) need six tracks, or "judged" wraps under each row */
+@media (max-width: 900px) {
+  .standing-row { grid-template-columns: 22px minmax(0, 1.4fr) repeat(4, minmax(0, 1fr)); }
+}
+.standing-row .city .dot { flex: none; }
+@media (max-width: 480px) {
+  /* five tracks on a phone: excess wait steps out, as bunching and cancels already do */
+  .standing-row { grid-template-columns: 18px minmax(0, 1.7fr) repeat(3, minmax(0, 1fr)); gap: 8px; padding: 10px 2px; }
+  .standing-row .ewt { display: none; }
+  .standing-row .num { font-size: 12px; white-space: nowrap; }
+  .standing-row .otp { font-size: 15px; }
+  .standing-row .city { font-size: 13px; gap: 6px; }
+  .standing-row.head { font-size: 9px; letter-spacing: 0.06em; }
+}
+
+/* adjacent numeric columns share no padding (num cells zero their right edge), so
+   on a phone "57.4%53.4%" touched; give every num after a num a left gutter */
+.data-table td.num + td.num, .data-table th.num + th.num { padding-left: 10px; }
+
+/* the feeds and pipeline tables carry prose columns; squeezed to phone width each
+   row grew to hundreds of pixels of one-word lines. Hold a readable width and let
+   the frame scroll sideways instead. */
+@media (max-width: 900px) {
+  #feeds .data-table { min-width: 980px; }
+  #pipeline .data-table { min-width: 760px; }
+  #feeds .chart-wrap, #pipeline .chart-wrap { -webkit-overflow-scrolling: touch; }
+}
+
+/* two storage cards side by side need ~560px each: below that the stat tiles
+   collapsed to 13px and the day-bar key ran off the card (seen at 768px) */
+@media (max-width: 1100px) {
+  .storage-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.daybars-label { flex-wrap: wrap; }
