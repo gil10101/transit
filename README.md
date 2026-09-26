@@ -12,9 +12,10 @@ answers live in [`docs/`](docs/).
 
 **Status: Phase 6 done — scorecard + dashboard; Phase 7 is accrual.** Phases 0–5 (NYC
 slice, cloud deploy, 7-city fan-out, metrics marts) are done and verified; the pipeline
-has run unattended since 2026-08-23. **Seven of the eight pollers were retired on
-2026-09-15/16**, each the night its city banked the 20 judged days a score needs — their
-numbers are frozen and their scores stand. Tokyo is the only feed still ingesting.
+has run unattended since 2026-08-23. **Every poller is retired** — seven on 2026-09-14/15
+and Tokyo on 2026-09-25 — each once its city banked the 20 judged days a score needs, so all
+eight cities hold a score (Zurich 93.6 leads the seven measured to the second; Tokyo's 98.8
+rests on operator-stated, minute-rounded delays — docs/06).
 
 ```
 8 city pollers (GTFS-RT, per-endpoint cadence)          EC2, Docker Compose
