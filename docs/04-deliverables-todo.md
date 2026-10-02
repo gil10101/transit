@@ -30,7 +30,7 @@
 
 ## Deliverables (definition of done per artifact)
 1. **Repo** — layout per plan §10; README with architecture diagram, demo GIF, findings, cost note, ATTRIBUTION.md (TTC/ODPT/511/Swiss).
-2. **Terraform** — `apply` from empty account stands up lake, Kafka, EMR Serverless, Snowflake (provider), services box; `destroy` leaves only S3. CI: plan on PR, apply on main.
+2. **Terraform** — `apply` from empty account stands up lake, Kafka, EMR Serverless, Snowflake (provider), services box; `destroy` removes everything once the data buckets are emptied (no `force_destroy`; the full order is docs/11). CI: plan on PR, apply on main.
 3. **Ingestion** — one Docker image; 8 cities via `config/cities/*.yaml` on the generic GTFS-RT adapter, +1 ODPT adapter (Tokyo). Health metrics per poller.
 4. **Spark** — bronze_writer + silver_normalize (Structured Streaming, checkpointed, Iceberg); Zurich allow-list filter; exactly-once semantics documented.
 5. **dbt** — per spec doc: all models, snapshots, seeds, 100% mart columns documented, tests green, slim CI wired.

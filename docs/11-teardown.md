@@ -51,6 +51,12 @@ should list only `transit-pulse` resources:
 If Snowflake ownership grants error on objects created outside Terraform, drop those in
 Snowsight (step 4) and re-run.
 
+Expect the first run to stop at 86 of 91: `snowflake_external_volume.lakehouse` cannot drop
+while the dropped database's Iceberg tables sit in Time Travel (`DATA_RETENTION_TIME_IN_DAYS`
+was 1), and the reader role and buckets depend on it, so Terraform skips them too. Nothing left
+costs money. Re-run `scripts/tf.sh apply -destroy` once `show databases history like 'TRANSIT'`
+returns nothing (about a day later); it removes the last 5.
+
 ## 4. Leftovers Terraform never owned  **[destroys]**
 AWS:
 ```sh
@@ -82,8 +88,11 @@ aws s3api list-object-versions --bucket $S --output json \
   --query '{Objects: [Versions[].{Key:Key,VersionId:VersionId}, DeleteMarkers[].{Key:Key,VersionId:VersionId}][] }' \
   > /tmp/tfstate-versions.json
 aws s3api delete-objects --bucket $S --delete file:///tmp/tfstate-versions.json
+terraform -chdir=infra/bootstrap init     # only if infra/bootstrap/.terraform is gone
 terraform -chdir=infra/bootstrap destroy
 ```
+From a shell that cannot answer prompts (Claude Code's `!`), add `-auto-approve` after reading
+the plan; otherwise the confirmation hits EOF and nothing is destroyed.
 Finally, as the account root user in the console, delete IAM user `terraform-transit` (it holds
 AdministratorAccess) with its access keys.
 
@@ -107,3 +116,13 @@ nothing. About 48 hours later, Cost Explorer daily cost should read $0.00.
 - `make site-data`, `make dashboard` and every `dbt` target need a warehouse that no longer
   exists; rebuilding means re-running `infra/` from bootstrap and re-accruing data (GTFS-RT
   history cannot be backfilled — docs/09).
+
+## Run log
+- 2026-09-26: step 1 (Dagster stopped), step 2 (raw/lakehouse/artifacts emptied; none were
+  versioned), step 3 first pass (86 destroyed, 5 held by Time Travel), AWS leftovers in step 4
+  (drain log group, reminder-scheduler role). The 4 CloudWatch alarms were already in state.
+- 2026-09-28: step 3 second pass destroyed the last 5; dev state empty.
+- 2026-10-02: tfstate bucket emptied (131 versions, 92 delete markers) and bootstrap destroyed.
+  Final sweep: no buckets, instances, volumes, snapshots, addresses, EMR apps, ECR repos, log
+  groups, Lambdas or transit IAM roles. The tagging API still lists the terminated EMR app for
+  a while; it costs nothing.

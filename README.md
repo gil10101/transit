@@ -3,14 +3,21 @@
 A multi-city transit reliability warehouse. One question: **which cities run the most
 reliable public transit — and what makes them reliable?**
 
-**Live now: eight cities** (NYC, Boston, DC, SF Bay, Toronto, Helsinki, Zurich, Tokyo)
-polled around the clock into one lakehouse, scored by one methodology. Chicago joins when
+**Eight cities** (NYC, Boston, DC, SF Bay, Toronto, Helsinki, Zurich, Tokyo) polled
+around the clock into one lakehouse from 2026-08-22 to 2026-09-25, scored by one methodology. Chicago joins when
 CTA activates its GTFS-RT beta key. Tokyo's rail source is the ODPT JSON API rather than
 GTFS-RT, and its delay is operator-stated and rounded to the minute — read its on-time
 rate with that caveat (docs/06). Full plan, verified per-feed facts, and the business
 answers live in [`docs/`](docs/).
 
-**Status: Phase 6 done — scorecard + dashboard; Phase 7 is accrual.** Phases 0–5 (NYC
+**Status: complete and decommissioned.** The cloud stack (AWS + Snowflake) was torn down
+2026-09-26 to 10-02 per [`docs/11-teardown.md`](docs/11-teardown.md); no warehouse archive was
+kept. https://transit.gillu.me keeps serving the final snapshot (`site/data/*.json`, as of
+2026-09-26) and [`docs/06`](docs/06-business-answers.md) holds the final numbers. `make
+site-data`, `make dashboard` and every prod `dbt` target need a warehouse that no longer
+exists; the local quickstart below still runs end to end.
+
+Phase history: Phase 6 done (scorecard + dashboard), Phase 7 was accrual. Phases 0–5 (NYC
 slice, cloud deploy, 7-city fan-out, metrics marts) are done and verified; the pipeline
 has run unattended since 2026-08-23. **Every poller is retired** — seven on 2026-09-14/15
 and Tokyo on 2026-09-25 — each once its city banked the 20 judged days a score needs, so all
